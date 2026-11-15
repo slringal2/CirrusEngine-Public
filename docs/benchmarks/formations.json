@@ -1,0 +1,1541 @@
+{
+  "date_jst": "2026-11-05",
+  "gpu_cases": 49,
+  "ctest": {
+    "passed": 3,
+    "hlsl_entries": 16,
+    "native_builds": [
+      "Release",
+      "Debug"
+    ]
+  },
+  "strength_zero_mae_255": 0.0,
+  "checker_vs_full_grid_at_same_half_buffer": {
+    "mae_255": 0.04826944444444444,
+    "component_p99_255": 1.0,
+    "max_component_255": 50.0
+  },
+  "formation_cases": {
+    "formation-reverse": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 183808,
+        "history_pixels": 176192,
+        "repair_pixels": 3808,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "vortex",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": -2.0,
+        "phase_seconds": -1.6,
+        "base_m": 900.0,
+        "top_m": 5300.0,
+        "regions": [
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.006912,
+        "max": 1.0,
+        "mean": 0.121675
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.013241
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 31.723493,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.791965,
+        "geometry": 0.091045,
+        "sky": 0.012039,
+        "cloud_march": 25.626782,
+        "temporal": 1.033079,
+        "aerial_fog": 0.083314,
+        "composite_ui": 0.085269
+      }
+    },
+    "formation-off": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Partly cloudy",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.28,
+        "density": 1.12,
+        "base_m": 2100.0,
+        "thickness_m": 3000.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        10.4,
+        4.8
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 180000,
+        "history_pixels": 0,
+        "repair_pixels": 0,
+        "analytical_clear_pixels": 180000,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 1.0,
+        "max": 1.0,
+        "mean": 1.0
+      },
+      "shadow_transmittance": {
+        "min": 1.0,
+        "max": 1.0,
+        "mean": 1.0
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 0.299986,
+      "gpu_pass_ms": {
+        "cloud_shadow": 0.010797,
+        "geometry": 0.073097,
+        "sky": 0.012046,
+        "cloud_march": 0.005722,
+        "temporal": 0.021806,
+        "aerial_fog": 0.087665,
+        "composite_ui": 0.088854
+      }
+    },
+    "formation-towers": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 12,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181865,
+        "history_pixels": 118619,
+        "repair_pixels": 1865,
+        "analytical_clear_pixels": 59516,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001982,
+        "max": 1.0,
+        "mean": 0.440717
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.014006
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 12.943838,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.138568,
+        "geometry": 0.084307,
+        "sky": 0.011924,
+        "cloud_march": 10.19035,
+        "temporal": 1.357151,
+        "aerial_fog": 0.082486,
+        "composite_ui": 0.079051
+      }
+    },
+    "formation-custom": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181829,
+        "history_pixels": 118655,
+        "repair_pixels": 1829,
+        "analytical_clear_pixels": 59516,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "custom",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.034907
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001982,
+        "max": 1.0,
+        "mean": 0.440427
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.012457
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 15.892712,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.035934,
+        "geometry": 0.083607,
+        "sky": 0.012068,
+        "cloud_march": 10.003493,
+        "temporal": 1.591907,
+        "aerial_fog": 0.085107,
+        "composite_ui": 0.080597
+      }
+    },
+    "formation-mixed": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181831,
+        "history_pixels": 118653,
+        "repair_pixels": 1831,
+        "analytical_clear_pixels": 59516,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001982,
+        "max": 1.0,
+        "mean": 0.440554
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.012489
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 16.822753,
+      "gpu_pass_ms": {
+        "cloud_shadow": 3.926232,
+        "geometry": 0.098897,
+        "sky": 0.012125,
+        "cloud_march": 10.330496,
+        "temporal": 2.289747,
+        "aerial_fog": 0.084774,
+        "composite_ui": 0.080482
+      }
+    },
+    "formation-reference": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": false,
+        "active": false,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          800,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 360000,
+        "history_pixels": 0,
+        "repair_pixels": 0,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 0,
+        "full_refresh_frames": 0
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.002228,
+        "max": 1.0,
+        "mean": 0.440535
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.012489
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 22.630682,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.53598,
+        "geometry": 0.083592,
+        "sky": 0.01198,
+        "cloud_march": 17.796677,
+        "temporal": 0.02005,
+        "aerial_fog": 0.091736,
+        "composite_ui": 0.090666
+      }
+    },
+    "formation-large": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 182925,
+        "history_pixels": 163818,
+        "repair_pixels": 2925,
+        "analytical_clear_pixels": 13257,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.6,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 15560.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 5760.0,
+            "base_m": 1800.0,
+            "height_m": 13760.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 11200.0,
+            "base_m": 900.0,
+            "height_m": 7040.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001552,
+        "max": 1.0,
+        "mean": 0.331191
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.011237
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 18.348147,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.525768,
+        "geometry": 0.113943,
+        "sky": 0.012547,
+        "cloud_march": 12.363777,
+        "temporal": 1.103562,
+        "aerial_fog": 0.117758,
+        "composite_ui": 0.110792
+      }
+    },
+    "formation-zero": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 12,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181723,
+        "history_pixels": 97261,
+        "repair_pixels": 1723,
+        "analytical_clear_pixels": 81016,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 0,
+        "strength": 0.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 1400.0,
+        "top_m": 4100.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 3600.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.003513,
+        "max": 1.0,
+        "mean": 0.475283
+      },
+      "shadow_transmittance": {
+        "min": 1e-06,
+        "max": 1.0,
+        "mean": 0.015015
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 11.559679,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.120002,
+        "geometry": 0.085549,
+        "sky": 0.014573,
+        "cloud_march": 8.983309,
+        "temporal": 0.990393,
+        "aerial_fog": 0.283889,
+        "composite_ui": 0.081964
+      }
+    },
+    "formation-none": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 12,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181723,
+        "history_pixels": 97261,
+        "repair_pixels": 1723,
+        "analytical_clear_pixels": 81016,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "none",
+        "count": 0,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 1400.0,
+        "top_m": 4100.0,
+        "regions": []
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.003513,
+        "max": 1.0,
+        "mean": 0.475283
+      },
+      "shadow_transmittance": {
+        "min": 1e-06,
+        "max": 1.0,
+        "mean": 0.015015
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 12.12449,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.130103,
+        "geometry": 0.088005,
+        "sky": 0.012416,
+        "cloud_march": 9.407639,
+        "temporal": 0.846628,
+        "aerial_fog": 0.468514,
+        "composite_ui": 0.171186
+      }
+    },
+    "formation-vortex": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 48,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 183809,
+        "history_pixels": 176191,
+        "repair_pixels": 3809,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "vortex",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 900.0,
+        "top_m": 5300.0,
+        "regions": [
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.006912,
+        "max": 1.0,
+        "mean": 0.121393
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.013172
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 31.806069,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.48634,
+        "geometry": 0.090766,
+        "sky": 0.011976,
+        "cloud_march": 26.007752,
+        "temporal": 1.043336,
+        "aerial_fog": 0.081141,
+        "composite_ui": 0.084759
+      }
+    },
+    "formation-density-zero": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 48,
+      "simulation_seconds": 0.8,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        12.8,
+        6.4
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 100.8,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 12,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181723,
+        "history_pixels": 97261,
+        "repair_pixels": 1723,
+        "analytical_clear_pixels": 81016,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      },
+      "formations": {
+        "mode": "custom",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 0.8,
+        "base_m": 1400.0,
+        "top_m": 4100.0,
+        "regions": [
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.0,
+            "spin_rad_s": 0.034907
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.003513,
+        "max": 1.0,
+        "mean": 0.475283
+      },
+      "shadow_transmittance": {
+        "min": 1e-06,
+        "max": 1.0,
+        "mean": 0.015015
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 42,
+      "gpu_frame_ms": 12.81482,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.40949,
+        "geometry": 0.084577,
+        "sky": 0.012009,
+        "cloud_march": 9.995891,
+        "temporal": 1.151423,
+        "aerial_fog": 0.081379,
+        "composite_ui": 0.080051
+      }
+    }
+  },
+  "rotation": {
+    "frames": 192,
+    "seconds": 8,
+    "speed": 2,
+    "phase_seconds": 16,
+    "camera": "vortex",
+    "resolution": [
+      960,
+      540
+    ],
+    "timeline_equal": true,
+    "mean_frame_mae_255": 0.12189102496874209,
+    "max_frame_mae_255": 0.12823431193828583,
+    "max_component_p99_255": 1.0,
+    "max_component_error_255": 65.0,
+    "rotating_vs_stopped_same_wind_mae_255": 7.631748199462891,
+    "worst_frames": [
+      {
+        "frame": 54,
+        "mae_255": 0.12823431193828583,
+        "p99_255": 1.0,
+        "max_255": 39.0
+      },
+      {
+        "frame": 69,
+        "mae_255": 0.12812049686908722,
+        "p99_255": 1.0,
+        "max_255": 32.0
+      },
+      {
+        "frame": 64,
+        "mae_255": 0.1280420571565628,
+        "p99_255": 1.0,
+        "max_255": 39.0
+      }
+    ]
+  },
+  "baseline_no_formations": {
+    "reference": "previous checkerboard renderer, same fixed time and full-grid half-buffer",
+    "mae_255": 8.865740740740741e-05,
+    "max_component_255": 1
+  },
+  "density_zero_mae_255": 0
+}

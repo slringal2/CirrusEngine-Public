@@ -1,0 +1,10 @@
+{
+  "adapter": "NVIDIA GeForce RTX 5080",
+  "width": 1600, "height": 900,
+  "quality": "High", "vsync": false,
+  "warmup_frames": 120, "measured_frames": 480,
+  "duration_seconds": 10.013607,
+  "average_fps": 47.934774, "mean_frame_ms": 20.861682,
+  "p95_frame_ms": 26.080600, "p99_frame_ms": 27.728900,
+  "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+}

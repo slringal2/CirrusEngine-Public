@@ -1,0 +1,927 @@
+﻿{
+    "gpu_cases":  20,
+    "ground_shadow_mean_absolute_delta_255":  75.160555039215566,
+    "ground_shadow_mean_darkening_255":  75.160555039215566,
+    "reports":  {
+                    "lightning":  {
+                                      "adapter":  "NVIDIA GeForce RTX 5080",
+                                      "width":  1600,
+                                      "height":  900,
+                                      "weather":  "Storm",
+                                      "quality":  "High",
+                                      "sun_elevation":  28.000000,
+                                      "sun_azimuth":  -26.000000,
+                                      "frames":  48,
+                                      "simulation_seconds":  12.000000,
+                                      "weather_state":  {
+                                                            "coverage":  0.980000,
+                                                            "density":  1.450000,
+                                                            "base_m":  1000.000000,
+                                                            "thickness_m":  5900.000000,
+                                                            "rain":  1.000000,
+                                                            "transition_progress":  1.000000
+                                                        },
+                                      "wind_offset_m":  [
+                                                            408.000000,
+                                                            204.000000
+                                                        ],
+                                      "cloud_shadows_enabled":  true,
+                                      "cloud_transmittance":  {
+                                                                  "min":  0.003311,
+                                                                  "max":  1.000000,
+                                                                  "mean":  0.478534
+                                                              },
+                                      "shadow_transmittance":  {
+                                                                   "min":  0.000000,
+                                                                   "max":  0.000000,
+                                                                   "mean":  0.000000
+                                                               },
+                                      "nonfinite_samples":  0,
+                                      "gpu_timing_samples":  42,
+                                      "gpu_frame_ms":  15.905530,
+                                      "gpu_pass_ms":  {
+                                                          "cloud_shadow":  6.149139,
+                                                          "geometry":  0.082050,
+                                                          "sky":  0.012474,
+                                                          "cloud_march":  9.500501,
+                                                          "temporal":  0.016616,
+                                                          "aerial_fog":  0.066682,
+                                                          "composite_ui":  0.078068
+                                                      }
+                                  },
+                    "sunset":  {
+                                   "adapter":  "NVIDIA GeForce RTX 5080",
+                                   "width":  1600,
+                                   "height":  900,
+                                   "weather":  "Partly cloudy",
+                                   "quality":  "High",
+                                   "sun_elevation":  5.000000,
+                                   "sun_azimuth":  -12.000000,
+                                   "frames":  48,
+                                   "simulation_seconds":  0.800000,
+                                   "weather_state":  {
+                                                         "coverage":  0.280000,
+                                                         "density":  1.120000,
+                                                         "base_m":  2100.000000,
+                                                         "thickness_m":  3000.000000,
+                                                         "rain":  0.000000,
+                                                         "transition_progress":  1.000000
+                                                     },
+                                   "wind_offset_m":  [
+                                                         10.400000,
+                                                         4.800000
+                                                     ],
+                                   "cloud_shadows_enabled":  true,
+                                   "cloud_transmittance":  {
+                                                               "min":  0.004578,
+                                                               "max":  1.000000,
+                                                               "mean":  0.531447
+                                                           },
+                                   "shadow_transmittance":  {
+                                                                "min":  0.000000,
+                                                                "max":  1.000000,
+                                                                "mean":  0.001468
+                                                            },
+                                   "nonfinite_samples":  0,
+                                   "gpu_timing_samples":  42,
+                                   "gpu_frame_ms":  15.033289,
+                                   "gpu_pass_ms":  {
+                                                       "cloud_shadow":  3.263629,
+                                                       "geometry":  0.054171,
+                                                       "sky":  0.011948,
+                                                       "cloud_march":  11.546235,
+                                                       "temporal":  0.015459,
+                                                       "aerial_fog":  0.068118,
+                                                       "composite_ui":  0.073729
+                                                   }
+                               },
+                    "hud":  {
+                                "adapter":  "NVIDIA GeForce RTX 5080",
+                                "width":  1600,
+                                "height":  900,
+                                "weather":  "Partly cloudy",
+                                "quality":  "High",
+                                "sun_elevation":  28.000000,
+                                "sun_azimuth":  -26.000000,
+                                "frames":  48,
+                                "simulation_seconds":  0.800000,
+                                "weather_state":  {
+                                                      "coverage":  0.280000,
+                                                      "density":  1.120000,
+                                                      "base_m":  2100.000000,
+                                                      "thickness_m":  3000.000000,
+                                                      "rain":  0.000000,
+                                                      "transition_progress":  1.000000
+                                                  },
+                                "wind_offset_m":  [
+                                                      10.400000,
+                                                      4.800000
+                                                  ],
+                                "cloud_shadows_enabled":  true,
+                                "cloud_transmittance":  {
+                                                            "min":  0.004578,
+                                                            "max":  1.000000,
+                                                            "mean":  0.531447
+                                                        },
+                                "shadow_transmittance":  {
+                                                             "min":  0.000000,
+                                                             "max":  1.000000,
+                                                             "mean":  0.161076
+                                                         },
+                                "nonfinite_samples":  0,
+                                "gpu_timing_samples":  42,
+                                "gpu_frame_ms":  15.891639,
+                                "gpu_pass_ms":  {
+                                                    "cloud_shadow":  3.547940,
+                                                    "geometry":  0.074557,
+                                                    "sky":  0.012200,
+                                                    "cloud_march":  12.081638,
+                                                    "temporal":  0.017294,
+                                                    "aerial_fog":  0.073504,
+                                                    "composite_ui":  0.084507
+                                                }
+                            },
+                    "transition-end":  {
+                                           "adapter":  "NVIDIA GeForce RTX 5080",
+                                           "width":  1600,
+                                           "height":  900,
+                                           "weather":  "Storm",
+                                           "quality":  "High",
+                                           "sun_elevation":  28.000000,
+                                           "sun_azimuth":  -26.000000,
+                                           "frames":  132,
+                                           "simulation_seconds":  2.200000,
+                                           "weather_state":  {
+                                                                 "coverage":  0.980000,
+                                                                 "density":  1.450000,
+                                                                 "base_m":  1000.000000,
+                                                                 "thickness_m":  5900.000000,
+                                                                 "rain":  1.000000,
+                                                                 "transition_progress":  1.000000
+                                                             },
+                                           "wind_offset_m":  [
+                                                                 49.800000,
+                                                                 24.400000
+                                                             ],
+                                           "cloud_shadows_enabled":  true,
+                                           "cloud_transmittance":  {
+                                                                       "min":  0.003994,
+                                                                       "max":  1.000000,
+                                                                       "mean":  0.478619
+                                                                   },
+                                           "shadow_transmittance":  {
+                                                                        "min":  0.000000,
+                                                                        "max":  0.000000,
+                                                                        "mean":  0.000000
+                                                                    },
+                                           "nonfinite_samples":  0,
+                                           "gpu_timing_samples":  126,
+                                           "gpu_frame_ms":  16.612964,
+                                           "gpu_pass_ms":  {
+                                                               "cloud_shadow":  6.328508,
+                                                               "geometry":  0.074636,
+                                                               "sky":  0.012430,
+                                                               "cloud_march":  10.036192,
+                                                               "temporal":  0.017115,
+                                                               "aerial_fog":  0.066574,
+                                                               "composite_ui":  0.077509
+                                                           }
+                                       },
+                    "clear":  {
+                                  "adapter":  "NVIDIA GeForce RTX 5080",
+                                  "width":  1600,
+                                  "height":  900,
+                                  "weather":  "Clear",
+                                  "quality":  "High",
+                                  "sun_elevation":  28.000000,
+                                  "sun_azimuth":  -26.000000,
+                                  "frames":  48,
+                                  "simulation_seconds":  0.800000,
+                                  "weather_state":  {
+                                                        "coverage":  0.150000,
+                                                        "density":  0.950000,
+                                                        "base_m":  2400.000000,
+                                                        "thickness_m":  2200.000000,
+                                                        "rain":  0.000000,
+                                                        "transition_progress":  1.000000
+                                                    },
+                                  "wind_offset_m":  [
+                                                        7.200000,
+                                                        3.200000
+                                                    ],
+                                  "cloud_shadows_enabled":  true,
+                                  "cloud_transmittance":  {
+                                                              "min":  0.004738,
+                                                              "max":  1.000000,
+                                                              "mean":  0.621504
+                                                          },
+                                  "shadow_transmittance":  {
+                                                               "min":  0.000000,
+                                                               "max":  1.000000,
+                                                               "mean":  0.429083
+                                                           },
+                                  "nonfinite_samples":  0,
+                                  "gpu_timing_samples":  42,
+                                  "gpu_frame_ms":  16.097287,
+                                  "gpu_pass_ms":  {
+                                                      "cloud_shadow":  3.262248,
+                                                      "geometry":  0.074351,
+                                                      "sky":  0.011884,
+                                                      "cloud_march":  12.581663,
+                                                      "temporal":  0.015049,
+                                                      "aerial_fog":  0.074979,
+                                                      "composite_ui":  0.077112
+                                                  }
+                              },
+                    "rain":  {
+                                 "adapter":  "NVIDIA GeForce RTX 5080",
+                                 "width":  1600,
+                                 "height":  900,
+                                 "weather":  "Rain",
+                                 "quality":  "High",
+                                 "sun_elevation":  28.000000,
+                                 "sun_azimuth":  -26.000000,
+                                 "frames":  48,
+                                 "simulation_seconds":  0.800000,
+                                 "weather_state":  {
+                                                       "coverage":  0.930000,
+                                                       "density":  1.050000,
+                                                       "base_m":  1150.000000,
+                                                       "thickness_m":  3900.000000,
+                                                       "rain":  0.650000,
+                                                       "transition_progress":  1.000000
+                                                   },
+                                 "wind_offset_m":  [
+                                                       16.800000,
+                                                       8.800000
+                                                   ],
+                                 "cloud_shadows_enabled":  true,
+                                 "cloud_transmittance":  {
+                                                             "min":  0.005226,
+                                                             "max":  1.000000,
+                                                             "mean":  0.481316
+                                                         },
+                                 "shadow_transmittance":  {
+                                                              "min":  0.000000,
+                                                              "max":  0.495361,
+                                                              "mean":  0.000118
+                                                          },
+                                 "nonfinite_samples":  0,
+                                 "gpu_timing_samples":  42,
+                                 "gpu_frame_ms":  19.480843,
+                                 "gpu_pass_ms":  {
+                                                     "cloud_shadow":  5.217510,
+                                                     "geometry":  0.074780,
+                                                     "sky":  0.012160,
+                                                     "cloud_march":  14.018627,
+                                                     "temporal":  0.015785,
+                                                     "aerial_fog":  0.065468,
+                                                     "composite_ui":  0.076513
+                                                 }
+                             },
+                    "transition-mid":  {
+                                           "adapter":  "NVIDIA GeForce RTX 5080",
+                                           "width":  1600,
+                                           "height":  900,
+                                           "weather":  "Storm",
+                                           "quality":  "High",
+                                           "sun_elevation":  28.000000,
+                                           "sun_azimuth":  -26.000000,
+                                           "frames":  60,
+                                           "simulation_seconds":  1.000000,
+                                           "weather_state":  {
+                                                                 "coverage":  0.565000,
+                                                                 "density":  1.200000,
+                                                                 "base_m":  1700.000000,
+                                                                 "thickness_m":  4050.000000,
+                                                                 "rain":  0.500000,
+                                                                 "transition_progress":  0.500000
+                                                             },
+                                           "wind_offset_m":  [
+                                                                 13.687934,
+                                                                 6.437726
+                                                             ],
+                                           "cloud_shadows_enabled":  true,
+                                           "cloud_transmittance":  {
+                                                                       "min":  0.004463,
+                                                                       "max":  1.000000,
+                                                                       "mean":  0.488883
+                                                                   },
+                                           "shadow_transmittance":  {
+                                                                        "min":  0.000000,
+                                                                        "max":  1.000000,
+                                                                        "mean":  0.007467
+                                                                    },
+                                           "nonfinite_samples":  0,
+                                           "gpu_timing_samples":  54,
+                                           "gpu_frame_ms":  17.438865,
+                                           "gpu_pass_ms":  {
+                                                               "cloud_shadow":  3.983831,
+                                                               "geometry":  0.100180,
+                                                               "sky":  0.043290,
+                                                               "cloud_march":  13.145220,
+                                                               "temporal":  0.017404,
+                                                               "aerial_fog":  0.071888,
+                                                               "composite_ui":  0.077051
+                                                           }
+                                       },
+                    "night":  {
+                                  "adapter":  "NVIDIA GeForce RTX 5080",
+                                  "width":  1600,
+                                  "height":  900,
+                                  "weather":  "Partly cloudy",
+                                  "quality":  "High",
+                                  "sun_elevation":  -10.000000,
+                                  "sun_azimuth":  -26.000000,
+                                  "frames":  48,
+                                  "simulation_seconds":  0.800000,
+                                  "weather_state":  {
+                                                        "coverage":  0.280000,
+                                                        "density":  1.120000,
+                                                        "base_m":  2100.000000,
+                                                        "thickness_m":  3000.000000,
+                                                        "rain":  0.000000,
+                                                        "transition_progress":  1.000000
+                                                    },
+                                  "wind_offset_m":  [
+                                                        10.400000,
+                                                        4.800000
+                                                    ],
+                                  "cloud_shadows_enabled":  true,
+                                  "cloud_transmittance":  {
+                                                              "min":  0.004578,
+                                                              "max":  1.000000,
+                                                              "mean":  0.531447
+                                                          },
+                                  "shadow_transmittance":  {
+                                                               "min":  1.000000,
+                                                               "max":  1.000000,
+                                                               "mean":  1.000000
+                                                           },
+                                  "nonfinite_samples":  0,
+                                  "gpu_timing_samples":  42,
+                                  "gpu_frame_ms":  10.769327,
+                                  "gpu_pass_ms":  {
+                                                      "cloud_shadow":  0.020657,
+                                                      "geometry":  0.060929,
+                                                      "sky":  0.011908,
+                                                      "cloud_march":  10.557861,
+                                                      "temporal":  0.014820,
+                                                      "aerial_fog":  0.046174,
+                                                      "composite_ui":  0.056978
+                                                  }
+                              },
+                    "shadows-off":  {
+                                        "adapter":  "NVIDIA GeForce RTX 5080",
+                                        "width":  1600,
+                                        "height":  900,
+                                        "weather":  "Partly cloudy",
+                                        "quality":  "High",
+                                        "sun_elevation":  28.000000,
+                                        "sun_azimuth":  -26.000000,
+                                        "frames":  48,
+                                        "simulation_seconds":  0.800000,
+                                        "weather_state":  {
+                                                              "coverage":  0.280000,
+                                                              "density":  1.120000,
+                                                              "base_m":  2100.000000,
+                                                              "thickness_m":  3000.000000,
+                                                              "rain":  0.000000,
+                                                              "transition_progress":  1.000000
+                                                          },
+                                        "wind_offset_m":  [
+                                                              10.400000,
+                                                              4.800000
+                                                          ],
+                                        "cloud_shadows_enabled":  false,
+                                        "cloud_transmittance":  {
+                                                                    "min":  0.001986,
+                                                                    "max":  1.000000,
+                                                                    "mean":  0.772702
+                                                                },
+                                        "shadow_transmittance":  {
+                                                                     "min":  1.000000,
+                                                                     "max":  1.000000,
+                                                                     "mean":  1.000000
+                                                                 },
+                                        "nonfinite_samples":  0,
+                                        "gpu_timing_samples":  42,
+                                        "gpu_frame_ms":  4.351278,
+                                        "gpu_pass_ms":  {
+                                                            "cloud_shadow":  0.014287,
+                                                            "geometry":  0.084974,
+                                                            "sky":  0.011802,
+                                                            "cloud_march":  4.120676,
+                                                            "temporal":  0.014842,
+                                                            "aerial_fog":  0.046388,
+                                                            "composite_ui":  0.058308
+                                                        }
+                                    },
+                    "odd-low":  {
+                                    "adapter":  "NVIDIA GeForce RTX 5080",
+                                    "width":  1001,
+                                    "height":  563,
+                                    "weather":  "Partly cloudy",
+                                    "quality":  "Low",
+                                    "sun_elevation":  28.000000,
+                                    "sun_azimuth":  -26.000000,
+                                    "frames":  48,
+                                    "simulation_seconds":  0.800000,
+                                    "weather_state":  {
+                                                          "coverage":  0.280000,
+                                                          "density":  1.120000,
+                                                          "base_m":  2100.000000,
+                                                          "thickness_m":  3000.000000,
+                                                          "rain":  0.000000,
+                                                          "transition_progress":  1.000000
+                                                      },
+                                    "wind_offset_m":  [
+                                                          10.400000,
+                                                          4.800000
+                                                      ],
+                                    "cloud_shadows_enabled":  true,
+                                    "cloud_transmittance":  {
+                                                                "min":  0.002714,
+                                                                "max":  1.000000,
+                                                                "mean":  0.531063
+                                                            },
+                                    "shadow_transmittance":  {
+                                                                 "min":  0.000000,
+                                                                 "max":  1.000000,
+                                                                 "mean":  0.160470
+                                                             },
+                                    "nonfinite_samples":  0,
+                                    "gpu_timing_samples":  42,
+                                    "gpu_frame_ms":  1.531640,
+                                    "gpu_pass_ms":  {
+                                                        "cloud_shadow":  0.467912,
+                                                        "geometry":  0.076028,
+                                                        "sky":  0.012211,
+                                                        "cloud_march":  0.905427,
+                                                        "temporal":  0.005452,
+                                                        "aerial_fog":  0.030195,
+                                                        "composite_ui":  0.034415
+                                                    }
+                                },
+                    "day":  {
+                                "adapter":  "NVIDIA GeForce RTX 5080",
+                                "width":  1600,
+                                "height":  900,
+                                "weather":  "Partly cloudy",
+                                "quality":  "High",
+                                "sun_elevation":  28.000000,
+                                "sun_azimuth":  -26.000000,
+                                "frames":  48,
+                                "simulation_seconds":  0.800000,
+                                "weather_state":  {
+                                                      "coverage":  0.280000,
+                                                      "density":  1.120000,
+                                                      "base_m":  2100.000000,
+                                                      "thickness_m":  3000.000000,
+                                                      "rain":  0.000000,
+                                                      "transition_progress":  1.000000
+                                                  },
+                                "wind_offset_m":  [
+                                                      10.400000,
+                                                      4.800000
+                                                  ],
+                                "cloud_shadows_enabled":  true,
+                                "cloud_transmittance":  {
+                                                            "min":  0.004578,
+                                                            "max":  1.000000,
+                                                            "mean":  0.531447
+                                                        },
+                                "shadow_transmittance":  {
+                                                             "min":  0.000000,
+                                                             "max":  1.000000,
+                                                             "mean":  0.161076
+                                                         },
+                                "nonfinite_samples":  0,
+                                "gpu_timing_samples":  42,
+                                "gpu_frame_ms":  14.353700,
+                                "gpu_pass_ms":  {
+                                                    "cloud_shadow":  3.345473,
+                                                    "geometry":  0.082706,
+                                                    "sky":  0.012200,
+                                                    "cloud_march":  10.749375,
+                                                    "temporal":  0.015136,
+                                                    "aerial_fog":  0.072441,
+                                                    "composite_ui":  0.076370
+                                                }
+                            },
+                    "shadows-on":  {
+                                       "adapter":  "NVIDIA GeForce RTX 5080",
+                                       "width":  1600,
+                                       "height":  900,
+                                       "weather":  "Partly cloudy",
+                                       "quality":  "High",
+                                       "sun_elevation":  28.000000,
+                                       "sun_azimuth":  -26.000000,
+                                       "frames":  48,
+                                       "simulation_seconds":  0.800000,
+                                       "weather_state":  {
+                                                             "coverage":  0.280000,
+                                                             "density":  1.120000,
+                                                             "base_m":  2100.000000,
+                                                             "thickness_m":  3000.000000,
+                                                             "rain":  0.000000,
+                                                             "transition_progress":  1.000000
+                                                         },
+                                       "wind_offset_m":  [
+                                                             10.400000,
+                                                             4.800000
+                                                         ],
+                                       "cloud_shadows_enabled":  true,
+                                       "cloud_transmittance":  {
+                                                                   "min":  0.001986,
+                                                                   "max":  1.000000,
+                                                                   "mean":  0.772702
+                                                               },
+                                       "shadow_transmittance":  {
+                                                                    "min":  0.000000,
+                                                                    "max":  1.000000,
+                                                                    "mean":  0.157025
+                                                                },
+                                       "nonfinite_samples":  0,
+                                       "gpu_timing_samples":  42,
+                                       "gpu_frame_ms":  8.496501,
+                                       "gpu_pass_ms":  {
+                                                           "cloud_shadow":  3.691235,
+                                                           "geometry":  0.086050,
+                                                           "sky":  0.012080,
+                                                           "cloud_march":  4.543072,
+                                                           "temporal":  0.016873,
+                                                           "aerial_fog":  0.069187,
+                                                           "composite_ui":  0.078006
+                                                       }
+                                   },
+                    "worley-detail":  {
+                                          "adapter":  "NVIDIA GeForce RTX 5080",
+                                          "width":  1600,
+                                          "height":  900,
+                                          "weather":  "Partly cloudy",
+                                          "quality":  "High",
+                                          "sun_elevation":  28.000000,
+                                          "sun_azimuth":  -26.000000,
+                                          "frames":  48,
+                                          "simulation_seconds":  0.800000,
+                                          "weather_state":  {
+                                                                "coverage":  0.280000,
+                                                                "density":  1.120000,
+                                                                "base_m":  2100.000000,
+                                                                "thickness_m":  3000.000000,
+                                                                "rain":  0.000000,
+                                                                "transition_progress":  1.000000
+                                                            },
+                                          "wind_offset_m":  [
+                                                                10.400000,
+                                                                4.800000
+                                                            ],
+                                          "cloud_shadows_enabled":  true,
+                                          "cloud_transmittance":  {
+                                                                      "min":  0.004578,
+                                                                      "max":  1.000000,
+                                                                      "mean":  0.531447
+                                                                  },
+                                          "shadow_transmittance":  {
+                                                                       "min":  0.000000,
+                                                                       "max":  1.000000,
+                                                                       "mean":  0.161076
+                                                                   },
+                                          "nonfinite_samples":  0,
+                                          "gpu_timing_samples":  42,
+                                          "gpu_frame_ms":  15.927499,
+                                          "gpu_pass_ms":  {
+                                                              "cloud_shadow":  3.546476,
+                                                              "geometry":  0.074636,
+                                                              "sky":  0.012214,
+                                                              "cloud_march":  12.129307,
+                                                              "temporal":  0.017263,
+                                                              "aerial_fog":  0.073097,
+                                                              "composite_ui":  0.074506
+                                                          }
+                                      },
+                    "overcast":  {
+                                     "adapter":  "NVIDIA GeForce RTX 5080",
+                                     "width":  1600,
+                                     "height":  900,
+                                     "weather":  "Overcast",
+                                     "quality":  "High",
+                                     "sun_elevation":  28.000000,
+                                     "sun_azimuth":  -26.000000,
+                                     "frames":  48,
+                                     "simulation_seconds":  0.800000,
+                                     "weather_state":  {
+                                                           "coverage":  0.860000,
+                                                           "density":  0.850000,
+                                                           "base_m":  1400.000000,
+                                                           "thickness_m":  2700.000000,
+                                                           "rain":  0.000000,
+                                                           "transition_progress":  1.000000
+                                                       },
+                                     "wind_offset_m":  [
+                                                           12.800000,
+                                                           6.400000
+                                                       ],
+                                     "cloud_shadows_enabled":  true,
+                                     "cloud_transmittance":  {
+                                                                 "min":  0.006020,
+                                                                 "max":  1.000000,
+                                                                 "mean":  0.487487
+                                                             },
+                                     "shadow_transmittance":  {
+                                                                  "min":  0.000001,
+                                                                  "max":  1.000000,
+                                                                  "mean":  0.010203
+                                                              },
+                                     "nonfinite_samples":  0,
+                                     "gpu_timing_samples":  42,
+                                     "gpu_frame_ms":  24.019210,
+                                     "gpu_pass_ms":  {
+                                                         "cloud_shadow":  4.157720,
+                                                         "geometry":  0.079078,
+                                                         "sky":  0.012148,
+                                                         "cloud_march":  19.611205,
+                                                         "temporal":  0.015616,
+                                                         "aerial_fog":  0.066466,
+                                                         "composite_ui":  0.076977
+                                                     }
+                                 },
+                    "overview":  {
+                                     "adapter":  "NVIDIA GeForce RTX 5080",
+                                     "width":  1600,
+                                     "height":  900,
+                                     "weather":  "Partly cloudy",
+                                     "quality":  "High",
+                                     "sun_elevation":  28.000000,
+                                     "sun_azimuth":  -26.000000,
+                                     "frames":  48,
+                                     "simulation_seconds":  0.800000,
+                                     "weather_state":  {
+                                                           "coverage":  0.280000,
+                                                           "density":  1.120000,
+                                                           "base_m":  2100.000000,
+                                                           "thickness_m":  3000.000000,
+                                                           "rain":  0.000000,
+                                                           "transition_progress":  1.000000
+                                                       },
+                                     "wind_offset_m":  [
+                                                           10.400000,
+                                                           4.800000
+                                                       ],
+                                     "cloud_shadows_enabled":  true,
+                                     "cloud_transmittance":  {
+                                                                 "min":  0.001766,
+                                                                 "max":  1.000000,
+                                                                 "mean":  0.456306
+                                                             },
+                                     "shadow_transmittance":  {
+                                                                  "min":  0.000000,
+                                                                  "max":  1.000000,
+                                                                  "mean":  0.175579
+                                                              },
+                                     "nonfinite_samples":  0,
+                                     "gpu_timing_samples":  42,
+                                     "gpu_frame_ms":  15.592649,
+                                     "gpu_pass_ms":  {
+                                                         "cloud_shadow":  3.796473,
+                                                         "geometry":  0.183506,
+                                                         "sky":  0.013496,
+                                                         "cloud_march":  11.433599,
+                                                         "temporal":  0.011362,
+                                                         "aerial_fog":  0.077787,
+                                                         "composite_ui":  0.076425
+                                                     }
+                                 },
+                    "ultra":  {
+                                  "adapter":  "NVIDIA GeForce RTX 5080",
+                                  "width":  1001,
+                                  "height":  563,
+                                  "weather":  "Partly cloudy",
+                                  "quality":  "Ultra",
+                                  "sun_elevation":  28.000000,
+                                  "sun_azimuth":  -26.000000,
+                                  "frames":  48,
+                                  "simulation_seconds":  0.800000,
+                                  "weather_state":  {
+                                                        "coverage":  0.280000,
+                                                        "density":  1.120000,
+                                                        "base_m":  2100.000000,
+                                                        "thickness_m":  3000.000000,
+                                                        "rain":  0.000000,
+                                                        "transition_progress":  1.000000
+                                                    },
+                                  "wind_offset_m":  [
+                                                        10.400000,
+                                                        4.800000
+                                                    ],
+                                  "cloud_shadows_enabled":  true,
+                                  "cloud_transmittance":  {
+                                                              "min":  0.005638,
+                                                              "max":  1.000000,
+                                                              "mean":  0.531646
+                                                          },
+                                  "shadow_transmittance":  {
+                                                               "min":  0.000000,
+                                                               "max":  1.000000,
+                                                               "mean":  0.161040
+                                                           },
+                                  "nonfinite_samples":  0,
+                                  "gpu_timing_samples":  42,
+                                  "gpu_frame_ms":  37.199989,
+                                  "gpu_pass_ms":  {
+                                                      "cloud_shadow":  7.499384,
+                                                      "geometry":  0.067441,
+                                                      "sky":  0.012678,
+                                                      "cloud_march":  29.517331,
+                                                      "temporal":  0.021335,
+                                                      "aerial_fog":  0.042617,
+                                                      "composite_ui":  0.039204
+                                                  }
+                              },
+                    "wind-later":  {
+                                       "adapter":  "NVIDIA GeForce RTX 5080",
+                                       "width":  1600,
+                                       "height":  900,
+                                       "weather":  "Partly cloudy",
+                                       "quality":  "High",
+                                       "sun_elevation":  28.000000,
+                                       "sun_azimuth":  -26.000000,
+                                       "frames":  120,
+                                       "simulation_seconds":  120.000000,
+                                       "weather_state":  {
+                                                             "coverage":  0.280000,
+                                                             "density":  1.120000,
+                                                             "base_m":  2100.000000,
+                                                             "thickness_m":  3000.000000,
+                                                             "rain":  0.000000,
+                                                             "transition_progress":  1.000000
+                                                         },
+                                       "wind_offset_m":  [
+                                                             1560.000000,
+                                                             720.000000
+                                                         ],
+                                       "cloud_shadows_enabled":  true,
+                                       "cloud_transmittance":  {
+                                                                   "min":  0.004951,
+                                                                   "max":  1.000000,
+                                                                   "mean":  0.554622
+                                                               },
+                                       "shadow_transmittance":  {
+                                                                    "min":  0.000000,
+                                                                    "max":  1.000000,
+                                                                    "mean":  0.161771
+                                                                },
+                                       "nonfinite_samples":  0,
+                                       "gpu_timing_samples":  114,
+                                       "gpu_frame_ms":  16.338041,
+                                       "gpu_pass_ms":  {
+                                                           "cloud_shadow":  3.793237,
+                                                           "geometry":  0.074278,
+                                                           "sky":  0.012228,
+                                                           "cloud_march":  12.271680,
+                                                           "temporal":  0.016696,
+                                                           "aerial_fog":  0.092243,
+                                                           "composite_ui":  0.077678
+                                                       }
+                                   },
+                    "storm":  {
+                                  "adapter":  "NVIDIA GeForce RTX 5080",
+                                  "width":  1600,
+                                  "height":  900,
+                                  "weather":  "Storm",
+                                  "quality":  "High",
+                                  "sun_elevation":  28.000000,
+                                  "sun_azimuth":  -26.000000,
+                                  "frames":  48,
+                                  "simulation_seconds":  0.800000,
+                                  "weather_state":  {
+                                                        "coverage":  0.980000,
+                                                        "density":  1.450000,
+                                                        "base_m":  1000.000000,
+                                                        "thickness_m":  5900.000000,
+                                                        "rain":  1.000000,
+                                                        "transition_progress":  1.000000
+                                                    },
+                                  "wind_offset_m":  [
+                                                        27.200000,
+                                                        13.600000
+                                                    ],
+                                  "cloud_shadows_enabled":  true,
+                                  "cloud_transmittance":  {
+                                                              "min":  0.003740,
+                                                              "max":  1.000000,
+                                                              "mean":  0.478509
+                                                          },
+                                  "shadow_transmittance":  {
+                                                               "min":  0.000000,
+                                                               "max":  0.000000,
+                                                               "mean":  0.000000
+                                                           },
+                                  "nonfinite_samples":  0,
+                                  "gpu_timing_samples":  42,
+                                  "gpu_frame_ms":  15.017071,
+                                  "gpu_pass_ms":  {
+                                                      "cloud_shadow":  5.932785,
+                                                      "geometry":  0.101337,
+                                                      "sky":  0.012253,
+                                                      "cloud_march":  8.813242,
+                                                      "temporal":  0.014540,
+                                                      "aerial_fog":  0.064187,
+                                                      "composite_ui":  0.078727
+                                                  }
+                              },
+                    "perlin-worley":  {
+                                          "adapter":  "NVIDIA GeForce RTX 5080",
+                                          "width":  1600,
+                                          "height":  900,
+                                          "weather":  "Partly cloudy",
+                                          "quality":  "High",
+                                          "sun_elevation":  28.000000,
+                                          "sun_azimuth":  -26.000000,
+                                          "frames":  48,
+                                          "simulation_seconds":  0.800000,
+                                          "weather_state":  {
+                                                                "coverage":  0.280000,
+                                                                "density":  1.120000,
+                                                                "base_m":  2100.000000,
+                                                                "thickness_m":  3000.000000,
+                                                                "rain":  0.000000,
+                                                                "transition_progress":  1.000000
+                                                            },
+                                          "wind_offset_m":  [
+                                                                10.400000,
+                                                                4.800000
+                                                            ],
+                                          "cloud_shadows_enabled":  true,
+                                          "cloud_transmittance":  {
+                                                                      "min":  0.004578,
+                                                                      "max":  1.000000,
+                                                                      "mean":  0.531447
+                                                                  },
+                                          "shadow_transmittance":  {
+                                                                       "min":  0.000000,
+                                                                       "max":  1.000000,
+                                                                       "mean":  0.161076
+                                                                   },
+                                          "nonfinite_samples":  0,
+                                          "gpu_timing_samples":  42,
+                                          "gpu_frame_ms":  15.234381,
+                                          "gpu_pass_ms":  {
+                                                              "cloud_shadow":  3.456373,
+                                                              "geometry":  0.116043,
+                                                              "sky":  0.012307,
+                                                              "cloud_march":  11.485581,
+                                                              "temporal":  0.016184,
+                                                              "aerial_fog":  0.073186,
+                                                              "composite_ui":  0.074708
+                                                          }
+                                      },
+                    "inside":  {
+                                   "adapter":  "NVIDIA GeForce RTX 5080",
+                                   "width":  1600,
+                                   "height":  900,
+                                   "weather":  "Partly cloudy",
+                                   "quality":  "High",
+                                   "sun_elevation":  28.000000,
+                                   "sun_azimuth":  -26.000000,
+                                   "frames":  48,
+                                   "simulation_seconds":  0.800000,
+                                   "weather_state":  {
+                                                         "coverage":  0.280000,
+                                                         "density":  1.120000,
+                                                         "base_m":  2100.000000,
+                                                         "thickness_m":  3000.000000,
+                                                         "rain":  0.000000,
+                                                         "transition_progress":  1.000000
+                                                     },
+                                   "wind_offset_m":  [
+                                                         10.400000,
+                                                         4.800000
+                                                     ],
+                                   "cloud_shadows_enabled":  true,
+                                   "cloud_transmittance":  {
+                                                               "min":  0.003151,
+                                                               "max":  1.000000,
+                                                               "mean":  0.486480
+                                                           },
+                                   "shadow_transmittance":  {
+                                                                "min":  0.000000,
+                                                                "max":  1.000000,
+                                                                "mean":  0.152054
+                                                            },
+                                   "nonfinite_samples":  0,
+                                   "gpu_timing_samples":  42,
+                                   "gpu_frame_ms":  12.304220,
+                                   "gpu_pass_ms":  {
+                                                       "cloud_shadow":  3.764652,
+                                                       "geometry":  0.080955,
+                                                       "sky":  0.013187,
+                                                       "cloud_march":  8.266680,
+                                                       "temporal":  0.011743,
+                                                       "aerial_fog":  0.074516,
+                                                       "composite_ui":  0.092487
+                                                   }
+                               }
+                }
+}

@@ -1,0 +1,5 @@
+# Units: metres; angular speed: degrees/second. Up to 8 regions.
+# tower  x  z  radius  base_altitude  height  density
+tower -5600 7000 6200 1800 8600 1.05
+# vortex x  z  radius  base_altitude  height  density  spin_deg_per_sec  turns (coverage skew)
+vortex 6400 12000 7000 900 4400 0.85 2.0 1.6

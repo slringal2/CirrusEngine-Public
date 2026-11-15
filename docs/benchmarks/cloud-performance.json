@@ -1,0 +1,294 @@
+{
+  "date": "2026-11-04",
+  "baseline_commit": "e28c51dbbacf6d593bf6fc24045eebd3f904d230",
+  "gpu": "NVIDIA GeForce RTX 5080",
+  "resolution": [
+    1600,
+    900
+  ],
+  "quality": "High",
+  "cloud_resolution": [
+    800,
+    450
+  ],
+  "view_samples": 384,
+  "light_samples": 12,
+  "cloud_shadow_resolution": [
+    1024,
+    1024
+  ],
+  "vsync": false,
+  "warmup_frames": 120,
+  "normal": {
+    "before_runs": [
+      {
+        "adapter": "NVIDIA GeForce RTX 5080",
+        "width": 1600,
+        "height": 900,
+        "quality": "High",
+        "vsync": false,
+        "warmup_frames": 120,
+        "measured_frames": 517,
+        "duration_seconds": 8.00625,
+        "average_fps": 64.574551,
+        "mean_frame_ms": 15.485977,
+        "p95_frame_ms": 15.9988,
+        "p99_frame_ms": 16.2188,
+        "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+      },
+      {
+        "adapter": "NVIDIA GeForce RTX 5080",
+        "width": 1600,
+        "height": 900,
+        "quality": "High",
+        "vsync": false,
+        "warmup_frames": 120,
+        "measured_frames": 481,
+        "duration_seconds": 8.008498,
+        "average_fps": 60.061197,
+        "mean_frame_ms": 16.649685,
+        "p95_frame_ms": 17.1993,
+        "p99_frame_ms": 17.7037,
+        "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+      }
+    ],
+    "after_runs": [
+      {
+        "adapter": "NVIDIA GeForce RTX 5080",
+        "width": 1600,
+        "height": 900,
+        "quality": "High",
+        "vsync": false,
+        "warmup_frames": 120,
+        "measured_frames": 791,
+        "duration_seconds": 8.001306,
+        "average_fps": 98.858858,
+        "mean_frame_ms": 10.115431,
+        "p95_frame_ms": 12.8666,
+        "p99_frame_ms": 13.6743,
+        "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+      },
+      {
+        "adapter": "NVIDIA GeForce RTX 5080",
+        "width": 1600,
+        "height": 900,
+        "quality": "High",
+        "vsync": false,
+        "warmup_frames": 120,
+        "measured_frames": 820,
+        "duration_seconds": 8.007003,
+        "average_fps": 102.410349,
+        "mean_frame_ms": 9.764638,
+        "p95_frame_ms": 12.6358,
+        "p99_frame_ms": 13.038,
+        "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+      }
+    ],
+    "before_fps": 62.31755879018516,
+    "after_fps": 100.63523886251822,
+    "fps_improvement_percent": 61.48777457946248
+  },
+  "storm": {
+    "lightning": false,
+    "before": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "quality": "High",
+      "vsync": false,
+      "warmup_frames": 120,
+      "measured_frames": 544,
+      "duration_seconds": 8.003625,
+      "average_fps": 67.969197,
+      "mean_frame_ms": 14.712547,
+      "p95_frame_ms": 15.2687,
+      "p99_frame_ms": 15.7161,
+      "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+    },
+    "after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "quality": "High",
+      "vsync": false,
+      "warmup_frames": 120,
+      "measured_frames": 998,
+      "duration_seconds": 8.005659,
+      "average_fps": 124.661811,
+      "mean_frame_ms": 8.021703,
+      "p95_frame_ms": 9.2288,
+      "p99_frame_ms": 9.5127,
+      "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+    },
+    "fps_improvement_percent": 83.40927435114469
+  },
+  "captures": {
+    "day": {
+      "before_gpu_ms": 15.420526,
+      "after_gpu_ms": 9.749623,
+      "before_pass_ms": {
+        "cloud_shadow": 3.516033,
+        "geometry": 0.073131,
+        "sky": 0.042723,
+        "cloud_march": 11.611984,
+        "temporal": 0.012626,
+        "aerial_fog": 0.069653,
+        "composite_ui": 0.094377
+      },
+      "after_pass_ms": {
+        "cloud_shadow": 0.869735,
+        "geometry": 0.070855,
+        "sky": 0.012155,
+        "cloud_march": 8.632091,
+        "temporal": 0.014402,
+        "aerial_fog": 0.073201,
+        "composite_ui": 0.077184
+      },
+      "mae_255": 0.17252106481481483,
+      "p99_255": 2.0,
+      "max_255": 8,
+      "pixels_difference_above_8_percent": 0.0,
+      "optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 24,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      }
+    },
+    "storm": {
+      "before_gpu_ms": 14.410028,
+      "after_gpu_ms": 9.478353,
+      "before_pass_ms": {
+        "cloud_shadow": 5.567881,
+        "geometry": 0.073013,
+        "sky": 0.012102,
+        "cloud_march": 8.599056,
+        "temporal": 0.01178,
+        "aerial_fog": 0.062247,
+        "composite_ui": 0.08395
+      },
+      "after_pass_ms": {
+        "cloud_shadow": 0.405782,
+        "geometry": 0.070715,
+        "sky": 0.013215,
+        "cloud_march": 8.825076,
+        "temporal": 0.011302,
+        "aerial_fog": 0.064982,
+        "composite_ui": 0.08728
+      },
+      "mae_255": 0.008461805555555556,
+      "p99_255": 0.0,
+      "max_255": 1,
+      "pixels_difference_above_8_percent": 0.0,
+      "optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 24,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      }
+    },
+    "inside": {
+      "before_gpu_ms": 11.573844,
+      "after_gpu_ms": 9.083785,
+      "before_pass_ms": {
+        "cloud_shadow": 3.620564,
+        "geometry": 0.0791,
+        "sky": 0.011683,
+        "cloud_march": 7.706602,
+        "temporal": 0.010852,
+        "aerial_fog": 0.069523,
+        "composite_ui": 0.075519
+      },
+      "after_pass_ms": {
+        "cloud_shadow": 0.971147,
+        "geometry": 0.076522,
+        "sky": 0.025562,
+        "cloud_march": 7.822635,
+        "temporal": 0.012315,
+        "aerial_fog": 0.078984,
+        "composite_ui": 0.09662
+      },
+      "mae_255": 0.06392731481481481,
+      "p99_255": 1.0,
+      "max_255": 14,
+      "pixels_difference_above_8_percent": 0.00125,
+      "optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 24,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      }
+    },
+    "sunset": {
+      "before_gpu_ms": 14.434898,
+      "after_gpu_ms": 9.641574,
+      "before_pass_ms": {
+        "cloud_shadow": 3.012018,
+        "geometry": 0.052195,
+        "sky": 0.011896,
+        "cloud_march": 11.206373,
+        "temporal": 0.013621,
+        "aerial_fog": 0.065443,
+        "composite_ui": 0.073351
+      },
+      "after_pass_ms": {
+        "cloud_shadow": 0.27058,
+        "geometry": 0.051027,
+        "sky": 0.01216,
+        "cloud_march": 9.147833,
+        "temporal": 0.015593,
+        "aerial_fog": 0.069249,
+        "composite_ui": 0.075132
+      },
+      "mae_255": 0.12205972222222222,
+      "p99_255": 2.0,
+      "max_255": 28,
+      "pixels_difference_above_8_percent": 0.015486111111111112,
+      "optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 24,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      }
+    },
+    "shadows": {
+      "before_gpu_ms": 7.767823,
+      "after_gpu_ms": 5.20082,
+      "before_pass_ms": {
+        "cloud_shadow": 3.45496,
+        "geometry": 0.081499,
+        "sky": 0.011846,
+        "cloud_march": 4.066706,
+        "temporal": 0.011276,
+        "aerial_fog": 0.065007,
+        "composite_ui": 0.07653
+      },
+      "after_pass_ms": {
+        "cloud_shadow": 0.89832,
+        "geometry": 0.082027,
+        "sky": 0.012041,
+        "cloud_march": 4.04652,
+        "temporal": 0.014259,
+        "aerial_fog": 0.069492,
+        "composite_ui": 0.078162
+      },
+      "mae_255": 0.03134421296296296,
+      "p99_255": 1.0,
+      "max_255": 8,
+      "pixels_difference_above_8_percent": 0.0,
+      "optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 24,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      }
+    }
+  },
+  "dynamic_weather_comparison": {
+    "frames": 240,
+    "seconds": 8,
+    "timeline_identical": true,
+    "max_frame_mae_255": 0.14696630658436213,
+    "mean_frame_mae_255": 0.03048396240569273
+  }
+}

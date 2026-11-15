@@ -1,0 +1,1368 @@
+{
+  "date_jst": "2026-11-05",
+  "prior_main_commit": "af5bdf66ca5c8f30df07f9bfb6f1d31facf439fa",
+  "description": "Half-resolution cloud grid with packed checkerboard tracing, temporal reprojection and disocclusion repair. OFF/ON use the same new executable.",
+  "fps": {
+    "reference": {
+      "combined_fps": 98.15157850465445,
+      "runs": [
+        {
+          "adapter": "NVIDIA GeForce RTX 5080",
+          "width": 1600,
+          "height": 900,
+          "quality": "High",
+          "vsync": false,
+          "checkerboard": false,
+          "cloud_buffer_divisor": 2,
+          "camera_path": "",
+          "warmup_frames": 120,
+          "measured_frames": 820,
+          "duration_seconds": 8.010014,
+          "average_fps": 102.371851,
+          "mean_frame_ms": 9.76831,
+          "p95_frame_ms": 12.7667,
+          "p99_frame_ms": 13.478,
+          "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+        },
+        {
+          "adapter": "NVIDIA GeForce RTX 5080",
+          "width": 1600,
+          "height": 900,
+          "quality": "High",
+          "vsync": false,
+          "checkerboard": false,
+          "cloud_buffer_divisor": 2,
+          "camera_path": "",
+          "warmup_frames": 120,
+          "measured_frames": 752,
+          "duration_seconds": 8.00603,
+          "average_fps": 93.929202,
+          "mean_frame_ms": 10.646316,
+          "p95_frame_ms": 14.1278,
+          "p99_frame_ms": 15.9716,
+          "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+        }
+      ]
+    },
+    "checker": {
+      "combined_fps": 125.79465288362212,
+      "runs": [
+        {
+          "adapter": "NVIDIA GeForce RTX 5080",
+          "width": 1600,
+          "height": 900,
+          "quality": "High",
+          "vsync": false,
+          "checkerboard": true,
+          "cloud_buffer_divisor": 2,
+          "camera_path": "",
+          "warmup_frames": 120,
+          "measured_frames": 1015,
+          "duration_seconds": 8.00172,
+          "average_fps": 126.847721,
+          "mean_frame_ms": 7.883468,
+          "p95_frame_ms": 11.0733,
+          "p99_frame_ms": 11.7785,
+          "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+        },
+        {
+          "adapter": "NVIDIA GeForce RTX 5080",
+          "width": 1600,
+          "height": 900,
+          "quality": "High",
+          "vsync": false,
+          "checkerboard": true,
+          "cloud_buffer_divisor": 2,
+          "camera_path": "",
+          "warmup_frames": 120,
+          "measured_frames": 998,
+          "duration_seconds": 8.00055,
+          "average_fps": 124.741422,
+          "mean_frame_ms": 8.016583,
+          "p95_frame_ms": 11.2244,
+          "p99_frame_ms": 11.9471,
+          "measurement": "Windowed wall time including message pump, rendering and Present; excludes startup, 120 warmup frames and PNG capture"
+        }
+      ]
+    },
+    "improvement_percent": 28.16365747766023
+  },
+  "static": [
+    {
+      "name": "day",
+      "mae_255": 0.04116504639387131,
+      "p99_255": 1.0,
+      "max_255": 44.0,
+      "fraction_pixels_over_8": 9.583333333333334e-05,
+      "reference_gpu_ms": 12.064051,
+      "checker_gpu_ms": 9.949294,
+      "checker_pass_ms": {
+        "cloud_shadow": 0.956429,
+        "geometry": 0.077511,
+        "sky": 0.012162,
+        "cloud_march": 7.377544,
+        "temporal": 1.368013,
+        "aerial_fog": 0.075406,
+        "composite_ui": 0.082229
+      },
+      "reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181763,
+        "history_pixels": 90753,
+        "repair_pixels": 1763,
+        "analytical_clear_pixels": 87484,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      }
+    },
+    {
+      "name": "overview",
+      "mae_255": 0.10828009247779846,
+      "p99_255": 1.0,
+      "max_255": 50.0,
+      "fraction_pixels_over_8": 0.0005590277777777778,
+      "reference_gpu_ms": 10.791194,
+      "checker_gpu_ms": 8.59657,
+      "checker_pass_ms": {
+        "cloud_shadow": 1.031632,
+        "geometry": 0.105927,
+        "sky": 0.012037,
+        "cloud_march": 6.393438,
+        "temporal": 0.644102,
+        "aerial_fog": 0.164909,
+        "composite_ui": 0.244524
+      },
+      "reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 193887,
+        "history_pixels": 106969,
+        "repair_pixels": 13887,
+        "analytical_clear_pixels": 59144,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      }
+    },
+    {
+      "name": "inside",
+      "mae_255": 0.08390139043331146,
+      "p99_255": 1.0,
+      "max_255": 64.0,
+      "fraction_pixels_over_8": 0.00034305555555555554,
+      "reference_gpu_ms": 9.385147,
+      "checker_gpu_ms": 7.426409,
+      "checker_pass_ms": {
+        "cloud_shadow": 1.006306,
+        "geometry": 0.077565,
+        "sky": 0.012807,
+        "cloud_march": 5.076171,
+        "temporal": 1.021584,
+        "aerial_fog": 0.074273,
+        "composite_ui": 0.157701
+      },
+      "reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 209082,
+        "history_pixels": 150918,
+        "repair_pixels": 29082,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      }
+    },
+    {
+      "name": "sunset",
+      "mae_255": 0.038511574268341064,
+      "p99_255": 1.0,
+      "max_255": 27.0,
+      "fraction_pixels_over_8": 0.0001673611111111111,
+      "reference_gpu_ms": 10.768506,
+      "checker_gpu_ms": 9.183765,
+      "checker_pass_ms": {
+        "cloud_shadow": 0.258986,
+        "geometry": 0.06177,
+        "sky": 0.012254,
+        "cloud_march": 7.279954,
+        "temporal": 1.419207,
+        "aerial_fog": 0.071873,
+        "composite_ui": 0.079721
+      },
+      "reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181763,
+        "history_pixels": 90753,
+        "repair_pixels": 1763,
+        "analytical_clear_pixels": 87484,
+        "checker_frames": 47,
+        "full_refresh_frames": 1
+      }
+    }
+  ],
+  "sequence": {
+    "frames": 180,
+    "seconds": 6,
+    "camera_path": "pan",
+    "weather": "clear -> storm, manual lightning at 4.5s",
+    "timeline_equal": true,
+    "mean_frame_mae_255": 0.19418364509733188,
+    "max_frame_mae_255": 0.4156777262687683,
+    "max_p99_255": 5.0,
+    "max_component_error_255": 64.0,
+    "worst_frames": [
+      {
+        "frame": "000053",
+        "mae_255": 0.4156777262687683,
+        "p99_255": 5.0,
+        "max_255": 51.0,
+        "fraction_pixels_over_8": 0.0038290895061728397
+      },
+      {
+        "frame": "000054",
+        "mae_255": 0.4108436107635498,
+        "p99_255": 5.0,
+        "max_255": 49.0,
+        "fraction_pixels_over_8": 0.0035956790123456792
+      },
+      {
+        "frame": "000055",
+        "mae_255": 0.4068332016468048,
+        "p99_255": 4.0,
+        "max_255": 46.0,
+        "fraction_pixels_over_8": 0.003260030864197531
+      },
+      {
+        "frame": "000052",
+        "mae_255": 0.40584489703178406,
+        "p99_255": 4.0,
+        "max_255": 61.0,
+        "fraction_pixels_over_8": 0.0035378086419753088
+      },
+      {
+        "frame": "000056",
+        "mae_255": 0.39850693941116333,
+        "p99_255": 4.0,
+        "max_255": 42.0,
+        "fraction_pixels_over_8": 0.003267746913580247
+      }
+    ]
+  },
+  "validation": {
+    "gpu_cases": 38,
+    "ctest_passed": 2,
+    "hlsl_entries": 16,
+    "native_builds": [
+      "Release",
+      "Debug"
+    ],
+    "ground_shadow_mean_delta_255": 75.1624329411764,
+    "reports": {
+      "checker-pan": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004204,
+          "max": 1.0,
+          "mean": 0.498944
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183435,
+          "history_pixels": 100131,
+          "repair_pixels": 3435,
+          "analytical_clear_pixels": 76434,
+          "checker_frames": 119,
+          "full_refresh_frames": 1
+        }
+      },
+      "full-lighting": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "overcast": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.00602,
+          "max": 1.0,
+          "mean": 0.4875
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181076,
+          "history_pixels": 92577,
+          "repair_pixels": 1076,
+          "analytical_clear_pixels": 86347,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "demo-clearing": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004978,
+          "max": 1.0,
+          "mean": 0.652895
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 96
+        }
+      },
+      "lightning": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003311,
+          "max": 1.0,
+          "mean": 0.478534
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 48
+        }
+      },
+      "shadows-off": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002377,
+          "max": 1.0,
+          "mean": 0.772684
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181456,
+          "history_pixels": 40356,
+          "repair_pixels": 1456,
+          "analytical_clear_pixels": 138188,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "shadows-on": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002377,
+          "max": 1.0,
+          "mean": 0.772684
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181456,
+          "history_pixels": 40356,
+          "repair_pixels": 1456,
+          "analytical_clear_pixels": 138188,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-mask": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "odd-low": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002663,
+          "max": 1.0,
+          "mean": 0.530909
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 18006,
+          "history_pixels": 8783,
+          "repair_pixels": 311,
+          "analytical_clear_pixels": 8602,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "wind-later": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004131,
+          "max": 1.0,
+          "mean": 0.554144
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 120
+        }
+      },
+      "transition-end": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003918,
+          "max": 1.0,
+          "mean": 0.478619
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181480,
+          "history_pixels": 93727,
+          "repair_pixels": 1480,
+          "analytical_clear_pixels": 84793,
+          "checker_frames": 131,
+          "full_refresh_frames": 1
+        }
+      },
+      "transition-mid": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004105,
+          "max": 1.0,
+          "mean": 0.48868
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181289,
+          "history_pixels": 91737,
+          "repair_pixels": 1289,
+          "analytical_clear_pixels": 86974,
+          "checker_frames": 59,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "night": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-particles": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "ultra": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005638,
+          "max": 1.0,
+          "mean": 0.531678
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            1001,
+            563
+          ],
+          "raw_allocation": [
+            501,
+            563
+          ],
+          "parity": 1,
+          "traced_pixels": 284147,
+          "history_pixels": 142460,
+          "repair_pixels": 2366,
+          "analytical_clear_pixels": 136956,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-full": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001773,
+          "max": 1.0,
+          "mean": 0.531288
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            1001,
+            563
+          ],
+          "raw_allocation": [
+            501,
+            563
+          ],
+          "parity": 1,
+          "traced_pixels": 284303,
+          "history_pixels": 142304,
+          "repair_pixels": 2522,
+          "analytical_clear_pixels": 136956,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-quarter": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004501,
+          "max": 1.0,
+          "mean": 0.531235
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 17999,
+          "history_pixels": 8790,
+          "repair_pixels": 304,
+          "analytical_clear_pixels": 8602,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-low": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003216,
+          "max": 1.0,
+          "mean": 0.481001
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 17767,
+          "history_pixels": 9201,
+          "repair_pixels": 72,
+          "analytical_clear_pixels": 8423,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-off": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-after-cut": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001706,
+          "max": 1.0,
+          "mean": 0.456735
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 0,
+          "traced_pixels": 193970,
+          "history_pixels": 106886,
+          "repair_pixels": 13970,
+          "analytical_clear_pixels": 59144,
+          "checker_frames": 119,
+          "full_refresh_frames": 2
+        }
+      },
+      "demo-storm": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003344,
+          "max": 1.0,
+          "mean": 0.47858
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 64
+        }
+      },
+      "checker-cut": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001513,
+          "max": 1.0,
+          "mean": 0.456806
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 118,
+          "full_refresh_frames": 2
+        }
+      },
+      "checker-off": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004578,
+          "max": 1.0,
+          "mean": 0.531447
+        },
+        "reconstruction": {
+          "enabled": false,
+          "active": false,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            800,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 0
+        }
+      },
+      "storm": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.00374,
+          "max": 1.0,
+          "mean": 0.478515
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181483,
+          "history_pixels": 93724,
+          "repair_pixels": 1483,
+          "analytical_clear_pixels": 84793,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "day": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "inside": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003101,
+          "max": 1.0,
+          "mean": 0.48661
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 209082,
+          "history_pixels": 150918,
+          "repair_pixels": 29082,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-half": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005711,
+          "max": 1.0,
+          "mean": 0.531529
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            501,
+            282
+          ],
+          "raw_allocation": [
+            251,
+            282
+          ],
+          "parity": 1,
+          "traced_pixels": 71586,
+          "history_pixels": 35372,
+          "repair_pixels": 945,
+          "analytical_clear_pixels": 34324,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "clouds-off": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "overview": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001789,
+          "max": 1.0,
+          "mean": 0.456675
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 193887,
+          "history_pixels": 106969,
+          "repair_pixels": 13887,
+          "analytical_clear_pixels": 59144,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "sunset": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "clear": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004738,
+          "max": 1.0,
+          "mean": 0.621565
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183745,
+          "history_pixels": 88681,
+          "repair_pixels": 3745,
+          "analytical_clear_pixels": 87574,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "night-lightning": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003424,
+          "max": 1.0,
+          "mean": 0.478517
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 46,
+          "full_refresh_frames": 2
+        }
+      },
+      "perlin-worley": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "worley-detail": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-above-clouds": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002035,
+          "max": 1.0,
+          "mean": 0.349751
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181532,
+          "history_pixels": 119187,
+          "repair_pixels": 1532,
+          "analytical_clear_pixels": 59281,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "hud": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "lightning-off": {
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003311,
+          "max": 1.0,
+          "mean": 0.478534
+        },
+        "reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 48
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "adapter": "NVIDIA GeForce RTX 5080",
+  "reference_commit": "f8874bfdb7757d491962789db19a00b2e722ab96",
+  "common_arguments": [
+    "--headless",
+    "--no-ui",
+    "--width",
+    "1600",
+    "--height",
+    "900",
+    "--quality",
+    "high",
+    "--frames",
+    "48",
+    "--fixed-dt",
+    "0.0166666666666667",
+    "--debug-layer"
+  ],
+  "timing_metric": "Smoothed D3D11 timestamps in each capture report. Single run per row, excludes Present and initialization.",
+  "before_and_after": {
+    "clear": {
+      "args": [
+        "--weather",
+        "clear",
+        "--camera",
+        "valley"
+      ],
+      "before": {
+        "gpu_ms": 11.840267,
+        "timing_samples": 42,
+        "cloud_march_ms": 9.293137,
+        "cloud_shadow_ms": 1.298504,
+        "cloud_mean_transmittance": 0.621565
+      },
+      "after": {
+        "gpu_ms": 4.373385,
+        "timing_samples": 42,
+        "cloud_march_ms": 3.356078,
+        "cloud_shadow_ms": 0.056979,
+        "cloud_mean_transmittance": 0.860168
+      }
+    },
+    "partly": {
+      "args": [
+        "--weather",
+        "partly",
+        "--camera",
+        "valley"
+      ],
+      "before": {
+        "gpu_ms": 10.943733,
+        "timing_samples": 42,
+        "cloud_march_ms": 7.627782,
+        "cloud_shadow_ms": 1.43828,
+        "cloud_mean_transmittance": 0.53147
+      },
+      "after": {
+        "gpu_ms": 4.222616,
+        "timing_samples": 42,
+        "cloud_march_ms": 3.114558,
+        "cloud_shadow_ms": 0.079856,
+        "cloud_mean_transmittance": 0.75316
+      }
+    },
+    "tower": {
+      "args": [
+        "--weather",
+        "partly",
+        "--camera",
+        "tower-close",
+        "--formations",
+        "towers",
+        "--sun-azimuth",
+        "150"
+      ],
+      "before": {
+        "gpu_ms": 10.479779,
+        "timing_samples": 42,
+        "cloud_march_ms": 7.121382,
+        "cloud_shadow_ms": 1.234718,
+        "cloud_mean_transmittance": 0.524597
+      },
+      "after": {
+        "gpu_ms": 10.673214,
+        "timing_samples": 42,
+        "cloud_march_ms": 8.826124,
+        "cloud_shadow_ms": 0.093456,
+        "cloud_mean_transmittance": 0.564269
+      }
+    },
+    "mixed": {
+      "args": [
+        "--weather",
+        "overcast",
+        "--camera",
+        "formations",
+        "--formations",
+        "mixed"
+      ],
+      "before": {
+        "gpu_ms": 23.978265,
+        "timing_samples": 42,
+        "cloud_march_ms": 13.448095,
+        "cloud_shadow_ms": 7.080869,
+        "cloud_mean_transmittance": 0.441798
+      },
+      "after": {
+        "gpu_ms": 14.239545,
+        "timing_samples": 42,
+        "cloud_march_ms": 11.195125,
+        "cloud_shadow_ms": 1.32317,
+        "cloud_mean_transmittance": 0.427515
+      }
+    },
+    "vortex": {
+      "args": [
+        "--weather",
+        "overcast",
+        "--camera",
+        "vortex",
+        "--formations",
+        "vortex"
+      ],
+      "before": {
+        "gpu_ms": 50.518046,
+        "timing_samples": 42,
+        "cloud_march_ms": 40.471438,
+        "cloud_shadow_ms": 6.263871,
+        "cloud_mean_transmittance": 0.066933
+      },
+      "after": {
+        "gpu_ms": 18.20501,
+        "timing_samples": 42,
+        "cloud_march_ms": 16.38002,
+        "cloud_shadow_ms": 0.451277,
+        "cloud_mean_transmittance": 0.027041
+      }
+    },
+    "shadows": {
+      "args": [
+        "--weather",
+        "partly",
+        "--camera",
+        "shadows",
+        "--sun-elevation",
+        "35"
+      ],
+      "before": {
+        "gpu_ms": 8.411692,
+        "timing_samples": 42,
+        "cloud_march_ms": 5.201604,
+        "cloud_shadow_ms": 1.883585,
+        "cloud_mean_transmittance": 0.772684
+      },
+      "after": {
+        "gpu_ms": 4.445971,
+        "timing_samples": 42,
+        "cloud_march_ms": 3.182167,
+        "cloud_shadow_ms": 0.081881,
+        "cloud_mean_transmittance": 0.826552
+      }
+    },
+    "storm": {
+      "args": [
+        "--weather",
+        "storm",
+        "--camera",
+        "valley",
+        "--sun-elevation",
+        "25"
+      ],
+      "before": {
+        "gpu_ms": 12.857732,
+        "timing_samples": 42,
+        "cloud_march_ms": 9.574296,
+        "cloud_shadow_ms": 0.308763,
+        "cloud_mean_transmittance": 0.478515
+      },
+      "after": {
+        "gpu_ms": 3.521862,
+        "timing_samples": 42,
+        "cloud_march_ms": 1.906781,
+        "cloud_shadow_ms": 0.091287,
+        "cloud_mean_transmittance": 0.478268
+      }
+    }
+  },
+  "tower_resolution": {
+    "args": [
+      "--weather",
+      "partly",
+      "--camera",
+      "tower-close",
+      "--formations",
+      "towers",
+      "--sun-azimuth",
+      "150"
+    ],
+    "half_checkerboard": {
+      "gpu_ms": 10.673214,
+      "timing_samples": 42,
+      "cloud_march_ms": 8.826124,
+      "cloud_shadow_ms": 0.093456,
+      "cloud_mean_transmittance": 0.564269
+    },
+    "half_reference": {
+      "gpu_ms": 12.342298,
+      "timing_samples": 42,
+      "cloud_march_ms": 10.985124,
+      "cloud_shadow_ms": 0.529302,
+      "cloud_mean_transmittance": 0.564197
+    },
+    "full_reference": {
+      "gpu_ms": 27.943276,
+      "timing_samples": 42,
+      "cloud_march_ms": 26.379605,
+      "cloud_shadow_ms": 0.6198,
+      "cloud_mean_transmittance": 0.564212
+    },
+    "half_checkerboard_vs_half_reference": {
+      "mean_absolute_rgb_255": 0.082913,
+      "p99_absolute_component_255": 1.0,
+      "maximum_absolute_component_255": 55,
+      "pixels_with_component_error_above_8_pct": 0.032222
+    },
+    "half_checkerboard_vs_full_reference": {
+      "mean_absolute_rgb_255": 0.629544,
+      "p99_absolute_component_255": 6.0,
+      "maximum_absolute_component_255": 150,
+      "pixels_with_component_error_above_8_pct": 0.682639
+    }
+  },
+  "packaged_custom_vs_cmake": {
+    "mean_absolute_rgb_255": 0.0,
+    "p99_absolute_component_255": 0.0,
+    "maximum_absolute_component_255": 0,
+    "pixels_with_component_error_above_8_pct": 0.0
+  }
+}

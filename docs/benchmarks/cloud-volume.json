@@ -1,0 +1,4986 @@
+{
+  "date_jst": "2026-11-08",
+  "reference_shader_commit": "12bb5e4fc1b8fd7636cd09adaccca3779ca740e1",
+  "methodology": [
+    "Legacy captures use the current executable and camera with unmodified shaders from the reference commit. The Frame cbuffer is compatible.",
+    "Display-encoded 8-bit RGB differences measure reconstruction differences, not physical accuracy or realism.",
+    "Native-full comparisons include spatial resolution changes. Checker references use the same half-size cloud grid.",
+    "GPU timestamps are smoothed values from individual captures, not windowed FPS or controlled performance benchmarks."
+  ],
+  "builds": {
+    "native_visual_studio": [
+      "Release",
+      "Debug"
+    ],
+    "cmake_release": true,
+    "ctest_passed": 4,
+    "hlsl_entry_points": 16
+  },
+  "assets": {
+    "size": 128,
+    "format": "R16_FLOAT",
+    "bytes": 4194304,
+    "cells": 261,
+    "warp_size": 64,
+    "warp_bytes": 2097152,
+    "asset_setup_cpu_ms": 20.7496
+  },
+  "source_normalized_lf_sha256": {
+    "src/cloud_volume.hpp": "94cf7a1606bbede79f023a60aeba2956fa9bcdbb49598e97489e46923a9f869b",
+    "src/renderer.cpp": "51f45a39cc0f791e38453c95e9ce5521d3edce679488b2b769c1d86bc8141f10",
+    "src/renderer.hpp": "279e87db7e3dd5445d244006f6a3fd705584319d8cd42e621c06fb708be49176",
+    "src/main.cpp": "13dbd39c3302883266dbbd0b505712c02a53a81b8c51d51055b73d338dcb5b75",
+    "shaders/formations.hlsli": "db7719e10760eb804f8d4569a13f0ae9ded4a5d0d2e81933bbe6925c04a18f7c",
+    "shaders/common.hlsli": "361fc4651ef3cc0f26be108865200720d3ad212ceda3fc61158dad8779974fde",
+    "shaders/scene.hlsl": "44a3c518ac1d25a870c07bf2683c7d0d7a42b127320e7438592381abd559f93d"
+  },
+  "legacy_shader_normalized_lf_sha256": {
+    "atmosphere.hlsl": "b4d188554ea5cfb2810c4050e71eef6eb0d18d5bb42f8569e3ec7f409ba1d0e0",
+    "clouds.hlsl": "a5b1a14e7f9610e0865da72d4941e44761f1fe2b9d872a985d0d6338eb637ea3",
+    "common.hlsli": "9deb30d37bd3c48e72a12727e245cf925cf0e7385cd923317ab7abd3ac8b5e1e",
+    "formations.hlsli": "bcb73d9499c79fa2e1596bbc3183e902b16dd42db02e73b3f35ee6018dd8560e",
+    "lightning.hlsli": "1c9134678665f279c536a365b36b0399f70d757451f545ab31cafc2abfe4af2b",
+    "noise.hlsl": "162d2f184c332800da83b4f3d5da3fcce7a754dd0950211574ee1efefec2a181",
+    "rain.hlsl": "507d51186d1668f633b91887f6b5187d27c2bf80d30b20c64289aa0c3bd505cb",
+    "scene.hlsl": "03afb50738eaf709e121b3fb658b83156c4dd1f033f1282293f83eef20c857b0"
+  },
+  "gpu_validation": {
+    "passed_cases": 62,
+    "debug_errors": 0,
+    "debug_warnings": 0,
+    "inspected_nonfinite_samples": 0,
+    "cases": {
+      "formation-none": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003513,
+          "max": 1.0,
+          "mean": 0.475283
+        },
+        "gpu_frame_ms": 10.512498,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181723,
+          "history_pixels": 97261,
+          "repair_pixels": 1723,
+          "analytical_clear_pixels": 81016,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "night": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 6.27371,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "overview": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001789,
+          "max": 1.0,
+          "mean": 0.456675
+        },
+        "gpu_frame_ms": 7.914306,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 193886,
+          "history_pixels": 106970,
+          "repair_pixels": 13886,
+          "analytical_clear_pixels": 59144,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "transition-end": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 132,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003918,
+          "max": 1.0,
+          "mean": 0.478619
+        },
+        "gpu_frame_ms": 7.61309,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181480,
+          "history_pixels": 93727,
+          "repair_pixels": 1480,
+          "analytical_clear_pixels": 84793,
+          "checker_frames": 131,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-control-z": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.409153,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "storm": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.00374,
+          "max": 1.0,
+          "mean": 0.478515
+        },
+        "gpu_frame_ms": 7.460828,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181483,
+          "history_pixels": 93724,
+          "repair_pixels": 1483,
+          "analytical_clear_pixels": 84793,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-warp-x": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.195632,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "wind-later": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 120,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004131,
+          "max": 1.0,
+          "mean": 0.554144
+        },
+        "gpu_frame_ms": 12.455923,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 120
+        }
+      },
+      "shadows-on": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002377,
+          "max": 1.0,
+          "mean": 0.772684
+        },
+        "gpu_frame_ms": 5.03945,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181456,
+          "history_pixels": 40356,
+          "repair_pixels": 1456,
+          "analytical_clear_pixels": 138188,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "ultra": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005638,
+          "max": 1.0,
+          "mean": 0.531678
+        },
+        "gpu_frame_ms": 25.953481,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            1001,
+            563
+          ],
+          "raw_allocation": [
+            501,
+            563
+          ],
+          "parity": 1,
+          "traced_pixels": 284146,
+          "history_pixels": 142461,
+          "repair_pixels": 2365,
+          "analytical_clear_pixels": 136956,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Rain",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "gpu_frame_ms": 9.310987,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-low": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Rain",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003216,
+          "max": 1.0,
+          "mean": 0.481001
+        },
+        "gpu_frame_ms": 1.517958,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 17767,
+          "history_pixels": 9201,
+          "repair_pixels": 72,
+          "analytical_clear_pixels": 8423,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-towers": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001655,
+          "max": 1.0,
+          "mean": 0.442018
+        },
+        "gpu_frame_ms": 10.83048,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 182461,
+          "history_pixels": 169497,
+          "repair_pixels": 2461,
+          "analytical_clear_pixels": 8042,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-frontlit": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001284,
+          "max": 1.0,
+          "mean": 0.525294
+        },
+        "gpu_frame_ms": 6.766726,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183006,
+          "history_pixels": 176994,
+          "repair_pixels": 3006,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-close": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001284,
+          "max": 1.0,
+          "mean": 0.525294
+        },
+        "gpu_frame_ms": 6.826129,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183006,
+          "history_pixels": 176994,
+          "repair_pixels": 3006,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "demo-clearing": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Clear",
+        "frames": 96,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004978,
+          "max": 1.0,
+          "mean": 0.652895
+        },
+        "gpu_frame_ms": 12.587208,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 96
+        }
+      },
+      "formation-custom": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001655,
+          "max": 1.0,
+          "mean": 0.44143
+        },
+        "gpu_frame_ms": 15.036635,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 182405,
+          "history_pixels": 169553,
+          "repair_pixels": 2405,
+          "analytical_clear_pixels": 8042,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-control-x": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.192006,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-particles": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Rain",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "gpu_frame_ms": 8.45908,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-large": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001177,
+          "max": 1.0,
+          "mean": 0.323873
+        },
+        "gpu_frame_ms": 17.005994,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 182955,
+          "history_pixels": 177045,
+          "repair_pixels": 2955,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-after-cut": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 121,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001706,
+          "max": 1.0,
+          "mean": 0.456735
+        },
+        "gpu_frame_ms": 7.415053,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 0,
+          "traced_pixels": 193970,
+          "history_pixels": 106886,
+          "repair_pixels": 13970,
+          "analytical_clear_pixels": 59144,
+          "checker_frames": 119,
+          "full_refresh_frames": 2
+        }
+      },
+      "day": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.877939,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "night-lightning": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003424,
+          "max": 1.0,
+          "mean": 0.478517
+        },
+        "gpu_frame_ms": 5.917083,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 46,
+          "full_refresh_frames": 2
+        }
+      },
+      "clear": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Clear",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004738,
+          "max": 1.0,
+          "mean": 0.621565
+        },
+        "gpu_frame_ms": 8.175125,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183744,
+          "history_pixels": 88682,
+          "repair_pixels": 3744,
+          "analytical_clear_pixels": 87574,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "worley-detail": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.61768,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-vortex": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.006863,
+          "max": 1.0,
+          "mean": 0.066933
+        },
+        "gpu_frame_ms": 29.071079,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183915,
+          "history_pixels": 176085,
+          "repair_pixels": 3915,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-control-y": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.56708,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-inside": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005516,
+          "max": 0.007996,
+          "mean": 0.007481
+        },
+        "gpu_frame_ms": 3.964623,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181851,
+          "history_pixels": 178149,
+          "repair_pixels": 1851,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-mixed": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001655,
+          "max": 1.0,
+          "mean": 0.441798
+        },
+        "gpu_frame_ms": 14.401462,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 182446,
+          "history_pixels": 169512,
+          "repair_pixels": 2446,
+          "analytical_clear_pixels": 8042,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-reference": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001545,
+          "max": 1.0,
+          "mean": 0.441793
+        },
+        "gpu_frame_ms": 18.744977,
+        "cloud_reconstruction": {
+          "enabled": false,
+          "active": false,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            800,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 0
+        }
+      },
+      "full-lighting": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 12.104383,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004578,
+          "max": 1.0,
+          "mean": 0.531447
+        },
+        "gpu_frame_ms": 9.991961,
+        "cloud_reconstruction": {
+          "enabled": false,
+          "active": false,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            800,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 0
+        }
+      },
+      "perlin-worley": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.648014,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-pan": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 120,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004204,
+          "max": 1.0,
+          "mean": 0.498944
+        },
+        "gpu_frame_ms": 9.955999,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183435,
+          "history_pixels": 100131,
+          "repair_pixels": 3435,
+          "analytical_clear_pixels": 76434,
+          "checker_frames": 119,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.762243,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "clouds-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.267713,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-density-zero": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003513,
+          "max": 1.0,
+          "mean": 0.475283
+        },
+        "gpu_frame_ms": 10.672368,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181723,
+          "history_pixels": 97261,
+          "repair_pixels": 1723,
+          "analytical_clear_pixels": 81016,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "lightning-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003311,
+          "max": 1.0,
+          "mean": 0.478534
+        },
+        "gpu_frame_ms": 9.18844,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 48
+        }
+      },
+      "tower-orbit": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 120,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.000968,
+          "max": 1.0,
+          "mean": 0.541429
+        },
+        "gpu_frame_ms": 14.123194,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 184242,
+          "history_pixels": 175758,
+          "repair_pixels": 4242,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 119,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-full": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001773,
+          "max": 1.0,
+          "mean": 0.531288
+        },
+        "gpu_frame_ms": 4.642192,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            1001,
+            563
+          ],
+          "raw_allocation": [
+            501,
+            563
+          ],
+          "parity": 1,
+          "traced_pixels": 284303,
+          "history_pixels": 142304,
+          "repair_pixels": 2522,
+          "analytical_clear_pixels": 136956,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "sunset": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.330678,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "transition-mid": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 60,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004105,
+          "max": 1.0,
+          "mean": 0.48868
+        },
+        "gpu_frame_ms": 10.10704,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181289,
+          "history_pixels": 91737,
+          "repair_pixels": 1289,
+          "analytical_clear_pixels": 86974,
+          "checker_frames": 59,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Rain",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005226,
+          "max": 1.0,
+          "mean": 0.481322
+        },
+        "gpu_frame_ms": 8.946161,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181205,
+          "history_pixels": 93173,
+          "repair_pixels": 1205,
+          "analytical_clear_pixels": 85622,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "formation-zero": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003513,
+          "max": 1.0,
+          "mean": 0.475283
+        },
+        "gpu_frame_ms": 9.935126,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181723,
+          "history_pixels": 97261,
+          "repair_pixels": 1723,
+          "analytical_clear_pixels": 81016,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-mask": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.587153,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "overcast": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.00602,
+          "max": 1.0,
+          "mean": 0.4875
+        },
+        "gpu_frame_ms": 10.826658,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181076,
+          "history_pixels": 92577,
+          "repair_pixels": 1076,
+          "analytical_clear_pixels": 86347,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "shadows-off": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002377,
+          "max": 1.0,
+          "mean": 0.772684
+        },
+        "gpu_frame_ms": 3.992576,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181456,
+          "history_pixels": 40356,
+          "repair_pixels": 1456,
+          "analytical_clear_pixels": 138188,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-side": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001146,
+          "max": 1.0,
+          "mean": 0.501105
+        },
+        "gpu_frame_ms": 6.943516,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183063,
+          "history_pixels": 176937,
+          "repair_pixels": 3063,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "lightning": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003311,
+          "max": 1.0,
+          "mean": 0.478534
+        },
+        "gpu_frame_ms": 9.678491,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 48
+        }
+      },
+      "tower-sunset": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001655,
+          "max": 1.0,
+          "mean": 0.441798
+        },
+        "gpu_frame_ms": 13.551963,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 182446,
+          "history_pixels": 169512,
+          "repair_pixels": 2446,
+          "analytical_clear_pixels": 8042,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "demo-storm": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Storm",
+        "frames": 64,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003344,
+          "max": 1.0,
+          "mean": 0.47858
+        },
+        "gpu_frame_ms": 11.312618,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 64
+        }
+      },
+      "tower-warp-z": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.191415,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-quarter": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004501,
+          "max": 1.0,
+          "mean": 0.531234
+        },
+        "gpu_frame_ms": 3.919548,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 17999,
+          "history_pixels": 8790,
+          "repair_pixels": 304,
+          "analytical_clear_pixels": 8602,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "rain-above-clouds": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Rain",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002035,
+          "max": 1.0,
+          "mean": 0.349751
+        },
+        "gpu_frame_ms": 10.521963,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181532,
+          "history_pixels": 119187,
+          "repair_pixels": 1532,
+          "analytical_clear_pixels": 59281,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "tower-warp-y": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0
+        },
+        "gpu_frame_ms": 0.622438,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 180000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 180000,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "cloud-half": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.005711,
+          "max": 1.0,
+          "mean": 0.531529
+        },
+        "gpu_frame_ms": 15.082349,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            501,
+            282
+          ],
+          "raw_allocation": [
+            251,
+            282
+          ],
+          "parity": 1,
+          "traced_pixels": 71586,
+          "history_pixels": 35372,
+          "repair_pixels": 945,
+          "analytical_clear_pixels": 34324,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "odd-low": {
+        "size": [
+          1001,
+          563
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.002663,
+          "max": 1.0,
+          "mean": 0.530908
+        },
+        "gpu_frame_ms": 1.393402,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            251,
+            141
+          ],
+          "raw_allocation": [
+            126,
+            141
+          ],
+          "parity": 1,
+          "traced_pixels": 18006,
+          "history_pixels": 8783,
+          "repair_pixels": 311,
+          "analytical_clear_pixels": 8602,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "hud": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.004124,
+          "max": 1.0,
+          "mean": 0.53147
+        },
+        "gpu_frame_ms": 7.673075,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 181763,
+          "history_pixels": 90753,
+          "repair_pixels": 1763,
+          "analytical_clear_pixels": 87484,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "inside": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.003101,
+          "max": 1.0,
+          "mean": 0.486609
+        },
+        "gpu_frame_ms": 7.168337,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 209082,
+          "history_pixels": 150918,
+          "repair_pixels": 29082,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      },
+      "checker-cut": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Partly cloudy",
+        "frames": 120,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.001513,
+          "max": 1.0,
+          "mean": 0.456806
+        },
+        "gpu_frame_ms": 7.534401,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": false,
+          "full_refresh": true,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 360000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 118,
+          "full_refresh_frames": 2
+        }
+      },
+      "tower-close-full": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.00093,
+          "max": 1.0,
+          "mean": 0.5255
+        },
+        "gpu_frame_ms": 22.682131,
+        "cloud_reconstruction": {
+          "enabled": false,
+          "active": false,
+          "full_refresh": false,
+          "logical_size": [
+            1600,
+            900
+          ],
+          "raw_allocation": [
+            1600,
+            900
+          ],
+          "parity": 1,
+          "traced_pixels": 1440000,
+          "history_pixels": 0,
+          "repair_pixels": 0,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 0,
+          "full_refresh_frames": 0
+        }
+      },
+      "formation-reverse": {
+        "size": [
+          1600,
+          900
+        ],
+        "weather": "Overcast",
+        "frames": 48,
+        "nonfinite_samples": 0,
+        "cloud_transmittance": {
+          "min": 0.006863,
+          "max": 1.0,
+          "mean": 0.067179
+        },
+        "gpu_frame_ms": 30.701578,
+        "cloud_reconstruction": {
+          "enabled": true,
+          "active": true,
+          "full_refresh": false,
+          "logical_size": [
+            800,
+            450
+          ],
+          "raw_allocation": [
+            400,
+            450
+          ],
+          "parity": 1,
+          "traced_pixels": 183917,
+          "history_pixels": 176083,
+          "repair_pixels": 3917,
+          "analytical_clear_pixels": 0,
+          "checker_frames": 47,
+          "full_refresh_frames": 1
+        }
+      }
+    }
+  },
+  "static_differences": {
+    "ordinary_clouds_legacy_shader_vs_current": {
+      "mae_255": 0.0,
+      "p99_component_255": 0.0,
+      "max_component_255": 0
+    },
+    "vortex_legacy_shader_vs_current": {
+      "mae_255": 0.0,
+      "p99_component_255": 0.0,
+      "max_component_255": 0
+    },
+    "close_half_checker_vs_native_full": {
+      "mae_255": 0.25096111111111113,
+      "p99_component_255": 3.0,
+      "max_component_255": 145
+    },
+    "frontlit_half_checker_vs_native_full": {
+      "mae_255": 0.2371587962962963,
+      "p99_component_255": 2.0,
+      "max_component_255": 96
+    },
+    "checker_vs_full_grid_same_half_mixed": {
+      "mae_255": 0.04945740740740741,
+      "p99_component_255": 1.0,
+      "max_component_255": 94
+    },
+    "strength_zero_vs_none": {
+      "mae_255": 0.0,
+      "p99_component_255": 0.0,
+      "max_component_255": 0
+    }
+  },
+  "orbit_reconstruction": {
+    "frames": 192,
+    "duration_seconds": 8,
+    "dimensions": [
+      960,
+      540
+    ],
+    "cloud_grid": [
+      480,
+      270
+    ],
+    "mean_mae_255": 0.15214489427940672,
+    "max_frame_mae_255": 0.201698816872428,
+    "max_frame_p99_component_255": 2.0,
+    "max_component_255": 96,
+    "weather_timelines_match": true,
+    "per_frame": [
+      {
+        "frame": 0,
+        "mae_255": 0.0,
+        "p99_component_255": 0.0,
+        "max_component_255": 0
+      },
+      {
+        "frame": 1,
+        "mae_255": 0.04771412037037037,
+        "p99_component_255": 1.0,
+        "max_component_255": 18
+      },
+      {
+        "frame": 2,
+        "mae_255": 0.06503858024691359,
+        "p99_component_255": 1.0,
+        "max_component_255": 20
+      },
+      {
+        "frame": 3,
+        "mae_255": 0.0797022890946502,
+        "p99_component_255": 1.0,
+        "max_component_255": 13
+      },
+      {
+        "frame": 4,
+        "mae_255": 0.0940599279835391,
+        "p99_component_255": 1.0,
+        "max_component_255": 28
+      },
+      {
+        "frame": 5,
+        "mae_255": 0.10439364711934157,
+        "p99_component_255": 1.0,
+        "max_component_255": 39
+      },
+      {
+        "frame": 6,
+        "mae_255": 0.11232960390946502,
+        "p99_component_255": 1.0,
+        "max_component_255": 19
+      },
+      {
+        "frame": 7,
+        "mae_255": 0.12001993312757202,
+        "p99_component_255": 1.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 8,
+        "mae_255": 0.12469521604938272,
+        "p99_component_255": 2.0,
+        "max_component_255": 17
+      },
+      {
+        "frame": 9,
+        "mae_255": 0.1301247427983539,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 10,
+        "mae_255": 0.13362911522633744,
+        "p99_component_255": 2.0,
+        "max_component_255": 48
+      },
+      {
+        "frame": 11,
+        "mae_255": 0.13702353395061728,
+        "p99_component_255": 2.0,
+        "max_component_255": 34
+      },
+      {
+        "frame": 12,
+        "mae_255": 0.13873328189300413,
+        "p99_component_255": 2.0,
+        "max_component_255": 23
+      },
+      {
+        "frame": 13,
+        "mae_255": 0.141943158436214,
+        "p99_component_255": 2.0,
+        "max_component_255": 17
+      },
+      {
+        "frame": 14,
+        "mae_255": 0.1420267489711934,
+        "p99_component_255": 2.0,
+        "max_component_255": 17
+      },
+      {
+        "frame": 15,
+        "mae_255": 0.14325810185185187,
+        "p99_component_255": 2.0,
+        "max_component_255": 16
+      },
+      {
+        "frame": 16,
+        "mae_255": 0.14288451646090536,
+        "p99_component_255": 2.0,
+        "max_component_255": 16
+      },
+      {
+        "frame": 17,
+        "mae_255": 0.14429269547325102,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 18,
+        "mae_255": 0.1448193158436214,
+        "p99_component_255": 2.0,
+        "max_component_255": 35
+      },
+      {
+        "frame": 19,
+        "mae_255": 0.1442476851851852,
+        "p99_component_255": 2.0,
+        "max_component_255": 15
+      },
+      {
+        "frame": 20,
+        "mae_255": 0.14474022633744857,
+        "p99_component_255": 2.0,
+        "max_component_255": 24
+      },
+      {
+        "frame": 21,
+        "mae_255": 0.1440110596707819,
+        "p99_component_255": 2.0,
+        "max_component_255": 17
+      },
+      {
+        "frame": 22,
+        "mae_255": 0.14347350823045268,
+        "p99_component_255": 2.0,
+        "max_component_255": 33
+      },
+      {
+        "frame": 23,
+        "mae_255": 0.1436574074074074,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 24,
+        "mae_255": 0.14252379115226338,
+        "p99_component_255": 2.0,
+        "max_component_255": 27
+      },
+      {
+        "frame": 25,
+        "mae_255": 0.14287229938271606,
+        "p99_component_255": 2.0,
+        "max_component_255": 43
+      },
+      {
+        "frame": 26,
+        "mae_255": 0.1421071244855967,
+        "p99_component_255": 2.0,
+        "max_component_255": 24
+      },
+      {
+        "frame": 27,
+        "mae_255": 0.14222479423868312,
+        "p99_component_255": 2.0,
+        "max_component_255": 19
+      },
+      {
+        "frame": 28,
+        "mae_255": 0.1411992026748971,
+        "p99_component_255": 2.0,
+        "max_component_255": 24
+      },
+      {
+        "frame": 29,
+        "mae_255": 0.1412622170781893,
+        "p99_component_255": 2.0,
+        "max_component_255": 27
+      },
+      {
+        "frame": 30,
+        "mae_255": 0.14072980967078189,
+        "p99_component_255": 2.0,
+        "max_component_255": 27
+      },
+      {
+        "frame": 31,
+        "mae_255": 0.13972029320987656,
+        "p99_component_255": 2.0,
+        "max_component_255": 15
+      },
+      {
+        "frame": 32,
+        "mae_255": 0.1399067644032922,
+        "p99_component_255": 2.0,
+        "max_component_255": 50
+      },
+      {
+        "frame": 33,
+        "mae_255": 0.13820923353909464,
+        "p99_component_255": 2.0,
+        "max_component_255": 24
+      },
+      {
+        "frame": 34,
+        "mae_255": 0.13853652263374486,
+        "p99_component_255": 2.0,
+        "max_component_255": 23
+      },
+      {
+        "frame": 35,
+        "mae_255": 0.13881944444444444,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 36,
+        "mae_255": 0.1392605452674897,
+        "p99_component_255": 2.0,
+        "max_component_255": 35
+      },
+      {
+        "frame": 37,
+        "mae_255": 0.1384670781893004,
+        "p99_component_255": 2.0,
+        "max_component_255": 24
+      },
+      {
+        "frame": 38,
+        "mae_255": 0.1373270318930041,
+        "p99_component_255": 2.0,
+        "max_component_255": 32
+      },
+      {
+        "frame": 39,
+        "mae_255": 0.13706983024691358,
+        "p99_component_255": 2.0,
+        "max_component_255": 29
+      },
+      {
+        "frame": 40,
+        "mae_255": 0.1368801440329218,
+        "p99_component_255": 2.0,
+        "max_component_255": 26
+      },
+      {
+        "frame": 41,
+        "mae_255": 0.1372852366255144,
+        "p99_component_255": 2.0,
+        "max_component_255": 21
+      },
+      {
+        "frame": 42,
+        "mae_255": 0.13718364197530863,
+        "p99_component_255": 2.0,
+        "max_component_255": 55
+      },
+      {
+        "frame": 43,
+        "mae_255": 0.13807806069958847,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 44,
+        "mae_255": 0.1382201646090535,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 45,
+        "mae_255": 0.13814557613168724,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 46,
+        "mae_255": 0.13820216049382716,
+        "p99_component_255": 2.0,
+        "max_component_255": 31
+      },
+      {
+        "frame": 47,
+        "mae_255": 0.13893904320987654,
+        "p99_component_255": 2.0,
+        "max_component_255": 20
+      },
+      {
+        "frame": 48,
+        "mae_255": 0.1393775720164609,
+        "p99_component_255": 2.0,
+        "max_component_255": 19
+      },
+      {
+        "frame": 49,
+        "mae_255": 0.13895190329218107,
+        "p99_component_255": 2.0,
+        "max_component_255": 22
+      },
+      {
+        "frame": 50,
+        "mae_255": 0.1387847222222222,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 51,
+        "mae_255": 0.13786008230452676,
+        "p99_component_255": 2.0,
+        "max_component_255": 26
+      },
+      {
+        "frame": 52,
+        "mae_255": 0.13774498456790124,
+        "p99_component_255": 2.0,
+        "max_component_255": 34
+      },
+      {
+        "frame": 53,
+        "mae_255": 0.1374125514403292,
+        "p99_component_255": 2.0,
+        "max_component_255": 25
+      },
+      {
+        "frame": 54,
+        "mae_255": 0.136684670781893,
+        "p99_component_255": 2.0,
+        "max_component_255": 47
+      },
+      {
+        "frame": 55,
+        "mae_255": 0.13674768518518518,
+        "p99_component_255": 2.0,
+        "max_component_255": 23
+      },
+      {
+        "frame": 56,
+        "mae_255": 0.1375147890946502,
+        "p99_component_255": 2.0,
+        "max_component_255": 46
+      },
+      {
+        "frame": 57,
+        "mae_255": 0.13774948559670783,
+        "p99_component_255": 2.0,
+        "max_component_255": 50
+      },
+      {
+        "frame": 58,
+        "mae_255": 0.1375289351851852,
+        "p99_component_255": 2.0,
+        "max_component_255": 34
+      },
+      {
+        "frame": 59,
+        "mae_255": 0.13711612654320987,
+        "p99_component_255": 2.0,
+        "max_component_255": 51
+      },
+      {
+        "frame": 60,
+        "mae_255": 0.13800154320987654,
+        "p99_component_255": 2.0,
+        "max_component_255": 43
+      },
+      {
+        "frame": 61,
+        "mae_255": 0.13766396604938272,
+        "p99_component_255": 2.0,
+        "max_component_255": 32
+      },
+      {
+        "frame": 62,
+        "mae_255": 0.13786458333333335,
+        "p99_component_255": 2.0,
+        "max_component_255": 64
+      },
+      {
+        "frame": 63,
+        "mae_255": 0.1374389146090535,
+        "p99_component_255": 2.0,
+        "max_component_255": 68
+      },
+      {
+        "frame": 64,
+        "mae_255": 0.13691036522633745,
+        "p99_component_255": 2.0,
+        "max_component_255": 34
+      },
+      {
+        "frame": 65,
+        "mae_255": 0.1358982767489712,
+        "p99_component_255": 2.0,
+        "max_component_255": 64
+      },
+      {
+        "frame": 66,
+        "mae_255": 0.13611432613168725,
+        "p99_component_255": 2.0,
+        "max_component_255": 74
+      },
+      {
+        "frame": 67,
+        "mae_255": 0.1360641718106996,
+        "p99_component_255": 2.0,
+        "max_component_255": 63
+      },
+      {
+        "frame": 68,
+        "mae_255": 0.13628022119341565,
+        "p99_component_255": 2.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 69,
+        "mae_255": 0.1372608024691358,
+        "p99_component_255": 2.0,
+        "max_component_255": 60
+      },
+      {
+        "frame": 70,
+        "mae_255": 0.13580632716049382,
+        "p99_component_255": 2.0,
+        "max_component_255": 82
+      },
+      {
+        "frame": 71,
+        "mae_255": 0.13592335390946503,
+        "p99_component_255": 2.0,
+        "max_component_255": 77
+      },
+      {
+        "frame": 72,
+        "mae_255": 0.13610275205761316,
+        "p99_component_255": 2.0,
+        "max_component_255": 54
+      },
+      {
+        "frame": 73,
+        "mae_255": 0.1348193158436214,
+        "p99_component_255": 2.0,
+        "max_component_255": 71
+      },
+      {
+        "frame": 74,
+        "mae_255": 0.1345164609053498,
+        "p99_component_255": 2.0,
+        "max_component_255": 45
+      },
+      {
+        "frame": 75,
+        "mae_255": 0.1342065329218107,
+        "p99_component_255": 2.0,
+        "max_component_255": 31
+      },
+      {
+        "frame": 76,
+        "mae_255": 0.13429269547325104,
+        "p99_component_255": 2.0,
+        "max_component_255": 28
+      },
+      {
+        "frame": 77,
+        "mae_255": 0.13420074588477365,
+        "p99_component_255": 2.0,
+        "max_component_255": 46
+      },
+      {
+        "frame": 78,
+        "mae_255": 0.13366962448559672,
+        "p99_component_255": 2.0,
+        "max_component_255": 70
+      },
+      {
+        "frame": 79,
+        "mae_255": 0.1351003086419753,
+        "p99_component_255": 2.0,
+        "max_component_255": 43
+      },
+      {
+        "frame": 80,
+        "mae_255": 0.13322916666666668,
+        "p99_component_255": 2.0,
+        "max_component_255": 75
+      },
+      {
+        "frame": 81,
+        "mae_255": 0.13415380658436213,
+        "p99_component_255": 2.0,
+        "max_component_255": 61
+      },
+      {
+        "frame": 82,
+        "mae_255": 0.13445216049382716,
+        "p99_component_255": 2.0,
+        "max_component_255": 40
+      },
+      {
+        "frame": 83,
+        "mae_255": 0.13379050925925925,
+        "p99_component_255": 2.0,
+        "max_component_255": 35
+      },
+      {
+        "frame": 84,
+        "mae_255": 0.13419817386831276,
+        "p99_component_255": 2.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 85,
+        "mae_255": 0.1357709619341564,
+        "p99_component_255": 2.0,
+        "max_component_255": 64
+      },
+      {
+        "frame": 86,
+        "mae_255": 0.13590534979423868,
+        "p99_component_255": 2.0,
+        "max_component_255": 59
+      },
+      {
+        "frame": 87,
+        "mae_255": 0.1353980195473251,
+        "p99_component_255": 2.0,
+        "max_component_255": 71
+      },
+      {
+        "frame": 88,
+        "mae_255": 0.1368287037037037,
+        "p99_component_255": 2.0,
+        "max_component_255": 67
+      },
+      {
+        "frame": 89,
+        "mae_255": 0.13818737139917694,
+        "p99_component_255": 2.0,
+        "max_component_255": 66
+      },
+      {
+        "frame": 90,
+        "mae_255": 0.1376781121399177,
+        "p99_component_255": 2.0,
+        "max_component_255": 71
+      },
+      {
+        "frame": 91,
+        "mae_255": 0.13812178497942387,
+        "p99_component_255": 2.0,
+        "max_component_255": 56
+      },
+      {
+        "frame": 92,
+        "mae_255": 0.13923032407407407,
+        "p99_component_255": 2.0,
+        "max_component_255": 62
+      },
+      {
+        "frame": 93,
+        "mae_255": 0.13969200102880658,
+        "p99_component_255": 2.0,
+        "max_component_255": 41
+      },
+      {
+        "frame": 94,
+        "mae_255": 0.14061792695473252,
+        "p99_component_255": 2.0,
+        "max_component_255": 44
+      },
+      {
+        "frame": 95,
+        "mae_255": 0.14104616769547326,
+        "p99_component_255": 2.0,
+        "max_component_255": 71
+      },
+      {
+        "frame": 96,
+        "mae_255": 0.14092978395061728,
+        "p99_component_255": 2.0,
+        "max_component_255": 36
+      },
+      {
+        "frame": 97,
+        "mae_255": 0.14148405349794238,
+        "p99_component_255": 2.0,
+        "max_component_255": 70
+      },
+      {
+        "frame": 98,
+        "mae_255": 0.1425315072016461,
+        "p99_component_255": 2.0,
+        "max_component_255": 55
+      },
+      {
+        "frame": 99,
+        "mae_255": 0.1441036522633745,
+        "p99_component_255": 2.0,
+        "max_component_255": 39
+      },
+      {
+        "frame": 100,
+        "mae_255": 0.144409079218107,
+        "p99_component_255": 2.0,
+        "max_component_255": 45
+      },
+      {
+        "frame": 101,
+        "mae_255": 0.14565264917695472,
+        "p99_component_255": 2.0,
+        "max_component_255": 64
+      },
+      {
+        "frame": 102,
+        "mae_255": 0.14596064814814816,
+        "p99_component_255": 2.0,
+        "max_component_255": 65
+      },
+      {
+        "frame": 103,
+        "mae_255": 0.14629758230452675,
+        "p99_component_255": 2.0,
+        "max_component_255": 69
+      },
+      {
+        "frame": 104,
+        "mae_255": 0.1486715534979424,
+        "p99_component_255": 2.0,
+        "max_component_255": 52
+      },
+      {
+        "frame": 105,
+        "mae_255": 0.14873135288065845,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 106,
+        "mae_255": 0.14985210905349794,
+        "p99_component_255": 2.0,
+        "max_component_255": 33
+      },
+      {
+        "frame": 107,
+        "mae_255": 0.1499022633744856,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 108,
+        "mae_255": 0.15176697530864197,
+        "p99_component_255": 2.0,
+        "max_component_255": 66
+      },
+      {
+        "frame": 109,
+        "mae_255": 0.15229295267489712,
+        "p99_component_255": 2.0,
+        "max_component_255": 75
+      },
+      {
+        "frame": 110,
+        "mae_255": 0.15187307098765432,
+        "p99_component_255": 2.0,
+        "max_component_255": 41
+      },
+      {
+        "frame": 111,
+        "mae_255": 0.15318865740740742,
+        "p99_component_255": 2.0,
+        "max_component_255": 54
+      },
+      {
+        "frame": 112,
+        "mae_255": 0.15424254115226338,
+        "p99_component_255": 2.0,
+        "max_component_255": 42
+      },
+      {
+        "frame": 113,
+        "mae_255": 0.15541087962962963,
+        "p99_component_255": 2.0,
+        "max_component_255": 33
+      },
+      {
+        "frame": 114,
+        "mae_255": 0.15753279320987654,
+        "p99_component_255": 2.0,
+        "max_component_255": 52
+      },
+      {
+        "frame": 115,
+        "mae_255": 0.15885609567901235,
+        "p99_component_255": 2.0,
+        "max_component_255": 60
+      },
+      {
+        "frame": 116,
+        "mae_255": 0.15813335905349793,
+        "p99_component_255": 2.0,
+        "max_component_255": 82
+      },
+      {
+        "frame": 117,
+        "mae_255": 0.15849537037037037,
+        "p99_component_255": 2.0,
+        "max_component_255": 83
+      },
+      {
+        "frame": 118,
+        "mae_255": 0.15981031378600824,
+        "p99_component_255": 2.0,
+        "max_component_255": 35
+      },
+      {
+        "frame": 119,
+        "mae_255": 0.16133487654320988,
+        "p99_component_255": 2.0,
+        "max_component_255": 28
+      },
+      {
+        "frame": 120,
+        "mae_255": 0.1624241255144033,
+        "p99_component_255": 2.0,
+        "max_component_255": 72
+      },
+      {
+        "frame": 121,
+        "mae_255": 0.16258166152263376,
+        "p99_component_255": 2.0,
+        "max_component_255": 83
+      },
+      {
+        "frame": 122,
+        "mae_255": 0.16318930041152263,
+        "p99_component_255": 2.0,
+        "max_component_255": 83
+      },
+      {
+        "frame": 123,
+        "mae_255": 0.16302662037037038,
+        "p99_component_255": 2.0,
+        "max_component_255": 50
+      },
+      {
+        "frame": 124,
+        "mae_255": 0.1659400720164609,
+        "p99_component_255": 2.0,
+        "max_component_255": 76
+      },
+      {
+        "frame": 125,
+        "mae_255": 0.1653047839506173,
+        "p99_component_255": 2.0,
+        "max_component_255": 40
+      },
+      {
+        "frame": 126,
+        "mae_255": 0.16566229423868312,
+        "p99_component_255": 2.0,
+        "max_component_255": 38
+      },
+      {
+        "frame": 127,
+        "mae_255": 0.16594585905349793,
+        "p99_component_255": 2.0,
+        "max_component_255": 42
+      },
+      {
+        "frame": 128,
+        "mae_255": 0.16635352366255143,
+        "p99_component_255": 2.0,
+        "max_component_255": 42
+      },
+      {
+        "frame": 129,
+        "mae_255": 0.16858217592592592,
+        "p99_component_255": 2.0,
+        "max_component_255": 65
+      },
+      {
+        "frame": 130,
+        "mae_255": 0.16737718621399178,
+        "p99_component_255": 2.0,
+        "max_component_255": 39
+      },
+      {
+        "frame": 131,
+        "mae_255": 0.1683301183127572,
+        "p99_component_255": 2.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 132,
+        "mae_255": 0.16773276748971194,
+        "p99_component_255": 2.0,
+        "max_component_255": 45
+      },
+      {
+        "frame": 133,
+        "mae_255": 0.16971064814814815,
+        "p99_component_255": 2.0,
+        "max_component_255": 81
+      },
+      {
+        "frame": 134,
+        "mae_255": 0.17036522633744855,
+        "p99_component_255": 2.0,
+        "max_component_255": 47
+      },
+      {
+        "frame": 135,
+        "mae_255": 0.16927662037037036,
+        "p99_component_255": 2.0,
+        "max_component_255": 47
+      },
+      {
+        "frame": 136,
+        "mae_255": 0.16933963477366254,
+        "p99_component_255": 2.0,
+        "max_component_255": 52
+      },
+      {
+        "frame": 137,
+        "mae_255": 0.16960648148148147,
+        "p99_component_255": 2.0,
+        "max_component_255": 81
+      },
+      {
+        "frame": 138,
+        "mae_255": 0.16949331275720164,
+        "p99_component_255": 2.0,
+        "max_component_255": 51
+      },
+      {
+        "frame": 139,
+        "mae_255": 0.1689184670781893,
+        "p99_component_255": 2.0,
+        "max_component_255": 83
+      },
+      {
+        "frame": 140,
+        "mae_255": 0.16790187757201647,
+        "p99_component_255": 2.0,
+        "max_component_255": 60
+      },
+      {
+        "frame": 141,
+        "mae_255": 0.1673630401234568,
+        "p99_component_255": 2.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 142,
+        "mae_255": 0.1688599537037037,
+        "p99_component_255": 2.0,
+        "max_component_255": 31
+      },
+      {
+        "frame": 143,
+        "mae_255": 0.17042052469135802,
+        "p99_component_255": 2.0,
+        "max_component_255": 66
+      },
+      {
+        "frame": 144,
+        "mae_255": 0.1714011059670782,
+        "p99_component_255": 2.0,
+        "max_component_255": 76
+      },
+      {
+        "frame": 145,
+        "mae_255": 0.17225244341563786,
+        "p99_component_255": 2.0,
+        "max_component_255": 82
+      },
+      {
+        "frame": 146,
+        "mae_255": 0.1717431841563786,
+        "p99_component_255": 2.0,
+        "max_component_255": 66
+      },
+      {
+        "frame": 147,
+        "mae_255": 0.1722286522633745,
+        "p99_component_255": 2.0,
+        "max_component_255": 62
+      },
+      {
+        "frame": 148,
+        "mae_255": 0.17308256172839506,
+        "p99_component_255": 2.0,
+        "max_component_255": 76
+      },
+      {
+        "frame": 149,
+        "mae_255": 0.17281057098765432,
+        "p99_component_255": 2.0,
+        "max_component_255": 48
+      },
+      {
+        "frame": 150,
+        "mae_255": 0.17178755144032923,
+        "p99_component_255": 2.0,
+        "max_component_255": 59
+      },
+      {
+        "frame": 151,
+        "mae_255": 0.17295074588477366,
+        "p99_component_255": 2.0,
+        "max_component_255": 57
+      },
+      {
+        "frame": 152,
+        "mae_255": 0.1742039609053498,
+        "p99_component_255": 2.0,
+        "max_component_255": 66
+      },
+      {
+        "frame": 153,
+        "mae_255": 0.17230838477366256,
+        "p99_component_255": 2.0,
+        "max_component_255": 62
+      },
+      {
+        "frame": 154,
+        "mae_255": 0.17219071502057612,
+        "p99_component_255": 2.0,
+        "max_component_255": 46
+      },
+      {
+        "frame": 155,
+        "mae_255": 0.17387281378600822,
+        "p99_component_255": 2.0,
+        "max_component_255": 58
+      },
+      {
+        "frame": 156,
+        "mae_255": 0.17337319958847736,
+        "p99_component_255": 2.0,
+        "max_component_255": 58
+      },
+      {
+        "frame": 157,
+        "mae_255": 0.17435442386831276,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 158,
+        "mae_255": 0.17453446502057612,
+        "p99_component_255": 2.0,
+        "max_component_255": 52
+      },
+      {
+        "frame": 159,
+        "mae_255": 0.17467463991769547,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 160,
+        "mae_255": 0.17813143004115226,
+        "p99_component_255": 2.0,
+        "max_component_255": 47
+      },
+      {
+        "frame": 161,
+        "mae_255": 0.17686471193415637,
+        "p99_component_255": 2.0,
+        "max_component_255": 29
+      },
+      {
+        "frame": 162,
+        "mae_255": 0.17741833847736627,
+        "p99_component_255": 2.0,
+        "max_component_255": 45
+      },
+      {
+        "frame": 163,
+        "mae_255": 0.17683191872427984,
+        "p99_component_255": 2.0,
+        "max_component_255": 21
+      },
+      {
+        "frame": 164,
+        "mae_255": 0.18014017489711934,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 165,
+        "mae_255": 0.17944444444444443,
+        "p99_component_255": 2.0,
+        "max_component_255": 29
+      },
+      {
+        "frame": 166,
+        "mae_255": 0.1786741255144033,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 167,
+        "mae_255": 0.17977109053497942,
+        "p99_component_255": 2.0,
+        "max_component_255": 96
+      },
+      {
+        "frame": 168,
+        "mae_255": 0.18100501543209876,
+        "p99_component_255": 2.0,
+        "max_component_255": 31
+      },
+      {
+        "frame": 169,
+        "mae_255": 0.18267296810699588,
+        "p99_component_255": 2.0,
+        "max_component_255": 31
+      },
+      {
+        "frame": 170,
+        "mae_255": 0.18223508230452676,
+        "p99_component_255": 2.0,
+        "max_component_255": 59
+      },
+      {
+        "frame": 171,
+        "mae_255": 0.18470807613168724,
+        "p99_component_255": 2.0,
+        "max_component_255": 68
+      },
+      {
+        "frame": 172,
+        "mae_255": 0.18657536008230452,
+        "p99_component_255": 2.0,
+        "max_component_255": 67
+      },
+      {
+        "frame": 173,
+        "mae_255": 0.18808191872427985,
+        "p99_component_255": 2.0,
+        "max_component_255": 65
+      },
+      {
+        "frame": 174,
+        "mae_255": 0.18992798353909465,
+        "p99_component_255": 2.0,
+        "max_component_255": 84
+      },
+      {
+        "frame": 175,
+        "mae_255": 0.18970743312757202,
+        "p99_component_255": 2.0,
+        "max_component_255": 55
+      },
+      {
+        "frame": 176,
+        "mae_255": 0.19017296810699588,
+        "p99_component_255": 2.0,
+        "max_component_255": 36
+      },
+      {
+        "frame": 177,
+        "mae_255": 0.19185378086419752,
+        "p99_component_255": 2.0,
+        "max_component_255": 48
+      },
+      {
+        "frame": 178,
+        "mae_255": 0.19342142489711933,
+        "p99_component_255": 2.0,
+        "max_component_255": 84
+      },
+      {
+        "frame": 179,
+        "mae_255": 0.1947845936213992,
+        "p99_component_255": 2.0,
+        "max_component_255": 58
+      },
+      {
+        "frame": 180,
+        "mae_255": 0.1941698816872428,
+        "p99_component_255": 2.0,
+        "max_component_255": 27
+      },
+      {
+        "frame": 181,
+        "mae_255": 0.19590020576131686,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 182,
+        "mae_255": 0.196855066872428,
+        "p99_component_255": 2.0,
+        "max_component_255": 37
+      },
+      {
+        "frame": 183,
+        "mae_255": 0.19435763888888888,
+        "p99_component_255": 2.0,
+        "max_component_255": 21
+      },
+      {
+        "frame": 184,
+        "mae_255": 0.19513824588477366,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 185,
+        "mae_255": 0.19403742283950617,
+        "p99_component_255": 2.0,
+        "max_component_255": 29
+      },
+      {
+        "frame": 186,
+        "mae_255": 0.19595807613168725,
+        "p99_component_255": 2.0,
+        "max_component_255": 35
+      },
+      {
+        "frame": 187,
+        "mae_255": 0.19650012860082305,
+        "p99_component_255": 2.0,
+        "max_component_255": 20
+      },
+      {
+        "frame": 188,
+        "mae_255": 0.19540123456790123,
+        "p99_component_255": 2.0,
+        "max_component_255": 61
+      },
+      {
+        "frame": 189,
+        "mae_255": 0.19666152263374487,
+        "p99_component_255": 2.0,
+        "max_component_255": 90
+      },
+      {
+        "frame": 190,
+        "mae_255": 0.19988104423868314,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      },
+      {
+        "frame": 191,
+        "mae_255": 0.201698816872428,
+        "p99_component_255": 2.0,
+        "max_component_255": 30
+      }
+    ],
+    "checker_final": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 960,
+      "height": 540,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": 150.0,
+      "frames": 192,
+      "simulation_seconds": 8.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        128.0,
+        64.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 108.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 192,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          480,
+          270
+        ],
+        "raw_allocation": [
+          240,
+          270
+        ],
+        "parity": 1,
+        "traced_pixels": 66739,
+        "history_pixels": 62861,
+        "repair_pixels": 1939,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 191,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 27.5502
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 8.0,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001216,
+        "max": 1.0,
+        "mean": 0.542686
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.019586
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 186,
+      "gpu_frame_ms": 10.817624,
+      "gpu_pass_ms": {
+        "cloud_shadow": 4.068704,
+        "geometry": 0.061007,
+        "sky": 0.012089,
+        "cloud_march": 4.537462,
+        "temporal": 2.073428,
+        "aerial_fog": 0.034754,
+        "composite_ui": 0.030179
+      }
+    },
+    "reference_final": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 960,
+      "height": 540,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": 150.0,
+      "frames": 192,
+      "simulation_seconds": 8.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        128.0,
+        64.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 108.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 192,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": false,
+        "active": false,
+        "full_refresh": false,
+        "logical_size": [
+          480,
+          270
+        ],
+        "raw_allocation": [
+          480,
+          270
+        ],
+        "parity": 1,
+        "traced_pixels": 129600,
+        "history_pixels": 0,
+        "repair_pixels": 0,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 0,
+        "full_refresh_frames": 0
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 20.6585
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 8.0,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001216,
+        "max": 1.0,
+        "mean": 0.542345
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.019586
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 186,
+      "gpu_frame_ms": 9.873552,
+      "gpu_pass_ms": {
+        "cloud_shadow": 3.997951,
+        "geometry": 0.070243,
+        "sky": 0.01206,
+        "cloud_march": 5.71714,
+        "temporal": 0.01189,
+        "aerial_fog": 0.033997,
+        "composite_ui": 0.030271
+      }
+    }
+  },
+  "capture_reports": {
+    "far-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 182466,
+        "history_pixels": 169503,
+        "repair_pixels": 2466,
+        "analytical_clear_pixels": 8031,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 20.4066
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.00153,
+        "max": 1.0,
+        "mean": 0.442015
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.014439
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 9.798046,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.058194,
+        "geometry": 0.078645,
+        "sky": 0.011667,
+        "cloud_march": 7.412793,
+        "temporal": 1.085186,
+        "aerial_fog": 0.077404,
+        "composite_ui": 0.074156
+      }
+    },
+    "close-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 182992,
+        "history_pixels": 177008,
+        "repair_pixels": 2992,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 21.2908
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001229,
+        "max": 1.0,
+        "mean": 0.52532
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.012712
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 6.189959,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.008032,
+        "geometry": 0.078445,
+        "sky": 0.012053,
+        "cloud_march": 4.02896,
+        "temporal": 0.910521,
+        "aerial_fog": 0.076829,
+        "composite_ui": 0.075119
+      }
+    },
+    "frontlit-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": 150.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 182992,
+        "history_pixels": 177008,
+        "repair_pixels": 2992,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 20.7496
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001229,
+        "max": 1.0,
+        "mean": 0.52532
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.01838
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 6.739437,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.114382,
+        "geometry": 0.070897,
+        "sky": 0.011872,
+        "cloud_march": 4.51896,
+        "temporal": 0.866879,
+        "aerial_fog": 0.085188,
+        "composite_ui": 0.071259
+      }
+    },
+    "frontlit-full": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": 150.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": false,
+        "active": false,
+        "full_refresh": false,
+        "logical_size": [
+          1600,
+          900
+        ],
+        "raw_allocation": [
+          1600,
+          900
+        ],
+        "parity": 1,
+        "traced_pixels": 1440000,
+        "history_pixels": 0,
+        "repair_pixels": 0,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 0,
+        "full_refresh_frames": 0
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 19.3957
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.000982,
+        "max": 1.0,
+        "mean": 0.525535
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.01838
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 23.210478,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.18035,
+        "geometry": 0.094863,
+        "sky": 0.019707,
+        "cloud_march": 21.699247,
+        "temporal": 0.061486,
+        "aerial_fog": 0.082321,
+        "composite_ui": 0.072504
+      }
+    },
+    "side-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 183059,
+        "history_pixels": 176941,
+        "repair_pixels": 3059,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 20.9519
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.001481,
+        "max": 1.0,
+        "mean": 0.501031
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.010704
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 6.992589,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.062115,
+        "geometry": 0.078981,
+        "sky": 0.012117,
+        "cloud_march": 4.647367,
+        "temporal": 1.040146,
+        "aerial_fog": 0.076505,
+        "composite_ui": 0.075358
+      }
+    },
+    "inside-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181851,
+        "history_pixels": 178149,
+        "repair_pixels": 1851,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 20.6702
+      },
+      "formations": {
+        "mode": "towers",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.005558,
+        "max": 0.007996,
+        "mean": 0.007481
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.010974
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 4.228443,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.089944,
+        "geometry": 0.120888,
+        "sky": 0.012017,
+        "cloud_march": 2.161571,
+        "temporal": 0.713818,
+        "aerial_fog": 0.057402,
+        "composite_ui": 0.072802
+      }
+    },
+    "mixed-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 60,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 182453,
+        "history_pixels": 169516,
+        "repair_pixels": 2453,
+        "analytical_clear_pixels": 8031,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 23.3446
+      },
+      "formations": {
+        "mode": "mixed",
+        "count": 2,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 900.0,
+        "top_m": 10400.0,
+        "regions": [
+          {
+            "kind": "tower",
+            "center_xz_m": [
+              -5600.0,
+              7000.0
+            ],
+            "radius_m": 6200.0,
+            "base_m": 1800.0,
+            "height_m": 8600.0,
+            "density": 1.05,
+            "spin_rad_s": 0.0
+          },
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.00153,
+        "max": 1.0,
+        "mean": 0.441798
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.012995
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 15.443187,
+      "gpu_pass_ms": {
+        "cloud_shadow": 3.84298,
+        "geometry": 0.084576,
+        "sky": 0.01202,
+        "cloud_march": 10.035496,
+        "temporal": 1.309636,
+        "aerial_fog": 0.080504,
+        "composite_ui": 0.077976
+      }
+    },
+    "none-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 15,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.05
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 181734,
+        "history_pixels": 97250,
+        "repair_pixels": 1734,
+        "analytical_clear_pixels": 81016,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 24.7153
+      },
+      "formations": {
+        "mode": "none",
+        "count": 0,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 1400.0,
+        "top_m": 4100.0,
+        "regions": []
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.003395,
+        "max": 1.0,
+        "mean": 0.47528
+      },
+      "shadow_transmittance": {
+        "min": 1e-06,
+        "max": 1.0,
+        "mean": 0.015013
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 10.546102,
+      "gpu_pass_ms": {
+        "cloud_shadow": 1.035775,
+        "geometry": 0.081294,
+        "sky": 0.024308,
+        "cloud_march": 8.428882,
+        "temporal": 0.810773,
+        "aerial_fog": 0.090017,
+        "composite_ui": 0.075054
+      }
+    },
+    "vortex-after": {
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1600,
+      "height": 900,
+      "weather": "Overcast",
+      "quality": "High",
+      "sun_elevation": 28.0,
+      "sun_azimuth": -26.0,
+      "frames": 60,
+      "simulation_seconds": 1.0,
+      "weather_state": {
+        "coverage": 0.86,
+        "density": 0.85,
+        "base_m": 1400.0,
+        "thickness_m": 2700.0,
+        "rain": 0.0,
+        "transition_progress": 1.0
+      },
+      "wind_offset_m": [
+        16.0,
+        8.0
+      ],
+      "weather_effects": {
+        "wetness": 0.0,
+        "demo": false,
+        "demo_seconds": 0.0,
+        "rain_enabled": true
+      },
+      "lightning": {
+        "serial": 0,
+        "strength": 0.0,
+        "age_seconds": 101.0,
+        "source_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "target_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "rain_opacity": {
+        "min": 0.0,
+        "max": 0.0,
+        "mean": 0.0
+      },
+      "cloud_shadows_enabled": true,
+      "cloud_optimization": {
+        "lighting_reuse": true,
+        "shadow_updates": 60,
+        "atmosphere_updates": 1,
+        "shadow_age_seconds": 0.0
+      },
+      "cloud_reconstruction": {
+        "enabled": true,
+        "active": true,
+        "full_refresh": false,
+        "logical_size": [
+          800,
+          450
+        ],
+        "raw_allocation": [
+          400,
+          450
+        ],
+        "parity": 1,
+        "traced_pixels": 183920,
+        "history_pixels": 176080,
+        "repair_pixels": 3920,
+        "analytical_clear_pixels": 0,
+        "checker_frames": 59,
+        "full_refresh_frames": 1
+      },
+      "tower_control_volume": {
+        "size": 128,
+        "format": "R16_FLOAT",
+        "bytes": 4194304,
+        "cells": 261,
+        "warp_size": 64,
+        "warp_bytes": 2097152,
+        "asset_setup_cpu_ms": 22.2995
+      },
+      "formations": {
+        "mode": "vortex",
+        "count": 1,
+        "strength": 1.0,
+        "scale": 1.0,
+        "speed": 1.0,
+        "phase_seconds": 1.0,
+        "base_m": 900.0,
+        "top_m": 5300.0,
+        "regions": [
+          {
+            "kind": "vortex",
+            "center_xz_m": [
+              6400.0,
+              12000.0
+            ],
+            "radius_m": 7000.0,
+            "base_m": 900.0,
+            "height_m": 4400.0,
+            "density": 0.85,
+            "spin_rad_s": 0.035
+          }
+        ]
+      },
+      "texture_view": {
+        "index": 0,
+        "name": "FINAL COMPOSITION",
+        "slice": 0.41,
+        "axis": "Z",
+        "panel_visible": false
+      },
+      "cloud_transmittance": {
+        "min": 0.006897,
+        "max": 1.0,
+        "mean": 0.066914
+      },
+      "shadow_transmittance": {
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.013242
+      },
+      "nonfinite_samples": 0,
+      "gpu_timing_samples": 54,
+      "gpu_frame_ms": 30.365633,
+      "gpu_pass_ms": {
+        "cloud_shadow": 3.774826,
+        "geometry": 0.093337,
+        "sky": 0.0118,
+        "cloud_march": 24.288039,
+        "temporal": 1.984402,
+        "aerial_fog": 0.118485,
+        "composite_ui": 0.094743
+      }
+    }
+  },
+  "runtime_adoption": {
+    "package_path": "out/CirrusEngine-research",
+    "packaged_files_match": true,
+    "matched_gpu_validation_custom_case": {
+      "packaged": {
+        "mae_255": 0.0,
+        "max_component_255": 0
+      },
+      "native-vs": {
+        "mae_255": 0.0,
+        "max_component_255": 0
+      }
+    },
+    "inspector_preview_captured": true
+  }
+}
