@@ -131,6 +131,7 @@ float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, f
         reflected = lerp(reflected, bank.rgb, weight);
     }
 
+    // 視線に沿った川面から川底までの距離 [m] を、水中を通る長さとして使う。
     float depth = min(opaqueDistance - distance, 18);
     float2 bentUV = uv + normal.xz * float2(0.19, -0.24) * saturate(depth * 0.21);
     [branch]
@@ -149,9 +150,11 @@ float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, f
     }
     float sun = cloudShadow(p) * terrainShadow(p);
     float daylight = 0.035 + 0.965 * smoothstep(-0.08, 0.43, SunDirection.y);
+    // absorption は RGB の残存透過率。赤の吸収が最も強く、距離とともに青緑が残る。
     float3 absorption = exp(-float3(0.56, 0.24, 0.19) * depth);
     float3 scatter = float3(0.023, 0.076, 0.066) * daylight * (0.70 + 0.30 * sun);
     scatter += float3(0.035, 0.083, 0.092) * lightningIrradiance(p);
+    // 川底から届く光が弱まる分だけ水中の散乱色を混ぜる。大気の減衰は CompositePS で掛ける。
     float3 refracted = bottom * absorption + scatter * (1 - absorption);
 
     float3 halfVector = normalize(SunDirection.xyz - ray);

@@ -9,6 +9,9 @@ static const float PLANET_RADIUS = 6360000.0;
 static const float ATMOSPHERE_HEIGHT = 100000.0;
 static const float CLOUD_SHADOW_EXPONENT = 10.0;
 static const float3 PLANET_CENTER = float3(0, -6360000.0, 0);
+// 基準の係数はすべて [m⁻¹]。実際のサンプルでは高度に応じた相対密度を掛ける。
+// R は空気分子、M はエアロゾル、O はオゾン。O は透過を減らす吸収にだけ使う。
+// R の青成分は赤の約 5.7 倍。M は RGB 共通で、白っぽい霞を作る。
 static const float3 BETA_R = float3(5.802e-6, 13.558e-6, 33.100e-6);
 static const float3 BETA_M = 3.996e-6;
 static const float3 BETA_O = float3(0.650e-6, 1.881e-6, 0.085e-6);
@@ -193,27 +196,36 @@ float sceneDistance(float2 uv)
 float hg(float cosine, float g)
 {
     // Henyey-Greenstein位相関数。g>0 は前方散乱、g<0 は後方散乱を強める。
+    // 呼び出し側の cosine はカメラ → サンプルとサンプル → 太陽の内積。
+    // 太陽を見ると +1 に近くなる。位相関数は光を方向ごとに配分する係数 [sr⁻¹]。
     return (1 - g * g) / (4 * PI * pow(max(1 + g * g - 2 * g * cosine, 0.001), 1.5));
 }
 
 float rayleighPhase(float cosine)
 {
+    // 二乗なので太陽を向く場合と背にする場合が対称。RGB の波長差は BETA_R で扱う。
     return 3.0 / (16 * PI) * (1 + cosine * cosine);
 }
 
 float3 atmosphericDensity(float h)
 {
+    // x と y は高度が 8 km と 1.2 km 上がるごとに 1/e へ減る。
+    // z は高度 25 km を頂点に、上下 15 km の範囲で直線的に減るオゾン層。
     h = max(h, 0);
     return float3(exp(-h / 8000.0), exp(-h / 1200.0), saturate(1 - abs(h - 25000.0) / 15000.0));
 }
 
 float3 atmosphereExtinction(float3 d)
 {
+    // 消散は散乱と吸収で光線から失われる割合。Mie の 1.11 は吸収分を含める倍率。
+    // Atmosphere.x は湿度に応じた倍率で、Mie の消散と散乱源の両方に掛かる。
     return BETA_R * d.x + BETA_M * (1.11 * Atmosphere.x * d.y) + BETA_O * d.z;
 }
 
 float3 sunTransmittance(float3 p)
 {
+    // TransmittanceCS と同じ座標変換。U はその地点の天頂と太陽方向の内積を正規化する。
+    // V の平方根写像で、密度が急に変わる地表付近へ LUT のサンプルを多く割り当てる。
     float h = clamp(altitude(p), 1.0, ATMOSPHERE_HEIGHT - 1);
     float mu = dot(normalize(p - planetCenter()), SunDirection.xyz);
     return TransmittanceLUT
@@ -295,20 +307,25 @@ float cloudShadow(float3 p)
         return 1;
 
     // 光線方向の距離を基準にする。雲より上の受光点には影が掛からない。
+    // 受光点を太陽方向へたどってマップの基準平面に投影する。
+    // receiver は ShadowCS と共通の深度で、太陽側の始点が 0、基準平面が 1。
     float projectionDistance = (FormationLayer.z - p.y) / max(SunDirection.y, 0.02);
     float rayLength = cloudShadowRayLength();
     float receiver = 1 + projectionDistance / rayLength;
     if (receiver <= 0)
         return 1;
     float2 projected = p.xz + SunDirection.xz * projectionDistance;
+    // キャッシュ生成時からの風による移動量を引き、生成時の座標で参照する。
     projected -= CloudPerformance.xy;
     float2 uv = (projected - ShadowRegion.xy) / ShadowRegion.z + 0.5;
     float border = saturate(min(min(uv.x, uv.y), min(1 - uv.x, 1 - uv.y)) * 25);
     float texelSize = ShadowRegion.z / ShadowRegion.w;
+    // 雲から遠いほど太陽の見かけの大きさによる半影が広がる。m からテクセル数へ換算する。
     float penumbra = max(FormationLayer.x - p.y, 0) * (0.0093 / SunDirection.y);
     float mip = clamp(log2(1.5 + penumbra / texelSize), 0, 5);
     float2 moments = CloudShadowMap.SampleLevel(LinearClamp, uv, mip);
     // Rは雲層全体の透過率。Gを復号すると遮蔽深度より太陽側で1に近づく。
+    // 遮蔽物より地面側では R に近づく。範囲の端と地平線近くでは影を徐々に薄める。
     float visibility = saturate(moments.x + moments.y * exp(-CLOUD_SHADOW_EXPONENT * receiver));
     return lerp(1, visibility, border * smoothstep(0.015, 0.045, SunDirection.y));
 }
@@ -357,6 +374,7 @@ float terrainShadow(float3 p)
 
 struct AtmosphereResult
 {
+    // 散乱光は視点へ届くまでの減衰を含む。透過率は終点から持ち込む光に掛ける RGB の比率。
     float3 scattering;
     float3 transmittance;
 };
@@ -368,23 +386,28 @@ AtmosphereResult integrateAtmosphere(float3 origin, float3 direction, float dist
     result.scattering = 0;
     result.transmittance = 1;
     float ds = distance / steps;
+    // 直線上では視線と太陽の角度は一定。位相関数を求めてから各区間の積分へ入る。
     float cosine = dot(direction, SunDirection.xyz);
     float rp = rayleighPhase(cosine), mp = hg(cosine, 0.76);
     [loop]
     for (int i = 0; i < steps; i++)
     {
+        // 区間の中点で密度を評価し、Beer–Lambert 則でこの区間だけの透過率を求める。
         float3 p = origin + direction * ((i + 0.5) * ds);
         float3 d = atmosphericDensity(altitude(p));
         float3 extinction = atmosphereExtinction(d);
         float3 segment = exp(-extinction * ds);
+        // 太陽 → 中点の大気透過を LUT から取得し、位相を掛けて視線に入る光を求める。
         float3 sunT = sunTransmittance(p);
         float3 source =
             (BETA_R * d.x * rp + BETA_M * (d.y * Atmosphere.x * mp)) * SolarExposure.rgb * sunT;
         // 高次の散乱は等方的な補助項で近似する。
+        // 直達光の減衰が強いほど補助項の係数を上げ、太陽が地平線下へ向かうと減らす。
         float3 multiple = (BETA_R * d.x + BETA_M * d.y * Atmosphere.x)
                           * (0.007 + 0.015 * (1 - sunT)) * SolarExposure.rgb
                           * saturate(SunDirection.y * 3 + 0.25);
         // 区間内の係数を一定とみなし、(1-exp(-sigma*ds))/sigma で積分する。
+        // result.transmittance は視点 → 区間手前の積。寄与を足してからこの区間の透過率を掛ける。
         result.scattering +=
             result.transmittance * (source + multiple) * (1 - segment) / max(extinction, 1e-8);
         result.transmittance *= segment;

@@ -162,6 +162,7 @@ float3 surfaceLighting(float2 uv, float depth)
     float3 F0 = lerp(0.04, material.rgb, metallic);
     float3 F = F0 + (1 - F0) * pow(1 - vh, 5);
     float3 specular = D * G * F / max(4 * nl * nv, 0.001);
+    // 地表と霧は同じ雲影・地形影を読む。直達光に太陽側の大気透過率も掛ける。
     float cloudVisibility = cloudShadow(world);
     float shadow = cloudVisibility * terrainShadow(world);
     float3 solar = SolarExposure.rgb * sunTransmittance(world);
@@ -173,6 +174,7 @@ float3 surfaceLighting(float2 uv, float depth)
     ambient *= lerp(1, 0.58, Weather.z) * lerp(0.74, 1, cloudVisibility);
     if (WorldRendering.x > 0.5)
     {
+        // 歩行シーンでは天空の平均色を明るさで割り、間接光に空の色味を反映する。
         float3 skyLight = SkyAmbient.Load(int3(0, 0, 0)).rgb;
         float skyLuma = dot(skyLight, float3(0.213, 0.715, 0.072));
         float3 tint = clamp(skyLight / max(skyLuma, 0.014), 0.52, 1.45);
@@ -187,6 +189,8 @@ float3 surfaceLighting(float2 uv, float depth)
     float3 flashDirection = normalize(LightningSource.xyz - world + float3(0, 0.001, 0));
     float3 flash = (diffuse + metallic * F0) * lightningIrradiance(world)
                    * (0.15 + 0.85 * saturate(dot(normal, flashDirection)));
+    // GSurface.a の大きさは間接光の遮蔽係数、負の符号は葉や草の透過光を足す目印。
+    // 光源越しに見る角度ほど葉の透過光を強める。大気・雲と同じ太陽色を使う。
     float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * abs(surface.a);
     float forwardLight = pow(saturate(dot(-V, L)), 3);
     float3 leafTransmission = surface.a < 0
@@ -214,6 +218,8 @@ float4 upsampleClouds(float2 uv, float scene)
             int2 q = clamp(base + int2(x, y), int2(0, 0), (int2)RenderSize.xy - 1);
             float2 meta = CloudMetadata.Load(int3(q, 0));
             float weight = (x ? f.x : 1 - f.x) * (y ? f.y : 1 - f.y);
+            // 通常のバイリニア重みに、シーン距離の差が大きいほど急に減る係数を掛ける。
+            // 近傍の雲が現在の手前の地形より奥にある場合は、さらに重みを下げる。
             float difference = abs(meta.y - scene) / max(scene * 0.035, 80);
             weight *= exp(-min(difference, 40));
             if (meta.x > scene + 100 && scene < Atmosphere.z * 0.99)
@@ -234,6 +240,7 @@ void upsampleAerial(float2 uv, float scene, out float3 scattering, out float3 tr
                    out float4 fog)
 {
     // 空気遠近法・霧も深度差を考慮して補間する。
+    // 散乱光と透過率に同じ正規化重みを使い、遠景の霧が手前の輪郭ににじむのを抑える。
     uint w, h;
     AerialScatter.GetDimensions(w, h);
     float2 size = float2(w, h);
@@ -439,6 +446,8 @@ float4 CompositePS(ScreenVarying v) : SV_Target
         scene = riverSurfaceDistance(ray, opaque);
     bool water = scene < opaque;
     float3 sky = SkyTexture.SampleLevel(LinearClamp, uv, 0).rgb;
+    // 低解像度の空に太陽円盤を足す。位置と輪郭はフル解像度の視線、色は大気透過率で決まる。
+    // ここに足した太陽光も、後段で空の一部として雲と霧による減衰を受ける。
     float solarDisk =
         1 - smoothstep(0.0046, 0.0062, acos(clamp(dot(ray, SunDirection.xyz), -1, 1)));
     sky += solarDisk * SolarExposure.rgb * sunTransmittance(CameraTime.xyz) * 22;
@@ -467,11 +476,17 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     [branch]
     if (water)
         surface = shadeRiver(uv, ray, scene, opaque, surface);
+    // 地形と川面の色は空気を通って減衰し、途中の空気が散乱させた光が足される。
+    // 空の背景色は SkyCS 側で大気散乱を積分済み。
     float3 base = geometry || water ? surface * transmission + scattering : sky;
+    // 背景は雲の残存透過率を掛ける。雲自身の RGB は手前の空気の透過率を掛ける。
+    // 雲が覆う割合 (1 - cloud.a) にも代表距離までに手前の空気が散乱させた光を足す。
     float3 color = base * cloud.a + cloud.rgb * transmission + scattering * (1 - cloud.a);
+    // 霧は手前に重ね、A で背後の光を減衰させた後に RGB の霧散乱光を加える。
     color = color * fog.a + fog.rgb;
     color += lightningBolt(ray, scene, cloud.a);
     float4 rain = RainTexture.SampleLevel(LinearClamp, uv, 0);
+    // RainPS の A は不透明度で RGB は乗算済み。背後の光に掛ける透過率は 1 - rain.a。
     color = color * (1 - rain.a) + rain.rgb;
     // 表示用のトーンマップとガンマ補正は、すべての照明・合成が済んでから行う。
     color = aces(max(color, 0) * SolarExposure.w);

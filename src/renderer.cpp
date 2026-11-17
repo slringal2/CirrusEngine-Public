@@ -477,6 +477,8 @@ void Renderer::initializeResources()
     cloudDisplacement_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
     cloudMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true);
     cloudHeightLut_ = makeTexture(1, 128, DXGI_FORMAT_R8G8B8A8_UNORM, false, true);
+    // 透過率 LUT は高度×太陽光の角度。背景の空はカメラ視線ごとに計算する。
+    // 空の環境光は上半球の散乱を平均した 1 テクセルを雲・霧・地表で共有する。
     transmittance_ = makeTexture(256, 64, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     sky_ = makeTexture(320, 180, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     skyAmbient_ = makeTexture(1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
@@ -843,6 +845,7 @@ void Renderer::updateConstants()
         options_.azimuth = XMConvertToDegrees(std::atan2(sun.x, sun.z));
     }
     constants_.sunDirection = {sun.x, sun.y, sun.z, 0};
+    // RGB は散乱や地表の照明に使う太陽光。w は最後のトーンマップで使う表示露出。
     constants_.solarExposure = {10, 9.65f, 9.1f, options_.exposure};
     constants_.resolution = {static_cast<float>(width_), static_cast<float>(height_), 1.0f / width_,
                              1.0f / height_};
@@ -931,6 +934,7 @@ void Renderer::updateConstants()
     constants_.cloudPerformance = {constants_.wind.x - shadowWind_.x,
                                    constants_.wind.y - shadowWind_.y, shareLighting ? 1.0f : 0.0f,
                                    static_cast<float>(weather_.time() - shadowTime_)};
+    // 湿度でエアロゾルを増やす。x が変われば太陽透過率 LUT も同じ係数で更新する。
     constants_.atmosphere = {1 + w.humidity * 1.5f, 0, 150000, 0};
     constants_.weatherEffects = {weather_.wetness(), w.windX, w.windZ, options_.rain ? 1.0f : 0};
     constants_.lightningSource = {lightningSource_.x, lightningSource_.y, lightningSource_.z,
@@ -1234,8 +1238,10 @@ void Renderer::frame(double dt, bool focused)
     // 1. 大気の太陽透過率LUT → 雲の配置・高度LUT → 雲影。
     auto input = resources();
     // LUTの内容は湿度由来のエアロゾル倍率だけに依存する。静止天候では再利用する。
+    // 太陽が動いたときは参照する角度が変わる。LUT 自体は全角度を保持している。
     if (cachedAerosol_ != constants_.atmosphere.x)
     {
+        // 書き込む LUT を SRV 一覧から外し、このディスパッチでは UAV として使う。
         input[16] = nullptr;
         compute(shaders_.transmittanceCS.Get(), 32, 8, 1, {transmittance_.uav.Get()}, input);
         cachedAerosol_ = constants_.atmosphere.x;
@@ -1257,6 +1263,7 @@ void Renderer::frame(double dt, bool focused)
         input[3] = nullptr;
         compute(shaders_.shadowCS.Get(), (shadowSize_ + 7) / 8, (shadowSize_ + 7) / 8, 1,
                 {shadowMap_.uav.Get()}, input);
+        // 地面や霧のサンプルは、雲から遠いほど粗いミップを読んで軟らかい影を作る。
         context_->GenerateMips(shadowMap_.srv.Get());
         ++shadowUpdates_;
     }
@@ -1273,6 +1280,7 @@ void Renderer::frame(double dt, bool focused)
     stamp(2);
 
     // 3. 背景の空 → 視線方向の雲レイマーチ。
+    // 背景の空と 1 テクセルの環境光を先に準備し、雲の積分で環境光を参照する。
     input = resources();
     input[7] = nullptr;
     compute(shaders_.skyCS.Get(), 40, 23, 1, {sky_.uav.Get()}, input);
@@ -1323,10 +1331,12 @@ void Renderer::frame(double dt, bool focused)
                     {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         }
     }
+    // 補完済みの雲の RGB・透過率・代表距離を、以降の大気計算と最終合成で使う。
     historyIndex_ = write;
     stamp(5);
 
     // 5. 雲の代表距離・地形深度までの大気散乱と、影を受ける地表霧。
+    // 縦横 1/4 解像度で出力し、CompositePS が地形との深度差を見ながら補間する。
     input = resources();
     input[12] = input[13] = input[14] = nullptr;
     compute(shaders_.aerialCS.Get(), (aerialWidth_ + 7) / 8, (aerialHeight_ + 7) / 8, 1,
@@ -1345,6 +1355,7 @@ void Renderer::frame(double dt, bool focused)
     context_->IASetInputLayout(nullptr);
     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     context_->VSSetShader(shaders_.fullscreenVS.Get(), nullptr, 0);
+    // 全画面で地表・空・雲・霧・雨を線形色のまま合成し、最後に表示用へ変換する。
     context_->PSSetShader(shaders_.compositePS.Get(), nullptr, 0);
     input = resources();
     // 生の雲は合成パスでだけ読む。CloudCSのUAVと同時に束縛しない。

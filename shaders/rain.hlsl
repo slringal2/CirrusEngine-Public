@@ -60,6 +60,8 @@ float4 RainPS(RainVarying v) : SV_Target
     float fade = saturate((sceneDistance(uv) - distance) / 2);
     float profile = exp(-v.uv.x * v.uv.x * 2.5) * saturate(1 - abs(v.uv.y * 2 - 1));
     float alpha = saturate(v.opacity * profile * fade);
+    // このパスは画面上の雨筋を照らす。雨域に広がる霞の散乱は AerialCS が積分する。
+    // 日の高さと雲影で雨筋の明るさを変え、雷の瞬間光も加算する。
     float sunlight = saturate(SunDirection.y * 3 + 0.1);
     float3 color = float3(0.55, 0.66, 0.80) * (0.18 + sunlight * 0.28)
                    * lerp(0.55, 1, cloudShadow(v.world));

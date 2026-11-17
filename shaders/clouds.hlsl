@@ -20,8 +20,10 @@ void ShadowCS(uint3 id : SV_DispatchThreadID)
     }
     float2 uv = (id.xy + 0.5) / float2(w, h);
     float2 xz = ShadowRegion.xy + (uv - 0.5) * ShadowRegion.z;
+    // テクセルは雲影の基準平面上の XZ。そこから太陽側へ戻した点を積分の始点にする。
     float distance = cloudShadowRayLength();
     float3 origin = float3(xz.x, FormationLayer.z, xz.y) + SunDirection.xyz * distance;
+    // 高い局所雲が存在し得る上層を最大 24 区間、通常の雲海側を 40 区間に分ける。
     float lower = min(distance, (CloudLayer.x + CloudLayer.y - FormationLayer.z)
                                / max(SunDirection.y, 0.02));
     float upper = distance - lower;
@@ -39,6 +41,7 @@ void ShadowCS(uint3 id : SV_DispatchThreadID)
             continue;
 
         // 最初の遮蔽点で始め、Tが高い間は奥へ更新する。厚い雲を抜けると更新が弱くなる。
+        // 累積透過率の 4 乗で深度を更新するため、不透明になるほど手前の情報が残る。
         if (transmittance == 1)
             shadowDepth = t;
         transmittance *= exp(-density * cloudExtinction() * ds);
@@ -49,6 +52,7 @@ void ShadowCS(uint3 id : SV_DispatchThreadID)
     }
 
     // 半透明の雲を保つため透過率も保持し、指数値は遮蔽量で重み付けしてから濾過する。
+    // R に層全体の透過率、G に遮蔽量 × 指数化深度を保存し、cloudShadow() で一緒に読む。
     float encodedDepth = exp(CLOUD_SHADOW_EXPONENT * shadowDepth / distance);
     ShadowOutput[id.xy] = float2(transmittance, (1 - transmittance) * encodedDepth);
 }
@@ -59,11 +63,13 @@ float lightOpticalDepth(float3 p)
     if (SunDirection.y <= 0)
         return 0;
     float height = altitude(p);
+    // 上端までの距離と天候に応じた上限の小さい方まで、細部ノイズ込みの密度を積分する。
     float distance = min((FormationLayer.y - height) / max(SunDirection.y, 0.05),
                          lerp(1250, 5000, Weather.x));
     distance = max(distance, 0);
     float tau = 0;
     float begin = 0;
+    // 自己遮蔽は 35 m の細かい区間から始め、遠方へ進むたびに区間長を 1.65 倍にする。
     float stepLength = 35;
     int steps = (int)RenderSize.w;
 
@@ -80,11 +86,14 @@ float lightOpticalDepth(float3 p)
     }
 
     float distantVisibility = cloudShadow(p + SunDirection.xyz * begin);
+    // 遠方の透過率を -log(T) で光学的厚さへ変換して加える。
+    // 呼び出し側の exp(-tau) は「近傍の透過率 × 遠方の透過率」になる。
     return tau - log(max(distantVisibility, 0.0001));
 }
 
 struct CloudRayResult
 {
+    // color.rgb は HDR 散乱光、color.a は残存透過率。metadata.xy は雲とシーンの距離 [m]。
     float4 color;
     float2 metadata;
 };
@@ -126,11 +135,12 @@ CloudRayResult traceCloudRay(uint2 pixel)
     float3 ray = worldRay(uv);
     float scene = sceneDistance(uv);
     CloudRayResult result;
+    // 雲がない画素は散乱光 0、透過率 1。背景色がそのまま通る初期値。
     result.color = float4(0, 0, 0, 1);
     result.metadata = float2(Atmosphere.z, scene);
 
-    // 雲底・雲頂の球面との交差から、雲の中を通る区間だけを取り出す。
-    // 地形より奥と100kmより先は描画しない。
+    // 雲底・雲頂の球面と、入道雲や渦の境界に当たる範囲をまとめる。
+    // 100 km とシーン深度の手前で積分する。歩行シーンの深度には川面も含まれる。
     float2 interval = cloudSegment(ray, scene);
     float start = interval.x, end = interval.y;
     if (end <= start || Controls.w < 0.5)
@@ -140,6 +150,7 @@ CloudRayResult traceCloudRay(uint2 pixel)
 
     int steps = (int)RenderSize.z;
     float emptyStep = clamp(5 * (end - start) / steps, 175, 850);
+    // 同じピクセルでもフレームごとに区間内の採取位置をずらし、帯状の誤差を分散する。
     float jitter = frac(hash12(pixel) + Wind.w * 0.61803398875);
 
     // T はカメラから現在位置まで残った光の割合。radiance は蓄積した散乱光。
@@ -148,6 +159,7 @@ CloudRayResult traceCloudRay(uint2 pixel)
     float distanceMoment = 0, weightSum = 0;
     float mu = dot(ray, SunDirection.xyz);
     // 太陽円盤は背景よりずっと明るいので、その付近では透過率をさらに追う。
+    // 通常は T < 0.005 で打ち切り、太陽方向に近い視線は 0.00005 まで積分する。
     float transmittanceLimit = mu > 0.9996 ? 0.00005 : 0.005;
     float phase = hg(mu, 0.80);
     float broadPhase = hg(mu, 0.80 * (2.0 / 3.0));
@@ -194,11 +206,11 @@ CloudRayResult traceCloudRay(uint2 pixel)
             haveLighting = false;
             continue;
         }
-        // 積分の広いAABBではなく、その点に寄与する雲のローカル高度を照明に使う。
+        // h はその点に寄与する雲の内部での相対高度。雷の寄与を雲の上側で強める。
         float h = cloudSample.y;
         float reuseDistance = clamp(t * 2.4 / RenderSize.y, 20, 160);
-        // 隣接する2点が近く、密度差が小さい場合だけ太陽遮蔽と天空光を共有する。
-        // 密度と透過率は全点で評価し、輪郭と光の吸収の積分点は変えない。
+        // 奇数のステップでは、直前の点と距離・密度が近ければ太陽側の光学的厚さを再利用する。
+        // 視線側の密度・透過率は区間ごとに求める。空の区間では光学的厚さのキャッシュを無効にする。
         bool reuseLighting = CloudPerformance.z > 0.5 && (i & 1) != 0 && haveLighting
                              && t - cachedDistance < reuseDistance
                              && abs(density - cachedDensity) < max(0.04, density * 0.2);
@@ -213,21 +225,27 @@ CloudRayResult traceCloudRay(uint2 pixel)
         float tau = cachedTau;
 
         // 2オクターブのHG。消散が強い雲では後方にも散るよう位相に下限を置く。
+        // 1回散乱は g = 0.80 の鋭い前方成分。多重散乱の近似には幅の広い位相を使う。
         float extinction = density * cloudExtinction();
         float backScatter = remap01(extinction, 0.0015, 0.012) / PI;
         float single = max(phase, backScatter) * exp(-tau);
+        // 多重散乱は係数 0.53 で混ぜ、光学的厚さを 0.35 倍して雲の奥にも光を残す。
         float multiple = 0.53 * max(broadPhase, backScatter * 0.36) * exp(-tau * 0.35);
+        // tau は雲による遮蔽。太陽 → サンプル間の大気による波長別の減衰を別途掛ける。
         float3 sunlight = SolarExposure.rgb * sunTransmittance(p);
 
         // 天空光の可視性には、太陽遮蔽のために求めた光学的厚さを再利用する。
+        // 1 テクセルにまとめた空の環境光を使い、降水の強い雲ほど寄与を抑える。
         float3 ambient = skyAmbient * lerp(0.19, 0.86, exp(-tau * 0.28)) * lerp(1, 0.52, Weather.y);
         float3 lighting = sunlight * (single + multiple) + ambient;
         lighting += lightningIrradiance(p) * (0.3 + 0.7 * h);
 
         // 前から後ろへ合成する。今回失われる透過光の割合を散乱光の重みにする。
+        // attenuation はこの区間だけの透過率。T は視点から区間の手前までの累積透過率。
         float attenuation = exp(-extinction * ds);
         float weight = T * (1 - attenuation);
         radiance += weight * lighting;
+        // 同じ重みで距離の平均も取る。明るさに依存しないため暗い雲にも代表距離が付く。
         distanceMoment += weight * t;
         weightSum += weight;
         T *= attenuation;
@@ -235,8 +253,8 @@ CloudRayResult traceCloudRay(uint2 pixel)
             break;
     }
 
-    // RGB は透過減衰を織り込んだ散乱光、A は不透明度ではなく残存透過率 T。
-    // meta.x は散乱の重みで平均した距離。次の再投影と大気合成に利用する。
+    // RGB は視点までの透過減衰を織り込んだ散乱光、A は背後の光に掛ける残存透過率 T。
+    // meta.x の代表距離は時間方向の再投影と空気遠近の積分先に使う。
     result.color = float4(radiance, T);
     result.metadata =
         float2(weightSum > 0.0001 ? distanceMoment / weightSum : Atmosphere.z, scene);
