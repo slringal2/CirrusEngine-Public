@@ -39,6 +39,7 @@ std::string ascii(const std::wstring &value)
 cirrus::Options arguments()
 {
     cirrus::Options o;
+    bool manualSun = false, customSpawn = false, dayLengthSet = false;
     int count = 0;
     LPWSTR *raw = CommandLineToArgvW(GetCommandLineW(), &count);
     if (!raw)
@@ -119,13 +120,43 @@ cirrus::Options arguments()
         else if (a == L"--camera-path")
         {
             o.cameraPath = ascii(next());
-            if (o.cameraPath != "pan" && o.cameraPath != "cut" && o.cameraPath != "tower-orbit")
-                throw std::runtime_error("Camera path must be pan, cut or tower-orbit");
+            if (o.cameraPath != "pan" && o.cameraPath != "cut" && o.cameraPath != "tower-orbit"
+                && o.cameraPath != "walk")
+                throw std::runtime_error("Camera path must be pan, cut, tower-orbit or walk");
         }
         else if (a == L"--sun-elevation")
+        {
             o.elevation = std::stof(next());
+            manualSun = true;
+        }
         else if (a == L"--sun-azimuth")
+        {
             o.azimuth = std::stof(next());
+            manualSun = true;
+        }
+        else if (a == L"--time")
+        {
+            o.timeOfDay = std::stof(next());
+            if (!std::isfinite(o.timeOfDay) || o.timeOfDay < 0 || o.timeOfDay >= 24)
+                throw std::runtime_error("Time must be in [0,24) solar hours");
+        }
+        else if (a == L"--day-seconds")
+        {
+            o.daySeconds = std::stod(next());
+            dayLengthSet = true;
+        }
+        else if (a == L"--spawn")
+        {
+            o.spawnX = std::stof(next());
+            o.spawnZ = std::stof(next());
+            customSpawn = true;
+        }
+        else if (a == L"--model")
+            o.modelPath = next();
+        else if (a == L"--model-scale")
+            o.modelScale = std::stof(next());
+        else if (a == L"--no-vegetation")
+            o.vegetation = false;
         else if (a == L"--exposure")
             o.exposure = std::stof(next());
         else if (a == L"--weather")
@@ -200,7 +231,7 @@ cirrus::Options arguments()
         || !std::isfinite(o.exposure) || o.exposure < 0.05f || o.exposure > 10)
         throw std::runtime_error("Invalid time step, sun, exposure or debug view");
     if (o.debugView < 0 || o.debugView >= static_cast<int>(cirrus::DebugView::Count))
-        throw std::runtime_error("Texture view must be between 0 and 25");
+        throw std::runtime_error("Unknown texture debug view");
     if (!std::isfinite(o.formationStrength) || o.formationStrength < 0 || o.formationStrength > 2
         || !std::isfinite(o.formationScale) || o.formationScale < 0.5f || o.formationScale > 1.6f
         || !std::isfinite(o.formationSpeed) || o.formationSpeed < -3 || o.formationSpeed > 3)
@@ -208,12 +239,41 @@ cirrus::Options arguments()
             "Invalid formation strength [0,2], scale [0.5,1.6] or speed [-3,3]");
     if (!std::isfinite(o.textureSlice) || o.textureSlice < 0 || o.textureSlice > 1)
         throw std::runtime_error("Texture slice must be between 0 and 1");
-    if (o.camera != "valley" && o.camera != "clouds" && o.camera != "overview"
+    if (!std::isfinite(o.spawnX) || !std::isfinite(o.spawnZ)
+        || std::abs(o.spawnX) > cirrus::worldLimit || std::abs(o.spawnZ) > cirrus::worldLimit
+        || !std::isfinite(o.daySeconds) || o.daySeconds < 0
+        || (o.daySeconds > 0 && o.daySeconds < 1) || !std::isfinite(o.modelScale)
+        || o.modelScale <= 0)
+        throw std::runtime_error("Invalid world position, day length or model scale");
+    if (manualSun && (o.timeOfDay >= 0 || dayLengthSet))
+        throw std::runtime_error("Choose a solar time or manual sun angles");
+    if (o.camera.empty())
+    {
+        bool typicalLaunch = !o.headless && o.capture.empty() && o.recordDirectory.empty()
+                             && o.cameraPath.empty() && o.formationMode == "none"
+                             && o.formationFile.empty() && !o.weatherDemo
+                             && o.benchmarkSeconds == 0;
+        o.camera = typicalLaunch || customSpawn || !o.modelPath.empty() || o.cameraPath == "walk"
+                       ? "walk"
+                       : "valley";
+    }
+    if ((customSpawn || o.cameraPath == "walk") && o.camera != "walk")
+        throw std::runtime_error("A world spawn and the walking path require --camera walk");
+    if (o.camera == "walk" && !o.cameraPath.empty() && o.cameraPath != "walk")
+        throw std::runtime_error("Exploration supports --camera-path walk");
+    o.openWorld = o.camera == "walk" || !o.modelPath.empty();
+    if ((o.openWorld || dayLengthSet) && o.timeOfDay < 0 && !manualSun)
+        o.timeOfDay = 16.4f;
+    if (o.timeOfDay >= 0 && !dayLengthSet && !o.headless && o.capture.empty()
+        && o.recordDirectory.empty())
+        o.daySeconds = 720;
+    if (o.camera != "walk" && o.camera != "valley" && o.camera != "clouds" && o.camera != "overview"
         && o.camera != "inside" && o.camera != "shadows" && o.camera != "formations"
         && o.camera != "vortex" && o.camera != "tower-close" && o.camera != "tower-side"
         && o.camera != "tower-inside")
-        throw std::runtime_error("Unknown camera. Use valley, clouds, overview, inside, shadows, "
-                                 "formations, vortex, tower-close, tower-side or tower-inside");
+        throw std::runtime_error(
+            "Unknown camera. Use walk, valley, clouds, overview, inside, shadows, "
+            "formations, vortex, tower-close, tower-side or tower-inside");
     if (!o.recordDirectory.empty() && !o.capture.empty())
         throw std::runtime_error("Choose --capture or --record");
     if (!std::isfinite(o.lightningAt) || (o.lightningAt < 0 && o.lightningAt != -1)

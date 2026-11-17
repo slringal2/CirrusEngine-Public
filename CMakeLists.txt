@@ -17,14 +17,14 @@ else()
 endif()
 
 if(WIN32)
-  add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp)
-  set(CIRRUS_SHADERS shaders/common.hlsli shaders/formations.hlsli shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/lightning.hlsli)
+  add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp src/world.cpp src/scene_mesh.cpp src/model.cpp)
+  set(CIRRUS_SHADERS shaders/common.hlsli shaders/formations.hlsli shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/lightning.hlsli shaders/mesh.hlsl shaders/geometry.hlsli)
   # HLSL items must not become ClInclude: that runs the C++ IntelliSense parser.
   # Runtime compilation handles all entry points, so exclude FXCompile from MSBuild.
   set_source_files_properties(${CIRRUS_SHADERS} PROPERTIES VS_TOOL_OVERRIDE "None")
-  set_source_files_properties(shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl
+  set_source_files_properties(shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/mesh.hlsl
     PROPERTIES VS_TOOL_OVERRIDE "FXCompile" VS_SETTINGS "ExcludedFromBuild=true" VS_SHADER_MODEL "5.0")
-  target_sources(CirrusEngine PRIVATE ${CIRRUS_SHADERS} src/renderer.hpp src/ui.hpp src/weather.hpp src/cloud_formations.hpp src/cloud_volume.hpp)
+  target_sources(CirrusEngine PRIVATE ${CIRRUS_SHADERS} src/renderer.hpp src/ui.hpp src/weather.hpp src/cloud_formations.hpp src/cloud_volume.hpp src/world.hpp src/scene_mesh.hpp)
   source_group("Shaders" FILES ${CIRRUS_SHADERS})
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT CirrusEngine)
   set_target_properties(CirrusEngine PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:CirrusEngine>")
@@ -40,7 +40,9 @@ if(WIN32)
   install(DIRECTORY shaders DESTINATION .)
   install(DIRECTORY docs DESTINATION .)
   install(DIRECTORY config DESTINATION .)
-  install(FILES README.md LICENSE weather-demo.cmd cloud-formations.cmd DESTINATION .)
+  install(FILES README.md LICENSE start.cmd weather-demo.cmd cloud-formations.cmd DESTINATION .)
+  install(FILES third_party/cgltf/LICENSE DESTINATION third_party/cgltf)
+  install(FILES tests/pbr-panel.gltf DESTINATION tests)
 endif()
 
 if(BUILD_TESTING)

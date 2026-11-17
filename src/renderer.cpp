@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -20,12 +21,6 @@ using namespace DirectX;
 
 namespace
 {
-struct TerrainVertex
-{
-    XMFLOAT3 position, normal;
-    XMFLOAT4 material;
-};
-
 // Low / Medium / High / Ultra の順。視線と太陽方向の積分回数を別々に制御する。
 constexpr std::array<int, 4> samples{160, 224, 384, 640};
 constexpr std::array<int, 4> lightSamples{6, 8, 12, 16};
@@ -76,6 +71,8 @@ constexpr std::array<TextureViewInfo, static_cast<size_t>(DebugView::Count)> tex
     {"CLOUD PLACEMENT", "RG16F", "R: lower layer. G: upper layer. Period: 32.768 km."},
     {"CLOUD HEIGHT LUT", "RGBA8 / RGB", "RG: density thresholds. B: softness. Height goes down."},
     {"CLOUD SHADOW DEPTH", "RG16F / G", "Light-space occluder depth. White: clear or far."},
+    {"METALLIC", "RGBA16F / A", "White: metal. Black: dielectric."},
+    {"NEAR SHADOW DEPTH", "D32 / R32F", "Local terrain and tree shadows for walking."},
 }};
 
 std::string narrow(const wchar_t *text)
@@ -178,7 +175,7 @@ Renderer::Renderer(HWND window, const Options &options)
 {
     createDevice(window);
     shaders_ = compileShaders();
-    log("Compiled 18 rendering shader entry points.");
+    log("Compiled 22 rendering shader entry points.");
     if (options_.checkShaders)
         return;
     if (options_.formationFile.empty())
@@ -194,8 +191,19 @@ Renderer::Renderer(HWND window, const Options &options)
                               options_.transitionSeconds);
     if (options_.weatherDemo)
         weather_.setDemo(true);
+    if (options_.openWorld)
+        world_ = std::make_unique<World>(device_.Get(), options_.vegetation);
+    timeLapse_ = options_.timeOfDay >= 0 && options_.daySeconds > 0;
     resetCamera();
     initializeResources();
+    if (!options_.modelPath.empty())
+    {
+        float x = camera_.position.x + std::sin(camera_.yaw) * 9;
+        float z = camera_.position.z + std::cos(camera_.yaw) * 9;
+        float y = world_ ? world_->ground(x, z) : terrainHeight(x, z);
+        model_ = loadStaticModel(device_.Get(), context_.Get(), options_.modelPath, {x, y, z},
+                                 options_.modelScale);
+    }
     resize(options.width, options.height);
 }
 
@@ -317,8 +325,12 @@ ShaderSet Renderer::compileShaders()
     vs(L"scene.hlsl", "FullscreenVS", s.fullscreenVS);
     ps(L"scene.hlsl", "GeometryPS", s.geometryPS);
     ps(L"scene.hlsl", "CompositePS", s.compositePS);
+    ps(L"scene.hlsl", "ResolveEdgesPS", s.resolveEdgesPS);
     vs(L"rain.hlsl", "RainVS", s.rainVS);
     ps(L"rain.hlsl", "RainPS", s.rainPS);
+    auto mesh = vs(L"mesh.hlsl", "MeshVS", s.meshVS);
+    ps(L"mesh.hlsl", "MeshPS", s.meshPS);
+    ps(L"mesh.hlsl", "MeshShadowPS", s.meshShadowPS);
     cs(L"noise.hlsl", "NoiseCS", s.noiseCS);
     cs(L"noise.hlsl", "WeatherCS", s.weatherCS);
     cs(L"noise.hlsl", "CloudMapCS", s.cloudMapCS);
@@ -337,6 +349,27 @@ ShaderSet Renderer::compileShaders()
     require(device_->CreateInputLayout(layout, 3, geometry->GetBufferPointer(),
                                        geometry->GetBufferSize(), &s.geometryLayout),
             "Geometry layout");
+    const D3D11_INPUT_ELEMENT_DESC meshLayout[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshVertex, position),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshVertex, normal),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(MeshVertex, tangent),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(MeshVertex, uv),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(MeshVertex, uv1),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(MeshVertex, color),
+         D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, offsetof(MeshInstance, positionScale),
+         D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"INSTANCE", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
+         offsetof(MeshInstance, rotationVariation), D3D11_INPUT_PER_INSTANCE_DATA, 1}};
+    require(device_->CreateInputLayout(meshLayout, static_cast<UINT>(std::size(meshLayout)),
+                                       mesh->GetBufferPointer(), mesh->GetBufferSize(),
+                                       &s.meshLayout),
+            "PBR mesh layout");
     return s;
 }
 
@@ -395,6 +428,8 @@ void Renderer::initializeResources()
     b.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     b.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     require(device_->CreateBuffer(&b, nullptr, &frameBuffer_), "Frame constants");
+    b.ByteWidth = sizeof(XMFLOAT4X4);
+    require(device_->CreateBuffer(&b, nullptr, &passBuffer_), "Geometry pass constants");
     b.ByteWidth = 16;
     require(device_->CreateBuffer(&b, nullptr, &noiseBuffer_), "Noise constants");
     D3D11_SAMPLER_DESC sd{};
@@ -416,15 +451,21 @@ void Renderer::initializeResources()
     rd.CullMode = D3D11_CULL_NONE;
     rd.DepthClipEnable = TRUE;
     require(device_->CreateRasterizerState(&rd, &raster_), "Raster state");
+    rd.CullMode = D3D11_CULL_BACK;
+    require(device_->CreateRasterizerState(&rd, &meshRaster_), "Mesh raster state");
     // 地形シャドウの自己遮蔽による縞を抑えるラスタライズ時の深度バイアス。
     rd.DepthBias = 200;
     rd.SlopeScaledDepthBias = 1.5f;
+    require(device_->CreateRasterizerState(&rd, &meshShadowRaster_), "Mesh shadow raster state");
+    rd.CullMode = D3D11_CULL_NONE;
     require(device_->CreateRasterizerState(&rd, &shadowRaster_), "Shadow raster state");
     D3D11_DEPTH_STENCIL_DESC dd{};
     dd.DepthEnable = TRUE;
     dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
     dd.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
     require(device_->CreateDepthStencilState(&dd, &depthOn_), "Depth state");
+    dd.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
+    require(device_->CreateDepthStencilState(&dd, &reversedDepth_), "Reversed depth state");
     dd.DepthEnable = FALSE;
     require(device_->CreateDepthStencilState(&dd, &depthOff_), "No depth state");
     weatherMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true, true);
@@ -511,6 +552,18 @@ void Renderer::initializeResources()
             {weatherMap_.uav.Get(), cloudDisplacement_.uav.Get()}, {});
     context_->GenerateMips(weatherMap_.srv.Get());
     context_->GenerateMips(cloudDisplacement_.srv.Get());
+    makeShadowDepth(terrainDepthView_, terrainDepthSRV_);
+    if (world_)
+        makeShadowDepth(nearDepthView_, nearDepthSRV_);
+    else
+        makeTerrain();
+    ui_.initialize(device_.Get());
+    log("Generated periodic Perlin-Worley 128^3 / Worley 128^3 noise and weather field.");
+}
+
+void Renderer::makeShadowDepth(ComPtr<ID3D11DepthStencilView> &dsv,
+                               ComPtr<ID3D11ShaderResourceView> &srv)
+{
     D3D11_TEXTURE2D_DESC td{};
     // 地形用は2048²の深度マップ。DSVではD32、シェーダーからはR32で読む。
     td.Width = td.Height = 2048;
@@ -519,21 +572,17 @@ void Renderer::initializeResources()
     td.Format = DXGI_FORMAT_R32_TYPELESS;
     td.SampleDesc.Count = 1;
     td.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
-    require(device_->CreateTexture2D(&td, nullptr, &terrainDepth_), "Terrain shadow depth");
+    ComPtr<ID3D11Texture2D> texture;
+    require(device_->CreateTexture2D(&td, nullptr, &texture), "Terrain shadow depth");
     D3D11_DEPTH_STENCIL_VIEW_DESC dv{};
     dv.Format = DXGI_FORMAT_D32_FLOAT;
     dv.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-    require(device_->CreateDepthStencilView(terrainDepth_.Get(), &dv, &terrainDepthView_),
-            "Terrain shadow DSV");
+    require(device_->CreateDepthStencilView(texture.Get(), &dv, &dsv), "Terrain shadow DSV");
     D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
     sv.Format = DXGI_FORMAT_R32_FLOAT;
     sv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     sv.Texture2D.MipLevels = 1;
-    require(device_->CreateShaderResourceView(terrainDepth_.Get(), &sv, &terrainDepthSRV_),
-            "Terrain shadow SRV");
-    makeTerrain();
-    ui_.initialize(device_.Get());
-    log("Generated periodic Perlin-Worley 128^3 / Worley 128^3 noise, weather field and terrain.");
+    require(device_->CreateShaderResourceView(texture.Get(), &sv, &srv), "Terrain shadow SRV");
 }
 
 void Renderer::makeTerrain()
@@ -634,8 +683,11 @@ void Renderer::makeTargets()
     aerialHeight_ = (height_ + 3) / 4;
     shadowSize_ = shadowSizes[q];
     finalColor_ = makeTexture(width_, height_, DXGI_FORMAT_R8G8B8A8_UNORM, true, false);
+    if (world_)
+        sceneColor_ = makeTexture(width_, height_, DXGI_FORMAT_R8G8B8A8_UNORM, true, false);
     albedo_ = makeTexture(width_, height_, DXGI_FORMAT_R8G8B8A8_UNORM, true, false);
     normals_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
+    surface_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
     // RG16Fに雲層全体の透過率と、太陽から見た遮蔽深度の指数値を保存する。
     shadowMap_ = makeTexture(shadowSize_, shadowSize_, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
     cloudRaw_ =
@@ -692,7 +744,10 @@ ShaderResources Renderer::resources() const
             cloudMap_.srv.Get(),
             cloudHeightLut_.srv.Get(),
             cloudDisplacement_.srv.Get(),
-            skyAmbient_.srv.Get()};
+            skyAmbient_.srv.Get(),
+            nearDepthSRV_.Get(),
+            surface_.srv.Get(),
+            nullptr};
 }
 
 void Renderer::compute(ID3D11ComputeShader *shader, int x, int y, int z,
@@ -760,8 +815,10 @@ void Renderer::updateConstants()
                                      std::cos(camera_.yaw) * cp, 0);
     XMMATRIX view =
         XMMatrixLookToLH(XMLoadFloat3(&camera_.position), direction, XMVectorSet(0, 1, 0, 0));
-    XMMATRIX projection = XMMatrixPerspectiveFovLH(
-        XMConvertToRadians(62), static_cast<float>(width_) / height_, 10, 150000);
+    // Float reversed-Z preserves ground-level depth precision over the streamed horizon.
+    XMMATRIX projection =
+        XMMatrixPerspectiveFovLH(XMConvertToRadians(62), static_cast<float>(width_) / height_,
+                                 world_ ? 150000.0f : 10.0f, world_ ? 0.15f : 150000.0f);
     XMMATRIX vp = view * projection;
     XMStoreFloat4x4(&constants_.viewProjection, XMMatrixTranspose(vp));
     XMStoreFloat4x4(&constants_.inverseViewProjection,
@@ -774,6 +831,12 @@ void Renderer::updateConstants()
                 azimuth = XMConvertToRadians(options_.azimuth);
     XMFLOAT3 sun{std::sin(azimuth) * std::cos(elevation), std::sin(elevation),
                  std::cos(azimuth) * std::cos(elevation)};
+    if (options_.timeOfDay >= 0)
+    {
+        sun = solarDirection(options_.timeOfDay);
+        options_.elevation = XMConvertToDegrees(std::asin(std::clamp(sun.y, -1.0f, 1.0f)));
+        options_.azimuth = XMConvertToDegrees(std::atan2(sun.x, sun.z));
+    }
     constants_.sunDirection = {sun.x, sun.y, sun.z, 0};
     constants_.solarExposure = {10, 9.65f, 9.1f, options_.exposure};
     constants_.resolution = {static_cast<float>(width_), static_cast<float>(height_), 1.0f / width_,
@@ -804,7 +867,7 @@ void Renderer::updateConstants()
         const float distance = 6500 + ((seed >> 16) & 65535) * (7000.0f / 65535);
         const float x = camera_.position.x + std::sin(angle) * distance;
         const float z = camera_.position.z + std::cos(angle) * distance;
-        lightningTarget_ = {x, terrainHeight(x, z) + 2, z};
+        lightningTarget_ = {x, (world_ ? world_->ground(x, z) : terrainHeight(x, z)) + 2, z};
         lightningSource_ = {
             x + 180, std::max(w.cloudBase + w.cloudThickness * 0.42f, lightningTarget_.y + 1200),
             z - 100};
@@ -882,6 +945,34 @@ void Renderer::updateConstants()
     XMStoreFloat4x4(
         &constants_.lightViewProjection,
         XMMatrixTranspose(lightView * XMMatrixOrthographicLH(65000, 65000, 100, 100000)));
+    bool localShadows = false;
+    if (world_ && sun.y > 0.02f)
+    {
+        float x = camera_.position.x + std::sin(camera_.yaw) * 76;
+        float z = camera_.position.z + std::cos(camera_.yaw) * 76;
+        float y = world_->ground(x, z);
+        localShadows = camera_.position.y - y < 480;
+        if (localShadows)
+        {
+            center = XMVectorSet(x, y, z, 1);
+            XMVECTOR up =
+                std::abs(sun.y) > 0.98f ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
+            XMMATRIX nearView = XMMatrixLookAtLH(center + light * 750, center, up);
+            constexpr float spanNear = 384;
+            // Snap the shadow projection to the same world-space texels during walking.
+            XMVECTOR origin = XMVector3TransformCoord(XMVectorZero(), nearView);
+            constexpr float texelNear = spanNear / 2048;
+            nearView.r[3] += XMVectorSet(
+                std::round(XMVectorGetX(origin) / texelNear) * texelNear - XMVectorGetX(origin),
+                std::round(XMVectorGetY(origin) / texelNear) * texelNear - XMVectorGetY(origin), 0,
+                0);
+            XMStoreFloat4x4(
+                &constants_.nearLightViewProjection,
+                XMMatrixTranspose(nearView * XMMatrixOrthographicLH(spanNear, spanNear, 10, 1600)));
+        }
+    }
+    constants_.worldRendering = {world_ ? 1.0f : 0.0f, localShadows ? 1.0f : 0.0f,
+                                 options_.timeOfDay >= 0 ? 1.0f : 0.0f, 0};
     D3D11_MAPPED_SUBRESOURCE mapped{};
     require(context_->Map(frameBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
             "Map frame constants");
@@ -905,7 +996,7 @@ void Renderer::updateConstants()
     lastLightning_ = flash;
 }
 
-void Renderer::drawGeometry(bool shadow)
+void Renderer::drawGeometry(bool shadow, bool localPass)
 {
     const ShaderResources empty{};
     context_->PSSetShaderResources(0, shaderResourceCount, empty.data());
@@ -917,12 +1008,23 @@ void Renderer::drawGeometry(bool shadow)
                             1};
     context_->RSSetViewports(1, &viewport);
     context_->RSSetState(shadow ? shadowRaster_.Get() : raster_.Get());
-    context_->OMSetDepthStencilState(depthOn_.Get(), 0);
+    context_->OMSetDepthStencilState(!shadow && world_ ? reversedDepth_.Get() : depthOn_.Get(), 0);
     context_->OMSetBlendState(nullptr, nullptr, 0xffffffff);
+    const XMFLOAT4X4 &projection = localPass ? constants_.nearLightViewProjection
+                                   : shadow  ? constants_.lightViewProjection
+                                             : constants_.viewProjection;
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    require(context_->Map(passBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
+            "Map geometry pass");
+    std::memcpy(mapped.pData, &projection, sizeof(projection));
+    context_->Unmap(passBuffer_.Get(), 0);
+    ID3D11Buffer *pass = passBuffer_.Get();
+    context_->VSSetConstantBuffers(2, 1, &pass);
     if (shadow)
     {
-        context_->ClearDepthStencilView(terrainDepthView_.Get(), D3D11_CLEAR_DEPTH, 1, 0);
-        context_->OMSetRenderTargets(0, nullptr, terrainDepthView_.Get());
+        ID3D11DepthStencilView *depth = localPass ? nearDepthView_.Get() : terrainDepthView_.Get();
+        context_->ClearDepthStencilView(depth, D3D11_CLEAR_DEPTH, 1, 0);
+        context_->OMSetRenderTargets(0, nullptr, depth);
         context_->VSSetShader(shaders_.shadowVS.Get(), nullptr, 0);
         context_->PSSetShader(nullptr, nullptr, 0);
     }
@@ -931,21 +1033,46 @@ void Renderer::drawGeometry(bool shadow)
         const float clear[] = {0, 0, 0, 0};
         context_->ClearRenderTargetView(albedo_.rtv.Get(), clear);
         context_->ClearRenderTargetView(normals_.rtv.Get(), clear);
-        context_->ClearDepthStencilView(depthView_.Get(), D3D11_CLEAR_DEPTH, 1, 0);
-        ID3D11RenderTargetView *rt[] = {albedo_.rtv.Get(), normals_.rtv.Get()};
-        context_->OMSetRenderTargets(2, rt, depthView_.Get());
+        context_->ClearRenderTargetView(surface_.rtv.Get(), clear);
+        context_->ClearDepthStencilView(depthView_.Get(), D3D11_CLEAR_DEPTH, world_ ? 0.0f : 1.0f,
+                                        0);
+        ID3D11RenderTargetView *rt[] = {albedo_.rtv.Get(), normals_.rtv.Get(), surface_.rtv.Get()};
+        context_->OMSetRenderTargets(3, rt, depthView_.Get());
         context_->VSSetShader(shaders_.geometryVS.Get(), nullptr, 0);
         context_->PSSetShader(shaders_.geometryPS.Get(), nullptr, 0);
-        ID3D11ShaderResourceView *wm = weatherMap_.srv.Get();
-        context_->PSSetShaderResources(2, 1, &wm);
+        ID3D11ShaderResourceView *maps[] = {world_ ? detailNoise_.Get() : nullptr,
+                                            weatherMap_.srv.Get()};
+        context_->PSSetShaderResources(1, 2, maps);
     }
-    UINT stride = sizeof(TerrainVertex), offset = 0;
-    ID3D11Buffer *vertex = vertices_.Get();
-    context_->IASetVertexBuffers(0, 1, &vertex, &stride, &offset);
-    context_->IASetIndexBuffer(indices_.Get(), DXGI_FORMAT_R32_UINT, 0);
     context_->IASetInputLayout(shaders_.geometryLayout.Get());
     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    context_->DrawIndexed(indexCount_, 0, 0);
+    if (world_)
+        world_->drawTerrain(context_.Get(), XMMatrixTranspose(XMLoadFloat4x4(&projection)));
+    else
+    {
+        const UINT stride = sizeof(TerrainVertex), offset = 0;
+        ID3D11Buffer *vertex = vertices_.Get();
+        context_->IASetVertexBuffers(0, 1, &vertex, &stride, &offset);
+        context_->IASetIndexBuffer(indices_.Get(), DXGI_FORMAT_R32_UINT, 0);
+        context_->DrawIndexed(indexCount_, 0, 0);
+    }
+    context_->IASetInputLayout(shaders_.meshLayout.Get());
+    context_->VSSetShader(shaders_.meshVS.Get(), nullptr, 0);
+    context_->PSSetShader(shadow ? nullptr : shaders_.meshPS.Get(), nullptr, 0);
+    if (world_ && (localPass || !shadow))
+        world_->drawPlants(context_.Get(), shadow);
+    for (const Mesh &mesh : model_.meshes)
+    {
+        auto *raster = mesh.doubleSided ? (shadow ? shadowRaster_.Get() : raster_.Get())
+                                        : (shadow ? meshShadowRaster_.Get() : meshRaster_.Get());
+        context_->RSSetState(raster);
+        if (shadow)
+            context_->PSSetShader(mesh.alphaMask ? shaders_.meshShadowPS.Get() : nullptr, nullptr,
+                                  0);
+        mesh.draw(context_.Get(), model_.instance.Get(), 1, shadow);
+    }
+    ID3D11ShaderResourceView *emptyMaterials[5]{};
+    context_->PSSetShaderResources(32, 5, emptyMaterials);
     context_->OMSetRenderTargets(0, nullptr, nullptr);
     context_->PSSetShaderResources(0, shaderResourceCount, empty.data());
 }
@@ -979,31 +1106,62 @@ void Renderer::drawRain()
     context_->OMSetBlendState(nullptr, nullptr, 0xffffffff);
 }
 
+void Renderer::moveCamera(float forward, float side, float vertical, double dt, bool fast)
+{
+    if (forward == 0 && side == 0 && (walking_ || vertical == 0))
+        return;
+    if (walking_)
+    {
+        float length = std::max(std::hypot(forward, side), 1.0f);
+        forward /= length;
+        side /= length;
+    }
+    float speed =
+        static_cast<float>(dt) * (walking_ ? (fast ? 8.4f : 4.2f) : (fast ? 2200.0f : 400.0f));
+    float x = speed * (forward * std::sin(camera_.yaw) + side * std::cos(camera_.yaw));
+    float z = speed * (forward * std::cos(camera_.yaw) - side * std::sin(camera_.yaw));
+    if (walking_)
+        world_->walk(camera_.position, x, z);
+    else
+    {
+        camera_.position.x += x;
+        camera_.position.z += z;
+        if (world_)
+        {
+            camera_.position.x = std::clamp(camera_.position.x, -worldLimit, worldLimit);
+            camera_.position.z = std::clamp(camera_.position.z, -worldLimit, worldLimit);
+        }
+        camera_.position.y += speed * vertical;
+        float ground = world_ ? world_->ground(camera_.position.x, camera_.position.z)
+                              : terrainHeight(camera_.position.x, camera_.position.z);
+        camera_.position.y = std::max(camera_.position.y, ground + (world_ ? eyeHeight : 12.0f));
+    }
+}
+
 void Renderer::frame(double dt, bool focused)
 {
     auto begin = std::chrono::steady_clock::now();
-    if (focused && !options_.headless)
+    if (focused && !options_.headless && options_.cameraPath.empty())
     {
-        float speed = static_cast<float>(std::min(dt, 0.1))
-                      * (GetAsyncKeyState(VK_SHIFT) & 0x8000 ? 2200.0f : 400.0f);
         float forward = static_cast<float>((GetAsyncKeyState('W') & 0x8000) != 0)
                         - static_cast<float>((GetAsyncKeyState('S') & 0x8000) != 0);
         float side = static_cast<float>((GetAsyncKeyState('D') & 0x8000) != 0)
                      - static_cast<float>((GetAsyncKeyState('A') & 0x8000) != 0);
-        camera_.position.x +=
-            speed * (forward * std::sin(camera_.yaw) + side * std::cos(camera_.yaw));
-        camera_.position.z +=
-            speed * (forward * std::cos(camera_.yaw) - side * std::sin(camera_.yaw));
-        camera_.position.y += speed
-                              * (static_cast<float>((GetAsyncKeyState('E') & 0x8000) != 0)
-                                 - static_cast<float>((GetAsyncKeyState('Q') & 0x8000) != 0));
-        camera_.position.y = std::max(camera_.position.y,
-                                      terrainHeight(camera_.position.x, camera_.position.z) + 12);
+        float vertical = static_cast<float>((GetAsyncKeyState('E') & 0x8000) != 0)
+                         - static_cast<float>((GetAsyncKeyState('Q') & 0x8000) != 0);
+        moveCamera(forward, side, vertical, std::min(dt, 0.1),
+                   (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
     }
     if (!paused_)
     {
         weather_.update(dt);
-        if (timeLapse_)
+        if (timeLapse_ && options_.timeOfDay >= 0)
+        {
+            double day = options_.daySeconds > 0 ? options_.daySeconds : 720;
+            options_.timeOfDay =
+                static_cast<float>(std::fmod(options_.timeOfDay + dt * 24 / day, 24));
+        }
+        else if (timeLapse_)
         {
             options_.elevation += static_cast<float>(dt) * 0.8f;
             if (options_.elevation > 85)
@@ -1017,6 +1175,13 @@ void Renderer::frame(double dt, bool focused)
     }
     // 固定時刻でA/B比較できる、移動・視点切り替え用の検証経路。
     const float pathTime = static_cast<float>(weather_.time());
+    if (options_.cameraPath == "walk")
+    {
+        // Follow the same path and grounded motion as interactive walking.
+        float z = camera_.position.z;
+        camera_.yaw = std::atan(0.088f * (std::cos(z * 0.022f) + std::cos(z * 0.008f)));
+        moveCamera(1, 0, 0, dt, false);
+    }
     if (options_.cameraPath == "pan")
     {
         camera_.position = {450 * std::sin(pathTime * 0.45f), 330, -1600};
@@ -1045,6 +1210,8 @@ void Renderer::frame(double dt, bool focused)
     // UIの変更を先に適用し、そのフレームで使う天候・カメラ定数をGPUへ送る。
     if (options_.ui)
         drawUi();
+    if (world_)
+        world_->update(camera_.position);
     updateConstants();
     startTiming();
 
@@ -1081,6 +1248,8 @@ void Renderer::frame(double dt, bool focused)
 
     // 2. 地形の深度シャドウ → ディファード描画用G-buffer。
     drawGeometry(true);
+    if (constants_.worldRendering.y > 0.5f)
+        drawGeometry(true, true);
     drawGeometry(false);
     stamp(2);
 
@@ -1151,7 +1320,8 @@ void Renderer::frame(double dt, bool focused)
     context_->RSSetViewports(1, &viewport);
     context_->RSSetState(raster_.Get());
     context_->OMSetDepthStencilState(depthOff_.Get(), 0);
-    ID3D11RenderTargetView *rt = finalColor_.rtv.Get();
+    const bool filterEdges = world_ && options_.debugView == 0;
+    ID3D11RenderTargetView *rt = filterEdges ? sceneColor_.rtv.Get() : finalColor_.rtv.Get();
     context_->OMSetRenderTargets(1, &rt, nullptr);
     context_->IASetInputLayout(nullptr);
     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1162,6 +1332,15 @@ void Renderer::frame(double dt, bool focused)
     input[17] = fullCloudRefresh_ ? history_[historyIndex_].srv.Get() : cloudRaw_.srv.Get();
     context_->PSSetShaderResources(0, shaderResourceCount, input.data());
     context_->Draw(3, 0);
+    if (filterEdges)
+    {
+        rt = finalColor_.rtv.Get();
+        context_->OMSetRenderTargets(1, &rt, nullptr);
+        context_->PSSetShader(shaders_.resolveEdgesPS.Get(), nullptr, 0);
+        ID3D11ShaderResourceView *color = sceneColor_.srv.Get();
+        context_->PSSetShaderResources(28, 1, &color);
+        context_->Draw(3, 0);
+    }
     if (options_.ui)
         ui_.draw(context_.Get());
 
@@ -1276,12 +1455,29 @@ void Renderer::drawUi()
         std::snprintf(line, sizeof(line), "%s  %3.0f%%", weatherName(weather_.target()).data(),
                       weather_.transitionProgress() * 100);
         ui_.text(44, 178, line, 0xffc5e3cf, 0.80f);
-        std::snprintf(line, sizeof(line), "SUN ELEVATION  %.1f deg", options_.elevation);
-        if (ui_.slider(44, 214, 254, line, options_.elevation, -14, 85))
-            historyValid_ = false;
-        std::snprintf(line, sizeof(line), "SUN AZIMUTH    %.1f deg", options_.azimuth);
-        if (ui_.slider(44, 273, 254, line, options_.azimuth, -180, 180))
-            historyValid_ = false;
+        if (options_.timeOfDay >= 0)
+        {
+            const int minutes = static_cast<int>(options_.timeOfDay * 60) % 1440;
+            std::snprintf(line, sizeof(line), "SOLAR TIME %02d:%02d", minutes / 60, minutes % 60);
+            if (ui_.slider(44, 214, 254, line, options_.timeOfDay, 0, 23.999f))
+                historyValid_ = false;
+            if (ui_.button(44, 275, 130, 30, timeLapse_ ? "STOP TIME [T]" : "RUN TIME [T]",
+                           timeLapse_, 0.66f))
+                timeLapse_ = !timeLapse_;
+            if (world_
+                && ui_.button(179, 275, 119, 30, walking_ ? "WALK [G]" : "FLY [G]", walking_,
+                              0.66f))
+                key('G');
+        }
+        else
+        {
+            std::snprintf(line, sizeof(line), "SUN ELEVATION  %.1f deg", options_.elevation);
+            if (ui_.slider(44, 214, 254, line, options_.elevation, -14, 85))
+                historyValid_ = false;
+            std::snprintf(line, sizeof(line), "SUN AZIMUTH    %.1f deg", options_.azimuth);
+            if (ui_.slider(44, 273, 254, line, options_.azimuth, -180, 180))
+                historyValid_ = false;
+        }
         std::snprintf(line, sizeof(line), "EXPOSURE       %.2f", options_.exposure);
         ui_.slider(44, 332, 254, line, options_.exposure, 0.2f, 3.0f);
         if (ui_.button(44, 397, 80, 34, qualityNames[static_cast<int>(options_.quality)], false,
@@ -1333,9 +1529,11 @@ void Renderer::drawUi()
         }
     }
     ui_.rect(24, static_cast<float>(height_) - 61, static_cast<float>(width_) - 48, 37, 0xc7171d19);
-    ui_.text(38, static_cast<float>(height_) - 56,
-             "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save",
-             0xffbdccc3, 0.72f);
+    const char *help =
+        world_
+            ? "WASD Walk | Shift Run | RMB Look | G Fly/Walk | T Time | 1-5 Weather | F1 Hide"
+            : "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save";
+    ui_.text(38, static_cast<float>(height_) - 56, help, 0xffbdccc3, 0.72f);
     if (!status_.empty())
         ui_.text(28, static_cast<float>(height_) - 94, status_, 0xffc4dfca, 0.73f);
     if (paused_)
@@ -1388,6 +1586,7 @@ void Renderer::drawTextureInspector()
             textureHeight = 128;
             break;
         case DebugView::TerrainShadow:
+        case DebugView::NearShadow:
             textureWidth = textureHeight = 2048;
             break;
         case DebugView::Sky:
@@ -1495,7 +1694,14 @@ void Renderer::setFormations(std::string_view mode)
 void Renderer::resetCamera()
 {
     camera_ = {};
-    if (options_.camera == "clouds")
+    walking_ = options_.camera == "walk";
+    if (walking_)
+    {
+        float x = options_.spawnX, z = options_.spawnZ;
+        camera_.position = {x, world_->ground(x, z) + eyeHeight, z};
+        camera_.pitch = -0.035f;
+    }
+    else if (options_.camera == "clouds")
         camera_.pitch = 0.40f;
     else if (options_.camera == "overview")
     {
@@ -1576,6 +1782,13 @@ void Renderer::key(UINT k)
         paused_ = !paused_;
     if (k == 'T')
         timeLapse_ = !timeLapse_;
+    if (k == 'G' && world_ && options_.cameraPath.empty())
+    {
+        walking_ = !walking_;
+        if (walking_)
+            camera_.position.y = world_->ground(camera_.position.x, camera_.position.z) + eyeHeight;
+        historyValid_ = false;
+    }
     if (k == VK_F6)
     {
         weather_.setDemo(!weather_.demo());
@@ -1595,10 +1808,17 @@ void Renderer::key(UINT k)
     }
     if (k == 'H')
         options_.shadows = !options_.shadows;
-    if (k == VK_OEM_4)
-        options_.elevation = std::max(-14.0f, options_.elevation - 2);
-    if (k == VK_OEM_6)
-        options_.elevation = std::min(85.0f, options_.elevation + 2);
+    if (k == VK_OEM_4 || k == VK_OEM_6)
+    {
+        float sign = k == VK_OEM_4 ? -1.0f : 1.0f;
+        if (options_.timeOfDay >= 0)
+        {
+            options_.timeOfDay = std::fmod(options_.timeOfDay + sign * 0.5f + 24, 24.0f);
+            historyValid_ = false;
+        }
+        else
+            options_.elevation = std::clamp(options_.elevation + sign * 2, -14.0f, 85.0f);
+    }
     if (k == VK_F5)
     {
         try
@@ -1738,6 +1958,20 @@ std::string Renderer::diagnostics()
         << qualityNames[static_cast<int>(options_.quality)] << "\",\n";
     out << "  \"sun_elevation\": " << options_.elevation
         << ", \"sun_azimuth\": " << options_.azimuth << ",\n";
+    out << "  \"solar_hour\": " << options_.timeOfDay << ",\n";
+    out << "  \"camera_position_m\": [" << camera_.position.x << ", " << camera_.position.y << ", "
+        << camera_.position.z << "],\n";
+    if (world_)
+    {
+        float ground = world_->ground(camera_.position.x, camera_.position.z);
+        out << "  \"world\": {\"walking\": " << (walking_ ? "true" : "false")
+            << ", \"ground_m\": " << ground << ", \"eye_height_m\": " << camera_.position.y - ground
+            << ", \"active_tiles\": " << world_->tiles()
+            << ", \"tiles_built\": " << world_->tilesBuilt() << ", \"trees\": " << world_->trees()
+            << ", \"grass_tufts\": " << world_->grassTufts()
+            << ", \"near_shadow\": " << (constants_.worldRendering.y > 0.5f ? "true" : "false")
+            << ", \"model_primitives\": " << model_.meshes.size() << "},\n";
+    }
     out << "  \"frames\": " << frameNumber_ << ", \"simulation_seconds\": " << weather_.time()
         << ",\n";
     const auto &state = weather_.state();

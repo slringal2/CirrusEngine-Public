@@ -15,7 +15,9 @@ void TransmittanceCS(uint3 id : SV_DispatchThreadID)
     float2 uv = (id.xy + 0.5) / float2(w, h);
     float height = uv.y * uv.y * ATMOSPHERE_HEIGHT;
     float mu = uv.x * 2 - 1;
-    float3 p = float3(0, height, 0), d = float3(sqrt(saturate(1 - mu * mu)), mu, 0);
+    float2 chartOrigin = planetCenter().xz;
+    float3 p = float3(chartOrigin.x, height, chartOrigin.y);
+    float3 d = float3(sqrt(saturate(1 - mu * mu)), mu, 0);
     float2 ground = sphereIntersection(p, d, PLANET_RADIUS);
     if (ground.x > 0)
     {
@@ -53,6 +55,8 @@ void SkyCS(uint3 id : SV_DispatchThreadID)
     float3 color = a.scattering + float3(0.0004, 0.0008, 0.0016) + stars;
     float moon = 1 - smoothstep(0.0038, 0.0055, acos(clamp(dot(ray, -SunDirection.xyz), -1, 1)));
     color += float3(0.35, 0.40, 0.50) * moon * night;
+    if (WorldRendering.z > 0.5)
+        color = a.scattering + float3(0.0004, 0.0008, 0.0016);
     Output0[id.xy] = float4(color, 1);
 }
 

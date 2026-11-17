@@ -78,7 +78,15 @@ try {
         @{name='tower-warp-z';args=@('--debug-view','25','--texture-axis','z','--texture-slice','0.5','--no-clouds')},
         @{name='tower-orbit';args=@('--formations','mixed','--camera','tower-close','--camera-path','tower-orbit','--weather','overcast','--fixed-dt','0.033333333333','--frames','120')},
         @{name='formation-off';args=@('--formations','mixed','--no-clouds')},
-        @{name='clouds-off';args=@('--no-clouds')}
+        @{name='clouds-off';args=@('--no-clouds')},
+        @{name='world-day';args=@('--camera','walk','--time','16.4')},
+        @{name='world-night';args=@('--camera','walk','--time','0.5')},
+        @{name='world-day-wrap';args=@('--camera','walk','--time','23','--day-seconds','8','--fixed-dt','0.06','--frames','40')},
+        @{name='walk-before';args=@('--camera-path','walk','--spawn','10','123','--frames','12')},
+        @{name='walk-crossing';args=@('--camera-path','walk','--spawn','10','123','--frames','90','--fixed-dt','0.10')},
+        @{name='world-distant';args=@('--camera','walk','--spawn','250000','180000','--time','15')},
+        @{name='pbr-metallic';args=@('--model','tests/pbr-panel.gltf','--time','15','--debug-view','29')},
+        @{name='pbr-roughness';args=@('--model','tests/pbr-panel.gltf','--time','15','--debug-view','21')}
     )
     $cirrusReports = @{}
     foreach ($cirrusCase in $cirrusCases) {
@@ -133,7 +141,44 @@ try {
     if ($cirrusReports['formation-reverse'].formations.phase_seconds -ge 0) { throw 'Reverse vortex rotation did not advance backwards' }
     if ($cirrusReports['formation-density-zero'].formations.top_m -ne $cirrusReports['formation-none'].formations.top_m -or $cirrusReports['formation-density-zero'].cloud_transmittance.mean -ne $cirrusReports['formation-none'].cloud_transmittance.mean) { throw 'Zero-density region still affected the cloud sea' }
     if ($cirrusReports['formation-off'].cloud_transmittance.min -lt 0.999 -or $cirrusReports['formation-off'].shadow_transmittance.min -lt 0.999) { throw 'Cloud disable left local formations visible' }
+    $cirrusDaylight = $cirrusReports['world-day']
+    $cirrusNight = $cirrusReports['world-night']
+    if ($cirrusDaylight.world.trees -eq 0 -or $cirrusDaylight.world.grass_tufts -eq 0 -or -not $cirrusDaylight.world.near_shadow) {
+        throw 'Walkable scene is missing vegetation or its local shadow pass'
+    }
+    if ($cirrusDaylight.sun_elevation -le 0 -or $cirrusNight.sun_elevation -ge 0 -or $cirrusNight.world.near_shadow) {
+        throw 'Solar altitude and shadow state do not distinguish day from night'
+    }
+    if ([Math]::Abs($cirrusReports['world-day-wrap'].solar_hour - 6.2) -gt 0.002) {
+        throw 'Solar time did not advance through midnight'
+    }
+    $cirrusBeforeWalk = $cirrusReports['walk-before']
+    $cirrusAfterWalk = $cirrusReports['walk-crossing']
+    if ($cirrusBeforeWalk.camera_position_m[2] -ge 128 -or $cirrusAfterWalk.camera_position_m[2] -lt 150 -or
+        $cirrusAfterWalk.world.tiles_built -le $cirrusBeforeWalk.world.tiles_built -or
+        [Math]::Abs($cirrusAfterWalk.world.eye_height_m - 1.68) -gt 0.001) {
+        throw 'Walking did not cross the streaming boundary at a stable eye height'
+    }
+    $cirrusDistantWorld = $cirrusReports['world-distant']
+    if ($cirrusDistantWorld.world.active_tiles -lt 80 -or $cirrusDistantWorld.cloud_transmittance.min -ge 0.999) {
+        throw 'The world or local atmosphere was missing at the distant spawn'
+    }
     Add-Type -AssemblyName System.Drawing
+    foreach ($cirrusChannel in @('metallic','roughness')) {
+        $cirrusMaterialReport = $cirrusReports["pbr-$cirrusChannel"]
+        if ($cirrusMaterialReport.world.model_primitives -ne 1) { throw 'The glTF mesh did not load' }
+        $cirrusView = [System.Drawing.Bitmap]::new((Join-Path $cirrusOutput "pbr-$cirrusChannel.png"))
+        try {
+            $cirrusLeft = $cirrusView.GetPixel(700,450).R
+            $cirrusRight = $cirrusView.GetPixel(900,450).R
+            if ($cirrusChannel -eq 'metallic' -and ($cirrusLeft -ne 255 -or $cirrusRight -ne 0)) {
+                throw 'glTF metallic texture blue channel was not drawn'
+            }
+            if ($cirrusChannel -eq 'roughness' -and ($cirrusLeft -ne 60 -or $cirrusRight -ne 204)) {
+                throw 'glTF roughness texture green channel was not drawn'
+            }
+        } finally { $cirrusView.Dispose() }
+    }
     $cirrusPlacement = [System.Drawing.Bitmap]::new((Join-Path $cirrusOutput 'cloud-placement.png'))
     $cirrusShadowDepth = [System.Drawing.Bitmap]::new((Join-Path $cirrusOutput 'cloud-shadow-depth.png'))
     try {

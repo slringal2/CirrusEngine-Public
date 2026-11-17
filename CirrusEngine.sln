@@ -9,6 +9,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{C946
 		shaders\atmosphere.hlsl = shaders\atmosphere.hlsl
 		shaders\clouds.hlsl = shaders\clouds.hlsl
 		shaders\common.hlsli = shaders\common.hlsli
+		shaders\geometry.hlsli = shaders\geometry.hlsli
+		shaders\mesh.hlsl = shaders\mesh.hlsl
 		shaders\formations.hlsli = shaders\formations.hlsli
 		shaders\noise.hlsl = shaders\noise.hlsl
 		shaders\rain.hlsl = shaders\rain.hlsl
@@ -19,6 +21,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{B56F0BCE-5B9E-4B22-BAE1-8F6F1DB68FA4}"
 	ProjectSection(SolutionItems) = preProject
 		README.md = README.md
+		docs\exploration.md = docs\exploration.md
 		docs\implementation-guide.md = docs\implementation-guide.md
 		docs\architecture.md = docs\architecture.md
 		docs\cloud-research.md = docs\cloud-research.md

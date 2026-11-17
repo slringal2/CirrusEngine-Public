@@ -60,11 +60,16 @@
     <ClCompile Include="src\renderer.cpp" />
     <ClCompile Include="src\ui.cpp" />
     <ClCompile Include="src\weather.cpp" />
+    <ClCompile Include="src\world.cpp" />
+    <ClCompile Include="src\scene_mesh.cpp" />
+    <ClCompile Include="src\model.cpp" />
     <ClInclude Include="src\renderer.hpp" />
     <ClInclude Include="src\ui.hpp" />
     <ClInclude Include="src\weather.hpp" />
     <ClInclude Include="src\cloud_formations.hpp" />
     <ClInclude Include="src\cloud_volume.hpp" />
+    <ClInclude Include="src\world.hpp" />
+    <ClInclude Include="src\scene_mesh.hpp" />
     <None Include="README.md" />
     <None Include="weather-demo.cmd" />
     <None Include="cloud-formations.cmd" />
@@ -78,7 +83,7 @@
     <Copy SourceFiles="@(CirrusShaderFile)" DestinationFiles="@(CirrusShaderFile->'$(OutDir)shaders\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="ValidateCirrusShaders" AfterTargets="CopyCirrusShaders" Condition="'$(DesignTimeBuild)'!='true'">
-    <Message Text="Validating all 18 HLSL entry points (warnings as errors)..." Importance="high" />
+    <Message Text="Validating all 22 HLSL entry points (warnings as errors)..." Importance="high" />
     <Exec Command="&quot;$(TargetPath)&quot; --check-shaders --warp" WorkingDirectory="$(OutDir)" />
   </Target>
 </Project>

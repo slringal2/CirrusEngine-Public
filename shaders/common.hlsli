@@ -25,6 +25,7 @@ cbuffer Frame : register(b0)
     float4x4 InverseViewProjection;
     float4x4 PreviousViewProjection;
     float4x4 LightViewProjection;
+    float4x4 NearLightViewProjection;
     float4 CameraTime;       // xyz: カメラ位置[m]、w: シミュレーション時間[s]
     float4 PreviousCamera;
     float4 SunDirection;     // xyz: サンプル位置から太陽に向かう単位ベクトル
@@ -44,6 +45,7 @@ cbuffer Frame : register(b0)
     float4 LightningTarget;   // xyz: 落雷地点[m]、w: 放電からの経過時間[s]
     float4 CloudPerformance;  // xy: 雲影生成後の風の移動量[m]、z: 照明共有、w: 雲影の経過秒
     float4 Checkerboard;      // x: 今回は半数を計算、y: 偶奇、z: 生バッファの幅
+    float4 WorldRendering;    // x: exploration / reversed Z, y: near shadows, z: solar clock
     float4 FormationControls; // 領域数, 強度, 回転の積算位相[s], フレームの回転位相差[s]
     float4 FormationLayer;    // 全領域を含む雲底・雲頂高度、雲影の投影面[m]
     CloudFormation Formations[8];
@@ -75,6 +77,8 @@ Texture2D<float2> CloudMap : register(t22);
 Texture2D<float4> CloudHeightLut : register(t23);
 Texture2D<float2> CloudDisplacement : register(t24);
 Texture2D<float4> SkyAmbient : register(t25);
+Texture2D<float> NearTerrainShadow : register(t26);
+Texture2D<float4> GSurface : register(t27);
 SamplerState LinearClamp : register(s0);
 SamplerState LinearWrap : register(s1);
 SamplerComparisonState ShadowCompare : register(s2);
@@ -113,14 +117,20 @@ float remap01(float v, float a, float b)
     return saturate((v - a) / max(b - a, 0.0001));
 }
 
+float3 planetCenter()
+{
+    // Exploration is a planar terrain chart. Center its local atmospheric horizon on the camera.
+    return PLANET_CENTER + float3(CameraTime.x, 0, CameraTime.z) * WorldRendering.x;
+}
+
 float altitude(float3 p)
 {
-    return length(p - PLANET_CENTER) - PLANET_RADIUS;
+    return length(p - planetCenter()) - PLANET_RADIUS;
 }
 
 float2 sphereIntersection(float3 origin, float3 direction, float radius)
 {
-    float3 o = origin - PLANET_CENTER;
+    float3 o = origin - planetCenter();
     float b = dot(o, direction), c = dot(o, o) - radius * radius;
     float d = b * b - c;
     if (d < 0)
@@ -137,13 +147,26 @@ float3 worldPosition(float2 uv, float depth)
 
 float3 worldRay(float2 uv)
 {
-    return normalize(worldPosition(uv, 0.995) - CameraTime.xyz);
+    float sampleDepth = WorldRendering.x > 0.5 ? 0.0008 : 0.995;
+    return normalize(worldPosition(uv, sampleDepth) - CameraTime.xyz);
+}
+
+float geometryDepth(float2 uv)
+{
+    int2 pixel = clamp(int2(uv * Resolution.xy), 0, int2(Resolution.xy) - 1);
+    return WorldRendering.x > 0.5 ? SceneDepth.Load(int3(pixel, 0))
+                                  : SceneDepth.SampleLevel(LinearClamp, uv, 0);
+}
+
+bool hasGeometry(float depth)
+{
+    return WorldRendering.x > 0.5 ? depth > 0 : depth < 0.999999;
 }
 
 float sceneDistance(float2 uv)
 {
-    float d = SceneDepth.SampleLevel(LinearClamp, uv, 0);
-    return d >= 0.999999 ? Atmosphere.z : length(worldPosition(uv, d) - CameraTime.xyz);
+    float depth = geometryDepth(uv);
+    return hasGeometry(depth) ? length(worldPosition(uv, depth) - CameraTime.xyz) : Atmosphere.z;
 }
 
 float hg(float cosine, float g)
@@ -171,7 +194,7 @@ float3 atmosphereExtinction(float3 d)
 float3 sunTransmittance(float3 p)
 {
     float h = clamp(altitude(p), 1.0, ATMOSPHERE_HEIGHT - 1);
-    float mu = dot(normalize(p - PLANET_CENTER), SunDirection.xyz);
+    float mu = dot(normalize(p - planetCenter()), SunDirection.xyz);
     return TransmittanceLUT
         .SampleLevel(LinearClamp, float2(mu * 0.5 + 0.5, sqrt(h / ATMOSPHERE_HEIGHT)), 0)
         .rgb;
@@ -269,11 +292,8 @@ float cloudShadow(float3 p)
     return lerp(1, visibility, border * smoothstep(0.015, 0.045, SunDirection.y));
 }
 
-float terrainShadow(float3 p)
+float sampleTerrainShadow(Texture2D<float> shadow, float3 coord, float bias)
 {
-    // 地形の影はこちらの深度マップで計算する。雲影の透過率とは別の方式。
-    float4 clip = mul(float4(p, 1), LightViewProjection);
-    float3 coord = clip.xyz / clip.w;
     float2 uv = coord.xy * float2(0.5, -0.5) + 0.5;
     if (any(uv <= 0) || any(uv >= 1) || coord.z <= 0 || coord.z >= 1)
         return 1;
@@ -284,10 +304,34 @@ float terrainShadow(float3 p)
     for (int y = -1; y <= 1; y++)
         [unroll]
         for (int x = -1; x <= 1; x++)
-            value += TerrainShadow.SampleCmpLevelZero(
-                ShadowCompare, uv + float2(x, y) / 2048.0, coord.z - 0.0004);
+            value += shadow.SampleCmpLevelZero(
+                ShadowCompare, uv + float2(x, y) / 2048.0, coord.z - bias);
 
     return value / 9;
+}
+
+float terrainShadow(float3 p)
+{
+    float weight = 0;
+    float3 coord = 0;
+    if (WorldRendering.y > 0.5)
+    {
+        float4 nearClip = mul(float4(p, 1), NearLightViewProjection);
+        coord = nearClip.xyz / nearClip.w;
+        weight = (1 - smoothstep(0.79, 0.99, max(abs(coord.x), abs(coord.y))))
+                 * smoothstep(0, 0.035, coord.z) * (1 - smoothstep(0.94, 1, coord.z));
+    }
+    float value = 1;
+    [branch]
+    if (weight < 1)
+    {
+        float4 farClip = mul(float4(p, 1), LightViewProjection);
+        value = sampleTerrainShadow(TerrainShadow, farClip.xyz / farClip.w, 0.0004);
+    }
+    [branch]
+    if (weight > 0)
+        value = lerp(value, sampleTerrainShadow(NearTerrainShadow, coord, 0.000055), weight);
+    return value;
 }
 
 struct AtmosphereResult

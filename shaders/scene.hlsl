@@ -1,5 +1,8 @@
 #include "common.hlsli"
 #include "lightning.hlsli"
+#include "geometry.hlsli"
+
+Texture2D<float4> CompositeColor : register(t28);
 
 struct Vertex
 {
@@ -19,7 +22,7 @@ struct GeometryVarying
 GeometryVarying GeometryVS(Vertex v)
 {
     GeometryVarying o;
-    o.position = mul(float4(v.position, 1), ViewProjection);
+    o.position = mul(float4(v.position, 1), GeometryProjection);
     o.normal = v.normal;
     o.material = v.material;
     o.world = v.position;
@@ -28,28 +31,36 @@ GeometryVarying GeometryVS(Vertex v)
 
 float4 ShadowVS(Vertex v) : SV_Position
 {
-    return mul(float4(v.position, 1), LightViewProjection);
+    return mul(float4(v.position, 1), GeometryProjection);
 }
-
-struct GBuffer
-{
-    float4 albedo : SV_Target0;
-    float4 normal : SV_Target1;
-};
 
 GBuffer GeometryPS(GeometryVarying v)
 {
     // G-bufferに線形アルベド・粗さと法線を保存し、照明は後の合成パスで計算する。
-    GBuffer o;
     float variation = WeatherMap.SampleLevel(LinearWrap, v.world.xz * 0.00018, 0).r;
     float grain = DetailNoise.SampleLevel(LinearWrap, v.world * 0.002, 0).r;
     float fine = DetailNoise.SampleLevel(LinearWrap, v.world * 0.027, 0).b;
     float wet = WeatherEffects.x;
     float3 albedo = v.material.rgb * lerp(0.8, 1.2, variation) * lerp(1, 0.62, wet);
     albedo *= lerp(0.68, 1.28, grain) * lerp(0.91, 1.07, fine);
-    o.albedo = float4(albedo, lerp(v.material.a, 0.18, wet));
-    o.normal = float4(normalize(v.normal) * 0.5 + 0.5, 0);
-    return o;
+    float3 normal = normalize(v.normal);
+    float roughness = lerp(v.material.a, 0.18, wet);
+    if (WorldRendering.x > 0.5)
+    {
+        float z = v.world.z;
+        float trailCenter = 4 * sin(z * 0.022) + 11 * sin(z * 0.008);
+        float grit = DetailNoise.Sample(LinearWrap, v.world * 1.25).r;
+        float soil = DetailNoise.Sample(LinearWrap, v.world * 0.31).b;
+        float ruts = DetailNoise.Sample(LinearWrap, v.world * float3(0.19, 0.17, 0.028)).g;
+        float trailDistance = abs(v.world.x - trailCenter) + (ruts - 0.5) * 1.6;
+        float trail = 1 - smoothstep(1.05, 1.95, trailDistance);
+        float3 earth = float3(0.17, 0.105, 0.051) * (0.60 + grit * 0.64 + ruts * 0.37);
+        float3 meadow = lerp(albedo * 0.80, albedo * float3(1.20, 1.32, 1.11), soil);
+        albedo = lerp(meadow * (0.82 + 0.51 * grit), earth * lerp(1, 0.61, wet), trail);
+        float3 bump = DetailNoise.Sample(LinearWrap, v.world * 0.84).rgb - 0.5;
+        normal = normalize(normal + float3(bump.x, 0, bump.z) * (0.22 + trail * 0.12));
+    }
+    return encodeMaterial(albedo, roughness, normal, 0, 0, 1);
 }
 
 struct ScreenVarying
@@ -70,7 +81,10 @@ float3 surfaceLighting(float2 uv, float depth)
 {
     // 深度から位置を復元し、GGXの反射と拡散反射に雲影・地形影を掛ける。
     float4 material = GAlbedo.SampleLevel(LinearClamp, uv, 0);
-    float3 normal = normalize(GNormal.SampleLevel(LinearClamp, uv, 0).xyz * 2 - 1);
+    float4 packedNormal = GNormal.SampleLevel(LinearClamp, uv, 0);
+    float4 surface = GSurface.SampleLevel(LinearClamp, uv, 0);
+    float3 normal = normalize(packedNormal.xyz * 2 - 1);
+    float metallic = saturate(packedNormal.w);
     float3 world = worldPosition(uv, depth), V = normalize(CameraTime.xyz - world),
            L = SunDirection.xyz;
     float3 H = normalize(V + L);
@@ -81,19 +95,29 @@ float3 surfaceLighting(float2 uv, float depth)
     float D = a2 / (PI * denom * denom + 1e-6);
     float k = (rough + 1) * (rough + 1) / 8;
     float G = (nl / (nl * (1 - k) + k)) * (nv / (nv * (1 - k) + k));
-    float3 F = 0.04 + 0.96 * pow(1 - vh, 5);
+    float3 F0 = lerp(0.04, material.rgb, metallic);
+    float3 F = F0 + (1 - F0) * pow(1 - vh, 5);
     float3 specular = D * G * F / max(4 * nl * nv, 0.001);
-    float shadow = cloudShadow(world) * terrainShadow(world);
+    float cloudVisibility = cloudShadow(world);
+    float shadow = cloudVisibility * terrainShadow(world);
     float3 solar = SolarExposure.rgb * sunTransmittance(world);
-    float3 direct = ((1 - F) * material.rgb / PI + specular) * solar * nl * shadow;
+    float3 diffuse = material.rgb * (1 - metallic);
+    float3 direct = ((1 - F) * diffuse / PI + specular) * solar * nl * shadow;
     float hemisphere = saturate(normal.y * 0.5 + 0.5);
     float3 ambient = lerp(float3(0.08, 0.075, 0.055), float3(0.29, 0.37, 0.49), hemisphere);
     ambient *= 0.04 + 0.96 * saturate(SunDirection.y * 3 + 0.15);
-    ambient *= lerp(1, 0.58, Weather.z) * lerp(0.74, 1, cloudShadow(world));
+    ambient *= lerp(1, 0.58, Weather.z) * lerp(0.74, 1, cloudVisibility);
+    if (WorldRendering.z > 0.5)
+    {
+        float night = smoothstep(0.025, 0.20, -L.y);
+        float moon = 0.45 + 0.55 * saturate(dot(normal, -L));
+        ambient += float3(0.018, 0.042, 0.080) * moon * night * lerp(1, 0.42, Weather.z);
+    }
     float3 flashDirection = normalize(LightningSource.xyz - world + float3(0, 0.001, 0));
-    float3 flash = material.rgb * lightningIrradiance(world)
+    float3 flash = (diffuse + metallic * F0) * lightningIrradiance(world)
                    * (0.15 + 0.85 * saturate(dot(normal, flashDirection)));
-    return direct + material.rgb * ambient + flash;
+    float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * surface.a;
+    return direct + indirect + flash + surface.rgb;
 }
 
 float4 upsampleClouds(float2 uv, float scene)
@@ -200,7 +224,7 @@ float4 textureDebugView(float2 uv, int view)
 {
     float aspect = Resolution.x / Resolution.y;
     if (view == 2 || view == 6 || view == 7 || view == 8 || view == 9 || view == 11
-        || view == 24 || view == 25 || view == 26 || view == 28)
+        || view == 24 || view == 25 || view == 26 || view == 28 || view == 30)
         aspect = 1;
     else if (view == 18)
         aspect = 4;
@@ -259,6 +283,13 @@ float4 textureDebugView(float2 uv, int view)
         float depth = moments.x >= 0.999 ? 1 : log(max(encoded, 1)) / CLOUD_SHADOW_EXPONENT;
         return float4(saturate(depth).xxx, 1);
     }
+    if (view == 29)
+        return float4(GNormal.SampleLevel(LinearClamp, uv, 0).aaa, 1);
+    if (view == 30)
+    {
+        float depth = WorldRendering.y > 0.5 ? NearTerrainShadow.SampleLevel(LinearClamp, uv, 0) : 1;
+        return float4(depth.xxx, 1);
+    }
     if (view == 10)
     {
         // 通常の射影深度は遠方がほぼ白になるため、復元した距離を対数表示する。
@@ -311,14 +342,29 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     if (Controls.x > 0)
         return textureDebugView(uv, (int)Controls.x);
 
-    float depth = SceneDepth.SampleLevel(LinearClamp, uv, 0);
+    float depth = geometryDepth(uv);
     float scene = sceneDistance(uv);
-    bool geometry = depth < 0.999999;
+    bool geometry = hasGeometry(depth);
     float3 ray = worldRay(uv);
     float3 sky = SkyTexture.SampleLevel(LinearClamp, uv, 0).rgb;
     float solarDisk =
         1 - smoothstep(0.0046, 0.0062, acos(clamp(dot(ray, SunDirection.xyz), -1, 1)));
     sky += solarDisk * SolarExposure.rgb * sunTransmittance(CameraTime.xyz) * 22;
+    if (WorldRendering.z > 0.5 && SunDirection.y < 0.02)
+    {
+        float night = 1 - smoothstep(-0.13, 0.02, SunDirection.y);
+        float2 angles = float2(atan2(ray.x, ray.z), asin(clamp(ray.y, -1, 1)));
+        float2 grid = angles * float2(185, 185);
+        float2 cell = floor(grid);
+        float2 center = 0.24 + 0.52 * float2(hash12(cell + 1.27), hash12(cell + 8.13));
+        float star = (1 - smoothstep(0.07, 0.25, length(frac(grid) - center)))
+                     * smoothstep(0.988, 1, hash12(cell)) * smoothstep(0, 0.18, ray.y);
+        float moonDistance = acos(clamp(dot(ray, -SunDirection.xyz), -1, 1));
+        float moon = 1 - smoothstep(0.0039, 0.0051, moonDistance);
+        float halo = exp(-moonDistance * 9) * 0.012;
+        sky += night * (float3(0.0010, 0.0028, 0.0062) * (0.55 + 0.45 * saturate(ray.y))
+                        + float3(0.37, 0.43, 0.56) * (moon + halo) + star * 0.27);
+    }
     float4 cloud = upsampleClouds(uv, scene);
     float3 scattering, transmission;
     float4 fog;
@@ -336,4 +382,37 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     color = pow(color, 1 / 2.2);
     float dither = (hash12(v.position.xy + Wind.ww) - 0.5) / 255;
     return float4(saturate(color + dither), 1);
+}
+
+float luma(float3 color)
+{
+    return dot(color, float3(0.299, 0.587, 0.114));
+}
+
+// A single-pass luminance edge filter in the spirit of FXAA Console.
+float4 ResolveEdgesPS(ScreenVarying v) : SV_Target
+{
+    float2 px = Resolution.zw;
+    float3 center = CompositeColor.SampleLevel(LinearClamp, v.uv, 0).rgb;
+    float nw = luma(CompositeColor.SampleLevel(LinearClamp, v.uv - px, 0).rgb);
+    float ne = luma(CompositeColor.SampleLevel(LinearClamp, v.uv + float2(px.x, -px.y), 0).rgb);
+    float sw = luma(CompositeColor.SampleLevel(LinearClamp, v.uv + float2(-px.x, px.y), 0).rgb);
+    float se = luma(CompositeColor.SampleLevel(LinearClamp, v.uv + px, 0).rgb);
+    float low = min(luma(center), min(min(nw, ne), min(sw, se)));
+    float high = max(luma(center), max(max(nw, ne), max(sw, se)));
+    float3 color = center;
+    [branch]
+    if (high - low > max(0.037, high * 0.125))
+    {
+        float2 edge = float2(sw + se - nw - ne, nw + sw - ne - se);
+        float reduce = max((nw + ne + sw + se) * 0.027, 0.006);
+        edge = clamp(edge / (min(abs(edge.x), abs(edge.y)) + reduce), -6, 6) * px;
+        float3 inner = 0.5 * (CompositeColor.SampleLevel(LinearClamp, v.uv - edge / 6, 0).rgb
+                             + CompositeColor.SampleLevel(LinearClamp, v.uv + edge / 6, 0).rgb);
+        float3 outer = 0.5 * inner
+            + 0.25 * (CompositeColor.SampleLevel(LinearClamp, v.uv - edge * 0.5, 0).rgb
+                      + CompositeColor.SampleLevel(LinearClamp, v.uv + edge * 0.5, 0).rgb);
+        color = luma(outer) < low || luma(outer) > high ? inner : outer;
+    }
+    return float4(color, 1);
 }

@@ -3,6 +3,7 @@
 #include "cloud_formations.hpp"
 #include "cloud_volume.hpp"
 #include "ui.hpp"
+#include "world.hpp"
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -11,13 +12,14 @@
 #include <array>
 #include <filesystem>
 #include <iosfwd>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace cirrus
 {
 using Microsoft::WRL::ComPtr;
-inline constexpr UINT shaderResourceCount = 26;
+inline constexpr UINT shaderResourceCount = 29;
 using ShaderResources = std::array<ID3D11ShaderResourceView *, shaderResourceCount>;
 enum class Quality
 {
@@ -59,6 +61,8 @@ enum class DebugView
     CloudMap,
     CloudHeightLut,
     CloudShadowDepth,
+    Metallic,
+    NearShadow,
     Count
 };
 
@@ -90,9 +94,14 @@ struct Options
     bool textureViewer = false;
     float textureSlice = 0.41f;
     int textureAxis = 2;
-    std::string camera = "valley";
+    std::string camera;
     std::string cameraPath;
     std::filesystem::path capture, shaderDirectory;
+    bool openWorld = false, vegetation = true;
+    float timeOfDay = -1, spawnX = -6.1f, spawnZ = -37;
+    double daySeconds = 0;
+    std::filesystem::path modelPath;
+    float modelScale = 1;
 };
 
 struct Camera
@@ -105,7 +114,7 @@ struct Camera
 struct FrameData
 {
     DirectX::XMFLOAT4X4 viewProjection, inverseViewProjection, previousViewProjection,
-        lightViewProjection;
+        lightViewProjection, nearLightViewProjection;
     DirectX::XMFLOAT4 cameraTime, previousCamera;
     DirectX::XMFLOAT4 sunDirection, solarExposure, resolution, cloudLayer, weather;
     DirectX::XMFLOAT4 wind, previousWind, shadowRegion, renderSize, controls, atmosphere;
@@ -113,6 +122,7 @@ struct FrameData
     DirectX::XMFLOAT4 weatherEffects, lightningSource, lightningTarget;
     DirectX::XMFLOAT4 cloudPerformance;
     DirectX::XMFLOAT4 checkerboard;
+    DirectX::XMFLOAT4 worldRendering;
     DirectX::XMFLOAT4 formationControls, formationLayer;
     std::array<CloudFormation, maxCloudFormations> formations;
 };
@@ -129,11 +139,11 @@ struct Texture
 
 struct ShaderSet
 {
-    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS;
-    ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS;
+    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS;
+    ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS;
     ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, cloudMapCS, transmittanceCS, skyCS,
         skyAmbientCS, shadowCS, cloudCS, temporalCS, repairCS, aerialCS;
-    ComPtr<ID3D11InputLayout> geometryLayout;
+    ComPtr<ID3D11InputLayout> geometryLayout, meshLayout;
 };
 
 class Renderer
@@ -172,11 +182,14 @@ class Renderer
     ShaderSet compileShaders();
     void initializeResources();
     void makeTerrain();
+    void makeShadowDepth(ComPtr<ID3D11DepthStencilView> &dsv,
+                         ComPtr<ID3D11ShaderResourceView> &srv);
     Texture makeTexture(int w, int h, DXGI_FORMAT format, bool target, bool unordered,
                         bool mipmaps = false);
     void makeTargets();
     void updateConstants();
-    void drawGeometry(bool shadows);
+    void drawGeometry(bool shadow, bool localPass = false);
+    void moveCamera(float forward, float side, float vertical, double dt, bool fast);
     void drawRain();
     void compute(ID3D11ComputeShader *shader, int x, int y, int z,
                  const std::vector<ID3D11UnorderedAccessView *> &outputs, ShaderResources inputs);
@@ -194,6 +207,9 @@ class Renderer
     WeatherSystem weather_;
     FormationSet formations_;
     Camera camera_;
+    std::unique_ptr<World> world_;
+    StaticModel model_;
+    bool walking_ = false;
     FrameData constants_{};
     ComPtr<ID3D11Device> device_;
     ComPtr<ID3D11DeviceContext> context_;
@@ -202,20 +218,19 @@ class Renderer
     ComPtr<ID3D11Texture2D> depth_;
     ComPtr<ID3D11DepthStencilView> depthView_;
     ComPtr<ID3D11ShaderResourceView> depthSRV_;
-    ComPtr<ID3D11Texture2D> terrainDepth_;
-    ComPtr<ID3D11DepthStencilView> terrainDepthView_;
-    ComPtr<ID3D11ShaderResourceView> terrainDepthSRV_;
-    ComPtr<ID3D11Buffer> frameBuffer_, noiseBuffer_, vertices_, indices_;
+    ComPtr<ID3D11DepthStencilView> terrainDepthView_, nearDepthView_;
+    ComPtr<ID3D11ShaderResourceView> terrainDepthSRV_, nearDepthSRV_;
+    ComPtr<ID3D11Buffer> frameBuffer_, passBuffer_, noiseBuffer_, vertices_, indices_;
     ComPtr<ID3D11ShaderResourceView> baseNoise_, detailNoise_, towerControl_, cloudWarp_;
     double towerBakeMs_ = 0;
     ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_;
-    ComPtr<ID3D11RasterizerState> raster_, shadowRaster_;
-    ComPtr<ID3D11DepthStencilState> depthOn_, depthOff_;
+    ComPtr<ID3D11RasterizerState> raster_, meshRaster_, shadowRaster_, meshShadowRaster_;
+    ComPtr<ID3D11DepthStencilState> depthOn_, reversedDepth_, depthOff_;
     ComPtr<ID3D11BlendState> rainBlend_;
     ShaderSet shaders_;
-    Texture finalColor_, albedo_, normals_, weatherMap_, cloudDisplacement_, cloudMap_,
-        cloudHeightLut_, shadowMap_, transmittance_, sky_, skyAmbient_, cloudRaw_, metaRaw_,
-        reconstruction_;
+    Texture finalColor_, sceneColor_, albedo_, normals_, surface_, weatherMap_, cloudDisplacement_,
+        cloudMap_, cloudHeightLut_, shadowMap_, transmittance_, sky_, skyAmbient_, cloudRaw_,
+        metaRaw_, reconstruction_;
     // 前回を読みながら今回を書けるよう、雲と代表距離の履歴を2組で交互に使う。
     std::array<Texture, 2> history_, historyMeta_;
     Texture aerialScatter_, aerialTransmittance_, fog_, rain_;

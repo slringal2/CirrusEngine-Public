@@ -174,8 +174,9 @@ float2 formationRayInterval(float3 origin, float3 ray, CloudFormation f)
 {
     float2 center = f.position.xz + Wind.xy;
     float radius = f.position.w * 1.85;
-    float farRadius = length(center) + radius;
-    float nearRadius = max(0, length(center) - radius);
+    float centerDistance = length(center - planetCenter().xz);
+    float farRadius = centerDistance + radius;
+    float nearRadius = max(0, centerDistance - radius);
     float3 lower = float3(center.x - radius,
         f.position.y - farRadius * farRadius / (2 * PLANET_RADIUS) - 120, center.y - radius);
     float3 upper = float3(center.x + radius,
