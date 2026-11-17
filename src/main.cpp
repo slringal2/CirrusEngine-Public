@@ -275,7 +275,7 @@ cirrus::Options arguments()
         throw std::runtime_error("Exploration supports --camera-path walk");
     o.openWorld = o.camera == "walk" || !o.modelPath.empty();
     if ((o.openWorld || dayLengthSet) && o.timeOfDay < 0 && !manualSun)
-        o.timeOfDay = 16.4f;
+        o.timeOfDay = o.camera == "walk" && o.modelPath.empty() ? 15.7f : 16.4f;
     if (o.timeOfDay >= 0 && !dayLengthSet && !o.headless && o.capture.empty()
         && o.recordDirectory.empty())
         o.daySeconds = 720;

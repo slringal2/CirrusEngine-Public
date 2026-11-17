@@ -2,9 +2,10 @@
 #include "../shaders/river_profile.hlsli"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <numbers>
-#include <optional>
 #include <set>
+#include <stdexcept>
 
 namespace cirrus
 {
@@ -17,6 +18,8 @@ constexpr int baseTile = 128;
 constexpr int farLod = 6;
 constexpr float treeSpacing = 19;
 constexpr float tau = 2 * std::numbers::pi_v<float>;
+constexpr int ridgeSize = 513;
+constexpr XMFLOAT2 ridgeMin{-3690, 1000}, ridgeMax{5610, 10300};
 
 float random01(int x, int z, uint32_t seed = 0)
 {
@@ -42,42 +45,13 @@ float noise(float x, float z, uint32_t seed)
                      std::lerp(random01(ix, iz + 1, seed), random01(ix + 1, iz + 1, seed), u), v);
 }
 
-float terrainHeight(float x, float z)
-{
-    float region = noise(x / 5900, z / 5900, 12);
-    float rolling = 32 * noise(x / 400, z / 400, 11) + 90 * noise(x / 1600, z / 1600, 23);
-    float mountainWeight = smooth(0.44f, 0.73f, region);
-    float ridge = 1 - std::abs(2 * noise(x / 2600, z / 2600, 8) - 1);
-    float mountains = mountainWeight
-                      * (260 * ridge * ridge + 680 * noise(x / 3400, z / 3400, 10)
-                         + 125 * noise(x / 750, z / 750, 17));
-    float soil = 2.0f * noise(x / 48, z / 48, 21);
-    soil += 1.1f * (noise(x / 19, z / 27, 76) - 0.5f);
-    float upland = 105 + rolling + mountains + soil;
-    if (std::abs(z) >= riverExtent || x < -116 || x > 222)
-        return upland;
-
-    float sandbars = noise(x / 8, z / 16, 71);
-    float bank = riverBankDistance(x, z) + (sandbars - 0.5f) * 4.4f;
-    float depth = 1.45f + 1.95f * noise(x / 28, z / 78, 72);
-    float wetBed = riverLevel(z) - depth * smooth(0, 13, -bank);
-    float dryBank = std::max(bank, 0.0f) * (0.27f + 0.18f * noise(x / 37, z / 53, 73));
-    dryBank += (noise(x / 17, z / 27, 74) - 0.43f) * 1.9f * smooth(0.5f, 17.0f, bank);
-    float strength = (1 - smooth(8, 88, bank)) * (1 - smooth(2180, riverExtent, std::abs(z)));
-    return std::lerp(upland, wetBed + dryBank, strength);
-}
-
 float trailCenter(float z)
 {
     return 4 * std::sin(z * 0.022f) + 11 * std::sin(z * 0.008f);
 }
 
-float sampledTerrain(float x, float z, int step)
+float interpolateTerrain(float a, float b, float c, float d, float u, float v)
 {
-    const float x0 = std::floor(x / step) * step, z0 = std::floor(z / step) * step;
-    float u = (x - x0) / step, v = (z - z0) / step;
-    float a = terrainHeight(x0, z0), b = terrainHeight(x0 + step, z0);
-    float c = terrainHeight(x0, z0 + step), d = terrainHeight(x0 + step, z0 + step);
     // The diagonal is shared with the rendered terrain indices.
     return u + v <= 1 ? a + (b - a) * u + (c - a) * v : d + (c - d) * (1 - u) + (b - d) * (1 - v);
 }
@@ -85,25 +59,6 @@ float sampledTerrain(float x, float z, int step)
 MeshInstance plant(float x, float y, float z, float scale, float angle, float tint)
 {
     return {{x, y, z, scale}, {std::cos(angle), std::sin(angle), tint, angle}};
-}
-
-std::optional<MeshInstance> treeInCell(int cellX, int cellZ)
-{
-    float x = (cellX + 0.12f + 0.76f * random01(cellX, cellZ, 1)) * treeSpacing;
-    float z = (cellZ + 0.12f + 0.76f * random01(cellX, cellZ, 2)) * treeSpacing;
-    float woods = noise(x / 160, z / 160, 42);
-    if (std::abs(x - trailCenter(z)) < 4.2f || terrainHeight(x, z) > 1280
-        || (std::abs(z) < riverExtent && riverBankDistance(x, z) < 4.1f)
-        || random01(cellX, cellZ, 3) > std::lerp(0.07f, 0.90f, smooth(0.22f, 0.76f, woods)))
-        return std::nullopt;
-    float slope = std::hypot(terrainHeight(x + 3, z) - terrainHeight(x - 3, z),
-                             terrainHeight(x, z + 3) - terrainHeight(x, z - 3))
-                  / 6;
-    if (slope > 0.65f)
-        return std::nullopt;
-    return plant(x, 0, z, std::lerp(0.48f, 1.38f, random01(cellX, cellZ, 4)),
-                 tau * random01(cellX, cellZ, 5),
-                 std::lerp(0.65f, 1.32f, random01(cellX, cellZ, 6)));
 }
 
 struct MeshBuilder
@@ -188,50 +143,6 @@ PbrMaterial plantMaterial(ComPtr<ID3D11ShaderResourceView> leaves, MeshKind kind
     material.data.flags = {1, static_cast<UINT>(kind), 1, 0};
     material.data.emissionCutoff.w = cutoff;
     return material;
-}
-
-Mesh makeGrass(ID3D11Device *device, const PbrMaterial &material, int variant)
-{
-    MeshBuilder mesh;
-    for (int tuft = 0; tuft < 4; ++tuft)
-    {
-        float angle = 2.3999632f * tuft + 0.68f * variant;
-        float radius = 0.13f * random01(tuft, variant, 21);
-        auto direction = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
-        auto center = direction * radius;
-        float height = 0.24f + 0.19f * random01(tuft, variant, 22);
-        float lean = 0.06f + 0.15f * random01(tuft, variant, 23);
-        const XMVECTOR rows[] = {
-            center, center + direction * (lean * 0.25f) + XMVectorSet(0, height * 0.5f, 0, 0),
-            center + direction * lean + XMVectorSet(0, height, 0, 0)};
-        mesh.leafStrip(rows, XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0),
-                       0.41f + 0.19f * random01(tuft, variant, 25), (tuft + variant) % 4, 1.0f,
-                       0.58f);
-    }
-    return mesh.create(device, material);
-}
-
-Mesh makeCloseGrass(ID3D11Device *device, const PbrMaterial &material, int variant)
-{
-    MeshBuilder mesh;
-    for (int blade = 0; blade < 21; ++blade)
-    {
-        float angle = blade * 2.3999632f + random01(blade, variant, 22) * 0.7f;
-        XMVECTOR out = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
-        XMVECTOR side = XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0);
-        XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-        float radius = 0.23f * std::sqrt(random01(blade, variant, 51));
-        float height = std::lerp(0.12f, 0.52f, random01(blade, variant, 53));
-        float arch = std::lerp(0.045f, 0.33f, random01(blade, variant, 54));
-        float width = std::lerp(0.020f, 0.056f, random01(blade, variant, 55));
-        const XMVECTOR rows[] = {out * radius,
-                                 out * (radius + arch * 0.13f) + up * (height * 0.43f),
-                                 out * (radius + arch * 0.48f) + up * (height * 0.81f),
-                                 out * (radius + arch) + up * height};
-        float tint = std::lerp(0.69f, 1.28f, random01(blade, variant, 68));
-        mesh.leafStrip(rows, side, width, (blade + variant) % 4, tint, 0.54f);
-    }
-    return mesh.create(device, material);
 }
 
 Mesh makeFern(ID3D11Device *device, const PbrMaterial &material)
@@ -388,10 +299,84 @@ bool visible(XMFLOAT3 min, XMFLOAT3 max, FXMMATRIX matrix)
 }
 }
 
+float World::valleyRidges(float x, float z) const
+{
+    float u = (x - ridgeMin.x) / (ridgeMax.x - ridgeMin.x);
+    float v = (z - ridgeMin.y) / (ridgeMax.y - ridgeMin.y);
+    if (u <= 0 || v <= 0 || u >= 1 || v >= 1)
+        return 0;
+
+    float sx = u * (ridgeSize - 1), sz = v * (ridgeSize - 1);
+    int ix = std::min(static_cast<int>(sx), ridgeSize - 2);
+    int iz = std::min(static_cast<int>(sz), ridgeSize - 2);
+    size_t i = iz * ridgeSize + ix;
+    float front = std::lerp(static_cast<float>(ridgeHeights_[i]),
+                            static_cast<float>(ridgeHeights_[i + 1]), sx - ix);
+    float back = std::lerp(static_cast<float>(ridgeHeights_[i + ridgeSize]),
+                           static_cast<float>(ridgeHeights_[i + ridgeSize + 1]), sx - ix);
+    float weight = smooth(0, 0.12f, u) * (1 - smooth(0.87f, 1, u)) * smooth(0, 0.14f, v)
+                   * (1 - smooth(0.86f, 1, v));
+    return std::lerp(front, back, sz - iz) * weight / 24;
+}
+
+float World::terrainHeight(float x, float z) const
+{
+    float region = noise(x / 5900, z / 5900, 12);
+    float rolling = 32 * noise(x / 400, z / 400, 11) + 90 * noise(x / 1600, z / 1600, 23);
+    float mountainWeight = smooth(0.44f, 0.73f, region);
+    float ridge = 1 - std::abs(2 * noise(x / 2600, z / 2600, 8) - 1);
+    float mountains = mountainWeight
+                      * (260 * ridge * ridge + 680 * noise(x / 3400, z / 3400, 10)
+                         + 125 * noise(x / 750, z / 750, 17));
+    float soil = 2.0f * noise(x / 48, z / 48, 21);
+    soil += 1.1f * (noise(x / 19, z / 27, 76) - 0.5f);
+    float upland = 105 + rolling + mountains + soil + valleyRidges(x, z);
+    if (std::abs(z) >= riverExtent || x < -116 || x > 222)
+        return upland;
+
+    float sandbars = noise(x / 8, z / 16, 71);
+    float bank = riverBankDistance(x, z) + (sandbars - 0.5f) * 4.4f;
+    float depth = 1.45f + 1.95f * noise(x / 28, z / 78, 72);
+    float wetBed = riverLevel(z) - depth * smooth(0, 13, -bank);
+    float dryBank = std::max(bank, 0.0f) * (0.27f + 0.18f * noise(x / 37, z / 53, 73));
+    dryBank += (noise(x / 17, z / 27, 74) - 0.43f) * 1.9f * smooth(0.5f, 17.0f, bank);
+    float strength = (1 - smooth(8, 88, bank)) * (1 - smooth(2180, riverExtent, std::abs(z)));
+    return std::lerp(upland, wetBed + dryBank, strength);
+}
+
+std::optional<MeshInstance> World::treeInCell(int cellX, int cellZ) const
+{
+    float x = (cellX + 0.12f + 0.76f * random01(cellX, cellZ, 1)) * treeSpacing;
+    float z = (cellZ + 0.12f + 0.76f * random01(cellX, cellZ, 2)) * treeSpacing;
+    float woods = noise(x / 160, z / 160, 42);
+    if (std::abs(x - trailCenter(z)) < 4.2f || terrainHeight(x, z) > 1280
+        || (std::abs(z) < riverExtent && riverBankDistance(x, z) < 4.1f)
+        || random01(cellX, cellZ, 3) > std::lerp(0.07f, 0.90f, smooth(0.22f, 0.76f, woods)))
+        return std::nullopt;
+    float slope = std::hypot(terrainHeight(x + 3, z) - terrainHeight(x - 3, z),
+                             terrainHeight(x, z + 3) - terrainHeight(x, z - 3))
+                  / 6;
+    if (slope > 0.65f)
+        return std::nullopt;
+    return plant(x, 0, z, std::lerp(0.48f, 1.38f, random01(cellX, cellZ, 4)),
+                 tau * random01(cellX, cellZ, 5),
+                 std::lerp(0.65f, 1.32f, random01(cellX, cellZ, 6)));
+}
+
 World::World(ID3D11Device *device, ID3D11DeviceContext *context,
              const std::filesystem::path &assets, bool vegetation)
     : device_(device), vegetation_(vegetation)
 {
+    ridgeHeights_.resize(ridgeSize * ridgeSize);
+    const auto relief = std::as_writable_bytes(std::span(ridgeHeights_));
+    std::ifstream ridge(assets / L"teton-relief.r16", std::ios::binary | std::ios::ate);
+    if (!ridge || ridge.tellg() != static_cast<std::streamoff>(relief.size()))
+        throw std::runtime_error("Invalid Teton relief heightfield");
+    ridge.seekg(0);
+    if (!ridge.read(reinterpret_cast<char *>(relief.data()),
+                    static_cast<std::streamsize>(relief.size())))
+        throw std::runtime_error("Could not read Teton relief heightfield");
+
     std::vector<uint32_t> indices;
     for (int z = 0; z < cells; ++z)
         for (int x = 0; x < cells; ++x)
@@ -417,9 +402,13 @@ World::World(ID3D11Device *device, ID3D11DeviceContext *context,
     {
         return loadTexture(device, context, assets / name, srgb);
     };
-    groundTextures_ = {texture(L"meadow.jpg"), texture(L"soil.jpg"),
-                       texture(L"soil-normal.jpg", false), texture(L"gravel.jpg"),
-                       texture(L"gravel-normal.jpg", false)};
+    groundTextures_ = {texture(L"meadow.jpg"),
+                       texture(L"soil.jpg"),
+                       texture(L"soil-normal.jpg", false),
+                       texture(L"gravel.jpg"),
+                       texture(L"gravel-normal.jpg", false),
+                       texture(L"ridge.jpg"),
+                       texture(L"ridge-normal.jpg", false)};
     PbrMaterial stone;
     stone.data.flags = {5, 0, 1, 0};
     stone.data.pbr = {0, 0.87f, 0.42f, 1};
@@ -428,15 +417,7 @@ World::World(ID3D11Device *device, ID3D11DeviceContext *context,
     rockMesh_ = makeBankRock(device, stone);
     if (vegetation_)
     {
-        auto grass = plantMaterial(texture(L"meadow-blades.png"), MeshKind::Grass, 0.37f);
-        grass.data.baseColor = {0.79f, 1.42f, 1.03f, 1};
-        auto blades = plantMaterial(texture(L"grass-blades-close.png"), MeshKind::Grass, 0.26f);
-        blades.data.baseColor = {0.58f, 0.96f, 0.79f, 1};
-        for (int variant = 0; variant < 2; ++variant)
-        {
-            grassMeshes_[variant] = makeCloseGrass(device, blades, variant);
-            grassMeshes_[variant + 2] = makeGrass(device, grass, variant);
-        }
+        grass_ = std::make_unique<GrassField>(device, context, assets / L"blade-grain.png");
         fernMesh_ =
             makeFern(device, plantMaterial(texture(L"fern-fronds.png"), MeshKind::Grass, 0.40f));
 
@@ -461,12 +442,15 @@ World::Tile World::buildTile(int lod, int x, int z)
     float xmin = static_cast<float>(x * size), zmin = static_cast<float>(z * size);
     std::vector<TerrainVertex> vertices;
     vertices.reserve((cells + 1) * (cells + 5));
+    std::vector<float> heights;
+    heights.reserve((cells + 1) * (cells + 1));
     float ymin = std::numeric_limits<float>::max(), ymax = -ymin;
     for (int row = 0; row <= cells; ++row)
         for (int col = 0; col <= cells; ++col)
         {
             float px = xmin + col * step, pz = zmin + row * step;
             float y = terrainHeight(px, pz);
+            heights.push_back(y);
             float d = 2.0f + step * 0.25f;
             XMFLOAT3 normal;
             XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(
@@ -495,7 +479,8 @@ World::Tile World::buildTile(int lod, int x, int z)
     ++tilesBuilt_;
     return {immutableBuffer(device_, D3D11_BIND_VERTEX_BUFFER, std::as_bytes(std::span(vertices))),
             {xmin, ymin - skirtDepth, zmin},
-            {xmin + size, ymax, zmin + size}};
+            {xmin + size, ymax, zmin + size},
+            std::move(heights)};
 }
 
 void World::updateTerrain(float x, float z)
@@ -507,7 +492,10 @@ void World::updateTerrain(float x, float z)
         float x0 = static_cast<float>(column * size), z0 = static_cast<float>(row * size);
         float dx = x - std::clamp(x, x0, x0 + size);
         float dz = z - std::clamp(z, z0, z0 + size);
-        if (lod > 0 && dx * dx + dz * dz < size * size * 1.14f)
+        const float distanceSquared = dx * dx + dz * dz;
+        bool detailedRidge = lod > 2 && distanceSquared < 11000.0f * 11000.0f && x0 < ridgeMax.x
+                             && x0 + size > ridgeMin.x && z0 < ridgeMax.y && z0 + size > ridgeMin.y;
+        if (lod > 0 && (distanceSquared < size * size * 1.14f || detailedRidge))
         {
             for (int j = 0; j < 2; ++j)
                 for (int i = 0; i < 2; ++i)
@@ -547,24 +535,11 @@ void World::uploadInstances(Instances &target, std::span<const MeshInstance> ins
 void World::updatePlants(XMFLOAT3 camera)
 {
     std::array<std::vector<MeshInstance>, 4> trees;
-    std::array<std::vector<MeshInstance>, 4> tufts;
     std::vector<MeshInstance> ferns;
-    constexpr float treeRadius = 1040, grassRadius = 88, spacing = 0.56f;
+    constexpr float treeRadius = 1040;
     const int firstX = static_cast<int>(std::floor((camera.x - treeRadius) / treeSpacing));
     const int firstZ = static_cast<int>(std::floor((camera.z - treeRadius) / treeSpacing));
     const int range = static_cast<int>(std::ceil(treeRadius * 2 / treeSpacing)) + 1;
-    auto terrainSurface = [&](float x, float z)
-    {
-        for (int lod = 0; lod <= farLod; ++lod)
-        {
-            const int size = baseTile << lod;
-            const int col = static_cast<int>(std::floor(x / size));
-            const int row = static_cast<int>(std::floor(z / size));
-            if (terrain_.contains({lod, col, row}))
-                return sampledTerrain(x, z, size / cells);
-        }
-        return terrainHeight(x, z);
-    };
     for (int iz = firstZ; iz <= firstZ + range; ++iz)
         for (int ix = firstX; ix <= firstX + range; ++ix)
         {
@@ -575,49 +550,14 @@ void World::updatePlants(XMFLOAT3 camera)
             float distance = std::hypot(p.x - camera.x, p.z - camera.z);
             if (distance > treeRadius)
                 continue;
-            p.y = terrainSurface(p.x, p.z) - 0.13f;
+            p.y = surface(p.x, p.z) - 0.13f;
             size_t form = random01(ix, iz, 58) < 0.69f ? 0 : 1;
             size_t lod = distance < 155 ? 0 : 2;
             trees[lod + form].push_back(*tree);
         }
 
-    const int grassX = static_cast<int>(std::floor(camera.x / spacing));
-    const int grassZ = static_cast<int>(std::floor(camera.z / spacing));
-    const int grassRange = static_cast<int>(std::ceil(grassRadius / spacing));
     if (groundDetail_)
     {
-        for (int iz = grassZ - grassRange; iz <= grassZ + grassRange; ++iz)
-            for (int ix = grassX - grassRange; ix <= grassX + grassRange; ++ix)
-            {
-                float x = (ix + random01(ix, iz, 29)) * spacing;
-                float z = (iz + random01(ix, iz, 37)) * spacing;
-                float distance = std::hypot(x - camera.x, z - camera.z);
-                if (distance > grassRadius)
-                    continue;
-                float soil = noise(x / 8, z / 8, 20);
-                float trail = std::abs(x - trailCenter(z)) + (soil - 0.5f) * 0.70f;
-                float bank = std::abs(z) < riverExtent ? riverBankDistance(x, z) : 100;
-                float reeds = 1 - smooth(0.4f, 6.5f, std::abs(bank - 3));
-                float meadow = noise(x / 23, z / 18, 51);
-                float density =
-                    std::lerp(0.16f, 0.98f, smooth(0.15f, 0.84f, soil * 0.65f + meadow * 0.35f));
-                density *= smooth(0.96f, 2.65f, trail) * (1 - smooth(29, grassRadius, distance));
-                density *= std::lerp(0.3f, 1.0f, smooth(-1.0f, 3.0f, bank));
-                if (random01(ix, iz, 17) >= density)
-                    continue;
-                float y = ground(x, z);
-                if (bank < 3 && y < riverLevel(z) + 0.04f)
-                    continue;
-                float scale = std::lerp(0.59f, 1.43f, random01(ix, iz, 13)) * (1 + reeds * soil);
-                size_t variant = random01(ix, iz, 22) < 0.5f ? 0 : 1;
-                bool blades = distance < 13 + 12 * random01(ix, iz, 60)
-                              && random01(ix, iz, 61) < std::lerp(0.32f, 0.78f, reeds);
-                size_t lod = blades ? 0 : 2;
-                tufts[lod + variant].push_back(
-                    plant(x, y - 0.040f, z, scale, tau * random01(ix, iz, 32),
-                          std::lerp(0.66f, 1.22f, random01(ix, iz, 59))));
-            }
-
         constexpr float fernSpacing = 3.2f;
         int fernX = static_cast<int>(std::floor(camera.x / fernSpacing));
         int fernZ = static_cast<int>(std::floor(camera.z / fernSpacing));
@@ -641,8 +581,6 @@ void World::updatePlants(XMFLOAT3 camera)
     }
     for (size_t i = 0; i < trees_.size(); ++i)
         uploadInstances(trees_[i], trees[i]);
-    for (size_t i = 0; i < grass_.size(); ++i)
-        uploadInstances(grass_[i], tufts[i]);
     uploadInstances(ferns_, ferns);
 }
 
@@ -680,7 +618,40 @@ void World::updateRocks(XMFLOAT3 camera)
     uploadInstances(rocks_, rocks);
 }
 
-void World::update(XMFLOAT3 camera)
+float World::surface(float x, float z) const
+{
+    for (int lod = 0; lod <= farLod; ++lod)
+    {
+        const int size = baseTile << lod;
+        const int col = static_cast<int>(std::floor(x / size));
+        const int row = static_cast<int>(std::floor(z / size));
+        auto found = terrain_.find({lod, col, row});
+        if (found == terrain_.end())
+            continue;
+
+        const float step = static_cast<float>(size / cells);
+        float ux = (x - col * size) / step, uz = (z - row * size) / step;
+        int ix = std::clamp(static_cast<int>(ux), 0, cells - 1);
+        int iz = std::clamp(static_cast<int>(uz), 0, cells - 1);
+        size_t at = iz * (cells + 1) + ix;
+        const auto &h = found->second.heights;
+        return interpolateTerrain(h[at], h[at + 1], h[at + cells + 1], h[at + cells + 2], ux - ix,
+                                  uz - iz);
+    }
+    return terrainHeight(x, z);
+}
+
+void World::updateGrassHeight(ID3D11DeviceContext *context, XMFLOAT2 origin)
+{
+    std::vector<float> heights(GrassField::terrainSize * GrassField::terrainSize);
+    for (UINT row = 0; row < GrassField::terrainSize; ++row)
+        for (UINT col = 0; col < GrassField::terrainSize; ++col)
+            heights[row * GrassField::terrainSize + col] = surface(
+                origin.x + col * GrassField::terrainStep, origin.y + row * GrassField::terrainStep);
+    grass_->setTerrain(context, origin, heights);
+}
+
+void World::update(ID3D11DeviceContext *context, XMFLOAT3 camera)
 {
     int tx = static_cast<int>(std::floor(camera.x / 128)),
         tz = static_cast<int>(std::floor(camera.z / 128));
@@ -704,11 +675,26 @@ void World::update(XMFLOAT3 camera)
         plantX_ = px;
         plantZ_ = pz;
     }
+    constexpr float fieldStep = 64;
+    int gx = static_cast<int>(std::floor(camera.x / fieldStep));
+    int gz = static_cast<int>(std::floor(camera.z / fieldStep));
+    if (grass() && (terrainChanged || gx != grassX_ || gz != grassZ_))
+    {
+        constexpr float offset =
+            (GrassField::terrainSize - 1) * GrassField::terrainStep * 0.5f - fieldStep * 0.5f;
+        updateGrassHeight(context, {gx * fieldStep - offset, gz * fieldStep - offset});
+        grassX_ = gx;
+        grassZ_ = gz;
+    }
 }
 
 float World::ground(float x, float z) const
 {
-    return sampledTerrain(x, z, baseTile / cells);
+    constexpr float step = baseTile / cells;
+    const float x0 = std::floor(x / step) * step, z0 = std::floor(z / step) * step;
+    return interpolateTerrain(terrainHeight(x0, z0), terrainHeight(x0 + step, z0),
+                              terrainHeight(x0, z0 + step), terrainHeight(x0 + step, z0 + step),
+                              (x - x0) / step, (z - z0) / step);
 }
 
 void World::placeWalker(XMFLOAT3 &position) const
@@ -802,10 +788,10 @@ void World::drawTerrain(ID3D11DeviceContext *context, FXMMATRIX viewProjection) 
 
 void World::bindTerrainMaterials(ID3D11DeviceContext *context) const
 {
-    ID3D11ShaderResourceView *views[5];
+    std::array<ID3D11ShaderResourceView *, 7> views{};
     for (size_t i = 0; i < groundTextures_.size(); ++i)
         views[i] = groundTextures_[i].Get();
-    context->PSSetShaderResources(37, static_cast<UINT>(groundTextures_.size()), views);
+    context->PSSetShaderResources(37, static_cast<UINT>(views.size()), views.data());
 }
 
 void World::drawPlants(ID3D11DeviceContext *context, bool shadow,
@@ -824,9 +810,6 @@ void World::drawPlants(ID3D11DeviceContext *context, bool shadow,
             draw(mesh, trees_[i]);
     draw(fernMesh_, ferns_);
     draw(rockMesh_, rocks_);
-    size_t grassBatches = shadow ? 2 : grass_.size();
-    for (size_t i = 0; i < grassBatches; ++i)
-        draw(grassMeshes_[i], grass_[i]);
 }
 
 XMFLOAT3 solarDirection(double hour)

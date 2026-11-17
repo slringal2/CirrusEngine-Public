@@ -17,15 +17,15 @@ else()
 endif()
 
 if(WIN32)
-  add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp src/world.cpp src/scene_mesh.cpp src/model.cpp)
+  add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp src/world.cpp src/scene_mesh.cpp src/model.cpp src/grass.cpp)
   set(CIRRUS_SHADERS shaders/common.hlsli shaders/formations.hlsli shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/lightning.hlsli shaders/mesh.hlsl shaders/geometry.hlsli)
-  list(APPEND CIRRUS_SHADERS shaders/river_profile.hlsli shaders/river_water.hlsli)
+  list(APPEND CIRRUS_SHADERS shaders/river_profile.hlsli shaders/river_water.hlsli shaders/grass.hlsl shaders/meadow.hlsli)
   # HLSL items must not become ClInclude: that runs the C++ IntelliSense parser.
   # Runtime compilation handles all entry points, so exclude FXCompile from MSBuild.
   set_source_files_properties(${CIRRUS_SHADERS} PROPERTIES VS_TOOL_OVERRIDE "None")
-  set_source_files_properties(shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/mesh.hlsl
+  set_source_files_properties(shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/mesh.hlsl shaders/grass.hlsl
     PROPERTIES VS_TOOL_OVERRIDE "FXCompile" VS_SETTINGS "ExcludedFromBuild=true" VS_SHADER_MODEL "5.0")
-  target_sources(CirrusEngine PRIVATE ${CIRRUS_SHADERS} src/renderer.hpp src/ui.hpp src/weather.hpp src/cloud_formations.hpp src/cloud_volume.hpp src/world.hpp src/scene_mesh.hpp)
+  target_sources(CirrusEngine PRIVATE ${CIRRUS_SHADERS} src/renderer.hpp src/ui.hpp src/weather.hpp src/cloud_formations.hpp src/cloud_volume.hpp src/world.hpp src/scene_mesh.hpp src/grass.hpp)
   source_group("Shaders" FILES ${CIRRUS_SHADERS})
   set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT CirrusEngine)
   set_target_properties(CirrusEngine PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:CirrusEngine>")

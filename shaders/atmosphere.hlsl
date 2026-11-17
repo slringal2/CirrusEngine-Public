@@ -140,6 +140,15 @@ void AerialCS(uint3 id : SV_DispatchThreadID)
         float density = Weather.w * exp(-max(height, 0) / 520.0);
         float modulation = WeatherMap.SampleLevel(LinearWrap, advected / 65536, 1).g;
         density *= lerp(0.65, 1.35, modulation);
+        if (WorldRendering.x > 0.5)
+        {
+            // A thin layer of valley haze separates the near meadow from the distant ridges.
+            float valley = exp(-abs(height - 148) / 146);
+            float lowSun = 1 - smoothstep(0.08, 0.65, max(SunDirection.y, 0));
+            density += 0.000068 * valley * smoothstep(60, 520, t) * (0.38 + 0.62 * lowSun);
+            float foothills = exp(-max(0, height - 200) / 930.0);
+            density += 0.000049 * foothills * smoothstep(380, 1560, t);
+        }
         // 降雨時は下層の雲マップから雨霧を置き、雲底から地表へ薄める。
         if (Weather.y > 0 && Controls.w > 0.5 && height < CloudLayer.x)
         {

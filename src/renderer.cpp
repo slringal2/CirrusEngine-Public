@@ -176,7 +176,7 @@ Renderer::Renderer(HWND window, const Options &options)
 {
     createDevice(window);
     shaders_ = compileShaders();
-    log("Compiled 22 rendering shader entry points.");
+    log("Compiled 25 rendering shader entry points.");
     if (options_.checkShaders)
         return;
     if (options_.formationFile.empty())
@@ -333,6 +333,9 @@ ShaderSet Renderer::compileShaders()
     auto mesh = vs(L"mesh.hlsl", "MeshVS", s.meshVS);
     ps(L"mesh.hlsl", "MeshPS", s.meshPS);
     ps(L"mesh.hlsl", "MeshShadowPS", s.meshShadowPS);
+    vs(L"grass.hlsl", "GrassVS", s.grassVS);
+    ps(L"grass.hlsl", "GrassPS", s.grassPS);
+    cs(L"grass.hlsl", "GrassPlacementCS", s.grassPlacementCS);
     cs(L"noise.hlsl", "NoiseCS", s.noiseCS);
     cs(L"noise.hlsl", "WeatherCS", s.weatherCS);
     cs(L"noise.hlsl", "CloudMapCS", s.cloudMapCS);
@@ -1075,8 +1078,16 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
                                   0);
         mesh.draw(context_.Get(), model_.instance.Get(), 1, shadow);
     }
-    ID3D11ShaderResourceView *emptyMaterials[10]{};
-    context_->PSSetShaderResources(32, 10, emptyMaterials);
+    if (world_ && world_->grass() && (localPass || !shadow))
+    {
+        context_->RSSetState(shadow ? shadowRaster_.Get() : raster_.Get());
+        context_->IASetInputLayout(nullptr);
+        context_->VSSetShader(shaders_.grassVS.Get(), nullptr, 0);
+        context_->PSSetShader(shadow ? nullptr : shaders_.grassPS.Get(), nullptr, 0);
+        world_->grass()->draw(context_.Get(), shadow);
+    }
+    ID3D11ShaderResourceView *emptyMaterials[12]{};
+    context_->PSSetShaderResources(32, 12, emptyMaterials);
     context_->OMSetRenderTargets(0, nullptr, nullptr);
     context_->PSSetShaderResources(0, shaderResourceCount, empty.data());
 }
@@ -1216,7 +1227,7 @@ void Renderer::frame(double dt, bool focused)
     if (options_.ui)
         drawUi();
     if (world_)
-        world_->update(camera_.position);
+        world_->update(context_.Get(), camera_.position);
     updateConstants();
     startTiming();
 
@@ -1252,6 +1263,9 @@ void Renderer::frame(double dt, bool focused)
     stamp(1);
 
     // 2. 地形の深度シャドウ → ディファード描画用G-buffer。
+    if (world_ && world_->grass())
+        world_->grass()->select(context_.Get(), shaders_.grassPlacementCS.Get(), camera_.position,
+                                constants_.viewProjection);
     drawGeometry(true);
     if (constants_.worldRendering.y > 0.5f)
         drawGeometry(true, true);
@@ -1979,12 +1993,16 @@ std::string Renderer::diagnostics()
     if (world_)
     {
         float ground = world_->ground(camera_.position.x, camera_.position.z);
+        std::array<UINT, GrassField::lodCount> grass{};
+        if (world_->grass())
+            grass = world_->grass()->counts(context_.Get());
         out << "  \"world\": {\"walking\": " << (walking_ ? "true" : "false")
             << ", \"ground_m\": " << ground << ", \"eye_height_m\": " << camera_.position.y - ground
             << ", \"active_tiles\": " << world_->tiles()
             << ", \"tiles_built\": " << world_->tilesBuilt() << ", \"trees\": " << world_->trees()
-            << ", \"grass_tufts\": " << world_->grassTufts() << ", \"ferns\": " << world_->ferns()
-            << ", \"bank_rocks\": " << world_->rocks()
+            << ", \"grass_tufts\": " << grass[0] + grass[1] + grass[2] << ", \"grass_lods\": ["
+            << grass[0] << ", " << grass[1] << ", " << grass[2] << "]"
+            << ", \"ferns\": " << world_->ferns() << ", \"bank_rocks\": " << world_->rocks()
             << ", \"near_shadow\": " << (constants_.worldRendering.y > 0.5f ? "true" : "false")
             << ", \"model_primitives\": " << model_.meshes.size() << "},\n";
     }

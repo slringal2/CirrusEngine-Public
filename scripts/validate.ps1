@@ -152,6 +152,13 @@ try {
         -not $cirrusDaylight.world.near_shadow) {
         throw 'Walkable scene is missing vegetation or its local shadow pass'
     }
+    $cirrusGrass = $cirrusDaylight.world.grass_lods
+    if ($cirrusGrass.Count -ne 3 -or $cirrusGrass[0] -lt 8000 -or $cirrusGrass[1] -lt 10000 -or
+        $cirrusGrass[2] -lt 25000 -or
+        $cirrusDaylight.world.grass_tufts -ne ($cirrusGrass[0] + $cirrusGrass[1] + $cirrusGrass[2]) -or
+        ($cirrusGrass -join ',') -ne ($cirrusNight.world.grass_lods -join ',')) {
+        throw 'The meadow density levels were incomplete or the grass moved as solar time changed'
+    }
     if ($cirrusDaylight.sun_elevation -le 0 -or $cirrusNight.sun_elevation -ge 0 -or $cirrusNight.world.near_shadow) {
         throw 'Solar altitude and shadow state do not distinguish day from night'
     }

@@ -1,14 +1,14 @@
 # CirrusEngine
 
-C++20 / Direct3D 11で動く描画エンジンです。草木の生える川沿いを歩きながら、RDR2の公開技術資料を参考に実装した雲・雲影・光散乱・天候を確認できます。静的glTFのPBR描画にも対応します。
+C++20 / Direct3D 11で動く描画エンジンです。風で波打つ草原と川沿いを歩きながら、RDR2の公開技術資料を参考に実装した雲・雲影・光散乱・天候を確認できます。静的glTFのPBR描画にも対応します。
 
-![川沿いの出発地点。エンジンの実機描画](docs/images/river-walk.png)
+![草原、川、実標高データから作った稜線。1080pの実機描画](docs/images/meadow-valley.png)
 
-[対岸から見た水面、木肌、草とシダ](docs/images/river-bank.png)
+[川岸から見た草と水面の近景](docs/images/meadow-riverside.png)
 
 ## 探索とモデルの表示
 
-ビルド後に `start.cmd` を開くと、針葉樹とシダの生える川沿いから探索を始めます。`WASD` で歩き、`Shift` で走り、右ドラッグで視点を動かします。`G` で飛行との切り替え、`T` で時計の停止・再開、`[` / `]` で30分ずつ時刻を変更できます。
+ビルド後に `start.cmd` を開くと、午後の草原と川沿いから探索を始めます。`WASD` で歩き、`Shift` で走り、右ドラッグで視点を動かします。`G` で飛行との切り替え、`T` で時計の停止・再開、`[` / `]` で30分ずつ時刻を変更できます。
 
 ```powershell
 # 18:12で固定した探索画面
@@ -60,7 +60,7 @@ ctest --preset release
 
 Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、`Release | x64` または `Debug | x64` でビルドできます。CMakeの事前実行は不要です。出力は `out\vs\Release\CirrusEngine.exe`（Debug は `out\vs\Debug`）です。
 
-`Shaders` ソリューションフォルダにHLSLがまとまっています。Visual StudioのビルドはC++のリンク後にシェーダーをコピーし、全22エントリーポイントをHLSLコンパイラーで検証します。シェーダーのエラーもビルド失敗になります。
+`Shaders` ソリューションフォルダにHLSLがまとまっています。Visual StudioのビルドはC++のリンク後にシェーダーをコピーし、全25エントリーポイントをHLSLコンパイラーで検証します。シェーダーのエラーもビルド失敗になります。
 
 `start.cmd` をダブルクリックすると、未ビルドの場合はビルドして起動します。配布物は `cmake --install build --config Release --prefix out/CirrusEngine` で生成できます。実行ファイルと `shaders`、`assets` フォルダを一緒に配置してください。
 

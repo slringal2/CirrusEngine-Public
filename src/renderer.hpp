@@ -142,10 +142,11 @@ struct Texture
 
 struct ShaderSet
 {
-    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS;
-    ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS;
+    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS, grassVS;
+    ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS,
+        grassPS;
     ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, cloudMapCS, transmittanceCS, skyCS,
-        skyAmbientCS, shadowCS, cloudCS, temporalCS, repairCS, aerialCS;
+        skyAmbientCS, shadowCS, cloudCS, temporalCS, repairCS, aerialCS, grassPlacementCS;
     ComPtr<ID3D11InputLayout> geometryLayout, meshLayout;
 };
 
