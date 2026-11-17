@@ -19,6 +19,7 @@ endif()
 if(WIN32)
   add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp src/world.cpp src/scene_mesh.cpp src/model.cpp)
   set(CIRRUS_SHADERS shaders/common.hlsli shaders/formations.hlsli shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/lightning.hlsli shaders/mesh.hlsl shaders/geometry.hlsli)
+  list(APPEND CIRRUS_SHADERS shaders/river_profile.hlsli shaders/river_water.hlsli)
   # HLSL items must not become ClInclude: that runs the C++ IntelliSense parser.
   # Runtime compilation handles all entry points, so exclude FXCompile from MSBuild.
   set_source_files_properties(${CIRRUS_SHADERS} PROPERTIES VS_TOOL_OVERRIDE "None")
@@ -31,13 +32,15 @@ if(WIN32)
   target_compile_definitions(CirrusEngine PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_compile_options(CirrusEngine PRIVATE /W4 /permissive- /utf-8 /EHsc)
   target_link_libraries(CirrusEngine PRIVATE cirrus_weather d3d11 dxgi d3dcompiler windowscodecs ole32 gdi32 shell32)
-  # Refresh shader-only edits even when the executable does not need relinking.
+  # Refresh runtime files even when the executable does not need relinking.
   add_custom_target(cirrus_shaders ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/shaders" "$<TARGET_FILE_DIR:CirrusEngine>/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:CirrusEngine>/assets"
     VERBATIM)
   add_dependencies(CirrusEngine cirrus_shaders)
   install(TARGETS CirrusEngine RUNTIME DESTINATION .)
   install(DIRECTORY shaders DESTINATION .)
+  install(DIRECTORY assets DESTINATION .)
   install(DIRECTORY docs DESTINATION .)
   install(DIRECTORY config DESTINATION .)
   install(FILES README.md LICENSE start.cmd weather-demo.cmd cloud-formations.cmd DESTINATION .)

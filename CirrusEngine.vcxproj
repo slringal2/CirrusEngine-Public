@@ -80,7 +80,9 @@
        The build still validates every shader entry point with the real HLSL compiler. -->
   <Target Name="CopyCirrusShaders" AfterTargets="Build" Condition="'$(DesignTimeBuild)'!='true'">
     <ItemGroup><CirrusShaderFile Include="$(ProjectDir)shaders\**\*" /></ItemGroup>
+    <ItemGroup><CirrusAssetFile Include="$(ProjectDir)assets\**\*" /></ItemGroup>
     <Copy SourceFiles="@(CirrusShaderFile)" DestinationFiles="@(CirrusShaderFile->'$(OutDir)shaders\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CirrusAssetFile)" DestinationFiles="@(CirrusAssetFile->'$(OutDir)assets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="ValidateCirrusShaders" AfterTargets="CopyCirrusShaders" Condition="'$(DesignTimeBuild)'!='true'">
     <Message Text="Validating all 22 HLSL entry points (warnings as errors)..." Importance="high" />

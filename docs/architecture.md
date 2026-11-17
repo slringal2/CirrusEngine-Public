@@ -135,6 +135,8 @@ F7、またはパネルの `CB [F7]` で切り替えられます。`--no-checker
 | 18 | 大気の太陽透過率LUT |
 | 19 / 20 | 時間再投影前の雲の散乱光 / 透過率 |
 | 22 | 地形深度で遮蔽した3D雨粒のHDR散乱光 |
+| 29 / 30 | G-bufferの金属度 / 近距離のシャドウ深度 |
+| 31 | 地形・草木で隠れていない水面のマスク |
 
 `noiseSlice` は固定する座標軸を選び、X=YZ面、Y=XZ面、Z=XY面を表示します。透過率・法線・粗さは値をそのまま表示し、HDRの散乱光だけトーンマップします。シーン距離と雲距離は `log2(1 + distance) / log2(1 + farDistance)` による表示です。地形シャドウは元の正射影深度です。
 
@@ -176,12 +178,12 @@ The cloud placement pass bakes a 512² two-channel map and a 1×128 height LUT f
 
 1. **Atmosphere transmittance**: 256×64 RGB LUT integrating Rayleigh, aerosol extinction and ozone to the top of the atmosphere. The LUT is refreshed for the weather-dependent aerosol coefficient.
 2. **Cloud shadows** use a 48 km sun-space map. High quality uses 768². March from the light to obtain transmittance and an effective occluder depth. Store the exponential depth term for mip filtering and evaluate it at the receiver depth.
-3. **Geometry**: draw a procedural 84 km terrain patch into linear albedo/roughness, normals and D32 depth. A separate 2048² directional depth map supplies terrain shadows.
+3. **Geometry** writes terrain, vegetation and models to the G-buffer and D32 depth. Exploration streams terrain tiles and draws nearby plants into an additional 2048² directional shadow map.
 4. **Sky** integrates atmospheric scattering into a camera-oriented 320×180 radiance texture. Reduce a separate set of hemispherical sky samples to an ambient color. Add the sun disk at full resolution during composition.
 5. **Clouds** clip their ray interval against the scene depth. Halve the step up to three times when the coarse cloud shape is present. Integrate front to back and terminate after strong extinction. The secondary ray toward the sun starts with a 35 m step, then grows geometrically and samples the shadow map at its endpoint. Evaluate two HG octaves and reuse light visibility for sky ambient. Output premultiplied cloud radiance, transmittance and opacity-weighted distance.
 6. **Temporal resolve**: reproject the representative cloud position through the previous camera, subtracting the integrated wind displacement. Reject invalid projection, depth mismatch and occlusion; clamp history to the current 3×3 neighborhood. Resize, shader reload, large light changes and teleport invalidate history.
 7. **Aerial / fog** integrates the atmosphere to the representative cloud or geometry depth. Integrate height fog and a rain veil from the lower cloud map with cloud and terrain shadowing to produce volumetric light shafts.
-8. **Deferred composition**: evaluate a GGX sun and approximate hemispherical ambient from G-buffers, apply both shadow systems, then compose sky/clouds/aerial/fog. Cloud and aerial upsampling reject depth discontinuities. Tone-map with the ACES fitted approximation and convert to display gamma before drawing controls.
+8. **Deferred composition** evaluates a GGX sun and hemispherical ambient from the G-buffer, with cloud and terrain shadows. Where the river surface is visible, it combines the shaded riverbed with reflections before applying aerial perspective and fog. Reflections use the existing sky and cloud buffers and trace visible banks against the depth buffer. Cloud and aerial upsampling reject depth discontinuities. The composite uses an ACES approximation and display gamma before drawing controls.
 
 | Quality | Cloud resolution | View samples | Light samples | Cloud shadow map |
 | --- | --- | --- | --- | --- |

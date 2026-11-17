@@ -85,6 +85,10 @@ try {
         @{name='walk-before';args=@('--camera-path','walk','--spawn','10','123','--frames','12')},
         @{name='walk-crossing';args=@('--camera-path','walk','--spawn','10','123','--frames','90','--fixed-dt','0.10')},
         @{name='world-distant';args=@('--camera','walk','--spawn','250000','180000','--time','15')},
+        @{name='river-mask';args=@('--camera','walk','--time','16.4','--debug-view','31')},
+        @{name='river-mask-distant';args=@('--camera','walk','--spawn','250000','180000','--debug-view','31','--no-vegetation')},
+        @{name='river-walk';args=@('--camera-path','walk','--spawn','12','-16','--look','90','-10','--frames','75','--fixed-dt','0.10')},
+        @{name='river-spawn';args=@('--spawn','35','-16','--look','79','-11','--no-vegetation')},
         @{name='pbr-metallic';args=@('--model','tests/pbr-panel.gltf','--time','15','--debug-view','29')},
         @{name='pbr-roughness';args=@('--model','tests/pbr-panel.gltf','--time','15','--debug-view','21')}
     )
@@ -143,7 +147,9 @@ try {
     if ($cirrusReports['formation-off'].cloud_transmittance.min -lt 0.999 -or $cirrusReports['formation-off'].shadow_transmittance.min -lt 0.999) { throw 'Cloud disable left local formations visible' }
     $cirrusDaylight = $cirrusReports['world-day']
     $cirrusNight = $cirrusReports['world-night']
-    if ($cirrusDaylight.world.trees -eq 0 -or $cirrusDaylight.world.grass_tufts -eq 0 -or -not $cirrusDaylight.world.near_shadow) {
+    if ($cirrusDaylight.world.trees -eq 0 -or $cirrusDaylight.world.grass_tufts -eq 0 -or
+        $cirrusDaylight.world.ferns -eq 0 -or $cirrusDaylight.world.bank_rocks -eq 0 -or
+        -not $cirrusDaylight.world.near_shadow) {
         throw 'Walkable scene is missing vegetation or its local shadow pass'
     }
     if ($cirrusDaylight.sun_elevation -le 0 -or $cirrusNight.sun_elevation -ge 0 -or $cirrusNight.world.near_shadow) {
@@ -163,7 +169,36 @@ try {
     if ($cirrusDistantWorld.world.active_tiles -lt 80 -or $cirrusDistantWorld.cloud_transmittance.min -ge 0.999) {
         throw 'The world or local atmosphere was missing at the distant spawn'
     }
+    $cirrusRiverWalk = $cirrusReports['river-walk']
+    $cirrusRiverSpawn = $cirrusReports['river-spawn']
+    if ($cirrusRiverWalk.camera_position_m[0] -lt 18 -or $cirrusRiverWalk.camera_position_m[0] -gt 25 -or
+        $cirrusRiverWalk.world.ground_m -lt 123.0 -or [Math]::Abs($cirrusRiverWalk.world.eye_height_m - 1.68) -gt 0.001) {
+        throw 'Walking did not reach and stop in the shallows'
+    }
+    if ([Math]::Abs($cirrusRiverSpawn.camera_position_m[0] - 35) -lt 5 -or
+        $cirrusRiverSpawn.world.ground_m -lt 123.0 -or $cirrusRiverSpawn.world.trees -ne 0 -or
+        $cirrusRiverSpawn.world.grass_tufts -ne 0 -or $cirrusRiverSpawn.world.bank_rocks -eq 0) {
+        throw 'Spawning in the river did not find a bank, or vegetation disabling affected the rocks'
+    }
     Add-Type -AssemblyName System.Drawing
+    foreach ($cirrusViewName in @('river-mask','river-mask-distant')) {
+        $cirrusWater = [System.Drawing.Bitmap]::new((Join-Path $cirrusOutput ($cirrusViewName+'.png')))
+        try {
+            $cirrusWetPixels = 0
+            $cirrusTestedPixels = 0
+            for ($cirrusY=4; $cirrusY -lt $cirrusWater.Height; $cirrusY+=8) {
+                for ($cirrusX=4; $cirrusX -lt $cirrusWater.Width; $cirrusX+=8) {
+                    if ($cirrusWater.GetPixel($cirrusX,$cirrusY).R -gt 200) { $cirrusWetPixels++ }
+                    $cirrusTestedPixels++
+                }
+            }
+            $cirrusFraction = $cirrusWetPixels / $cirrusTestedPixels
+            if (($cirrusViewName -eq 'river-mask' -and ($cirrusFraction -lt 0.02 -or $cirrusFraction -gt 0.35)) -or
+                ($cirrusViewName -eq 'river-mask-distant' -and $cirrusWetPixels -ne 0)) {
+                throw "River failed the terrain depth test: $cirrusViewName"
+            }
+        } finally { $cirrusWater.Dispose() }
+    }
     foreach ($cirrusChannel in @('metallic','roughness')) {
         $cirrusMaterialReport = $cirrusReports["pbr-$cirrusChannel"]
         if ($cirrusMaterialReport.world.model_primitives -ne 1) { throw 'The glTF mesh did not load' }

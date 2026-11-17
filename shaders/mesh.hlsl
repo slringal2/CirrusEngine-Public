@@ -54,10 +54,12 @@ MeshVarying MeshVS(MeshInput v)
     o.world = rotateY(v.position, v.rotationVariation.xy) * v.positionScale.w + v.positionScale.xyz;
     if (MaterialFlags.y != 0)
     {
-        float sway = sin(CameraTime.w * 2.6 + v.rotationVariation.w + dot(o.world.xz, float2(0.13, 0.08)));
-        float bend = MaterialFlags.y == 1 ? 0.3 : 0.006;
+        float2 wind = normalize(WeatherEffects.yz + 0.0001);
+        float sway = 0.35 + 0.65 * sin(CameraTime.w * 2.6 + v.rotationVariation.w
+                                     + dot(v.positionScale.xz, float2(0.13, 0.08)));
+        float bend = MaterialFlags.y == 1 ? 0.38 : 0.0018;
         float strength = min(length(WeatherEffects.yz) / 24, 1.5);
-        o.world.xz += v.position.y * v.position.y * sway * bend * strength * float2(0.85, 0.52);
+        o.world.xz += v.position.y * v.position.y * sway * bend * strength * wind * v.positionScale.w;
     }
     o.position = mul(float4(o.world, 1), GeometryProjection);
     o.normal = rotateY(v.normal, v.rotationVariation.xy);
@@ -78,6 +80,18 @@ float4 baseColor(MeshVarying v)
     if ((MaterialFlags.x & 1) != 0)
         value *= BaseColorTexture.Sample(BaseColorSampler, textureUV(v, 1));
     return value;
+}
+
+void clipFoliage(MeshVarying v, float alpha)
+{
+    float cutoff = EmissiveCutoff.w;
+    if (MaterialFlags.y == 3)
+    {
+        // Subpixel needles darken in averaged mips. Keep the silhouette of the whole spray.
+        float2 footprint = fwidth(v.uv.xy);
+        cutoff = lerp(cutoff, 0.069, smoothstep(0.018, 0.14, max(footprint.x, footprint.y)));
+    }
+    clip(alpha - cutoff);
 }
 
 float3 materialNormal(MeshVarying v, bool front)
@@ -122,7 +136,7 @@ GBuffer MeshPS(MeshVarying v, bool front : SV_IsFrontFace)
 {
     float4 color = baseColor(v);
     if (EmissiveCutoff.w >= 0)
-        clip(color.a - EmissiveCutoff.w);
+        clipFoliage(v, color.a);
     float metallic = RoughMetalNormalAO.x;
     float roughness = RoughMetalNormalAO.y;
     if ((MaterialFlags.x & 2) != 0)
@@ -137,10 +151,18 @@ GBuffer MeshPS(MeshVarying v, bool front : SV_IsFrontFace)
     float3 emission = EmissiveCutoff.rgb;
     if ((MaterialFlags.x & 16) != 0)
         emission *= EmissiveTexture.Sample(EmissiveSampler, textureUV(v, 16)).rgb;
-    return encodeMaterial(color.rgb, roughness, materialNormal(v, front), metallic, emission, ao);
+    bool foliage = MaterialFlags.y == 1 || MaterialFlags.y == 3;
+    if (MaterialFlags.y != 0)
+    {
+        color.rgb *= lerp(1, 0.73, WeatherEffects.x);
+        roughness *= lerp(1, 0.63, WeatherEffects.x);
+    }
+    // Negative AO identifies thin foliage in the deferred lighting pass.
+    return encodeMaterial(color.rgb, roughness, materialNormal(v, front), metallic, emission,
+                          foliage ? -ao : ao);
 }
 
 void MeshShadowPS(MeshVarying v)
 {
-    clip(baseColor(v).a - EmissiveCutoff.w);
+    clipFoliage(v, baseColor(v).a);
 }

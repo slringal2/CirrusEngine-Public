@@ -13,12 +13,15 @@ inline constexpr float worldLimit = 500000;
 class World
 {
   public:
-    World(ID3D11Device *device, bool vegetation);
+    World(ID3D11Device *device, ID3D11DeviceContext *context, const std::filesystem::path &assets,
+          bool vegetation);
     void update(DirectX::XMFLOAT3 camera);
     float ground(float x, float z) const;
+    void placeWalker(DirectX::XMFLOAT3 &position) const;
     void walk(DirectX::XMFLOAT3 &position, float x, float z) const;
     void drawTerrain(ID3D11DeviceContext *context, DirectX::FXMMATRIX viewProjection) const;
-    void drawPlants(ID3D11DeviceContext *context, bool shadow) const;
+    void bindTerrainMaterials(ID3D11DeviceContext *context) const;
+    void drawPlants(ID3D11DeviceContext *context, bool shadow, ID3D11PixelShader *shadowMask) const;
 
     size_t tiles() const
     {
@@ -27,12 +30,28 @@ class World
 
     UINT trees() const
     {
-        return closeTrees_.count + distantTrees_.count;
+        UINT count = 0;
+        for (const auto &batch : trees_)
+            count += batch.count;
+        return count;
     }
 
     UINT grassTufts() const
     {
-        return grass_.count;
+        UINT count = 0;
+        for (const auto &batch : grass_)
+            count += batch.count;
+        return count;
+    }
+
+    UINT ferns() const
+    {
+        return ferns_.count;
+    }
+
+    UINT rocks() const
+    {
+        return rocks_.count;
     }
 
     uint64_t tilesBuilt() const
@@ -58,12 +77,21 @@ class World
     Tile buildTile(int lod, int x, int z);
     void updateTerrain(float x, float z);
     void updatePlants(DirectX::XMFLOAT3 camera);
+    void updateRocks(DirectX::XMFLOAT3 camera);
+    void uploadInstances(Instances &target, std::span<const MeshInstance> instances);
 
     ID3D11Device *device_;
     std::map<TileKey, Tile> terrain_;
     ComPtr<ID3D11Buffer> indices_;
-    Mesh grassMesh_, closeTreeMesh_, distantTreeMesh_;
-    Instances grass_, closeTrees_, distantTrees_;
+    std::array<ComPtr<ID3D11ShaderResourceView>, 5> groundTextures_;
+    std::array<std::array<Mesh, 2>, 4> treeMeshes_; // bark and needles, two forms per LOD
+    std::array<Mesh, 4> grassMeshes_;
+    Mesh fernMesh_;
+    std::array<Instances, 4> trees_;
+    std::array<Instances, 4> grass_;
+    Instances ferns_;
+    Mesh rockMesh_;
+    Instances rocks_;
     UINT indexCount_ = 0;
     bool vegetation_;
     bool groundDetail_ = false;

@@ -3,6 +3,11 @@
 #include "geometry.hlsli"
 
 Texture2D<float4> CompositeColor : register(t28);
+Texture2D<float4> GroundMeadow : register(t37);
+Texture2D<float4> GroundSoil : register(t38);
+Texture2D<float4> GroundSoilNormal : register(t39);
+Texture2D<float4> RiverGravel : register(t40);
+Texture2D<float4> RiverGravelNormal : register(t41);
 
 struct Vertex
 {
@@ -49,16 +54,33 @@ GBuffer GeometryPS(GeometryVarying v)
     {
         float z = v.world.z;
         float trailCenter = 4 * sin(z * 0.022) + 11 * sin(z * 0.008);
-        float grit = DetailNoise.Sample(LinearWrap, v.world * 1.25).r;
-        float soil = DetailNoise.Sample(LinearWrap, v.world * 0.31).b;
+        float cover = DetailNoise.Sample(LinearWrap, v.world * 0.032).b;
         float ruts = DetailNoise.Sample(LinearWrap, v.world * float3(0.19, 0.17, 0.028)).g;
-        float trailDistance = abs(v.world.x - trailCenter) + (ruts - 0.5) * 1.6;
-        float trail = 1 - smoothstep(1.05, 1.95, trailDistance);
-        float3 earth = float3(0.17, 0.105, 0.051) * (0.60 + grit * 0.64 + ruts * 0.37);
-        float3 meadow = lerp(albedo * 0.80, albedo * float3(1.20, 1.32, 1.11), soil);
-        albedo = lerp(meadow * (0.82 + 0.51 * grit), earth * lerp(1, 0.61, wet), trail);
-        float3 bump = DetailNoise.Sample(LinearWrap, v.world * 0.84).rgb - 0.5;
-        normal = normalize(normal + float3(bump.x, 0, bump.z) * (0.22 + trail * 0.12));
+        float trailDistance = abs(v.world.x - trailCenter) + (ruts - 0.5) * 1.7;
+        float trail = 1 - smoothstep(0.75, 2.23, trailDistance);
+        float erosion = smoothstep(0.09, 0.38, 1 - normal.y);
+        float soilCover = max(trail, smoothstep(0.42, 0.92, cover) * 0.76 + erosion * 0.4);
+        float2 xz = v.world.xz;
+        float3 meadow = GroundMeadow.Sample(LinearWrap, xz * 0.46).rgb;
+        float3 macro = GroundMeadow.Sample(LinearWrap, xz.yx * 0.026 + 0.49).rgb;
+        meadow *= float3(0.35, 0.71, 0.65) * (0.68 + 1.65 * dot(macro, float3(0.3, 0.59, 0.11)));
+        float3 earth = GroundSoil.Sample(LinearWrap, xz * 0.52).rgb * (0.70 + 0.32 * ruts);
+        float bank = riverBankDistance(v.world.x, z);
+        float gravel = (1 - smoothstep(-0.6, 5.4, bank + (ruts - 0.5) * 4))
+                       * (1 - smoothstep(2180, riverExtent, abs(z)));
+        float nearWater = (1 - smoothstep(0.05, 0.75, v.world.y - riverLevel(z))) * gravel;
+        float3 pebbles = RiverGravel.Sample(LinearWrap, xz * 0.52).rgb
+                         * lerp(1.08, 0.59, nearWater);
+        float3 ground = lerp(meadow, earth, saturate(soilCover));
+        ground = lerp(ground, pebbles, gravel);
+        albedo = ground * (0.77 + 0.45 * variation) * lerp(1, 0.62, wet);
+
+        float3 soilNormal = GroundSoilNormal.Sample(LinearWrap, xz * 0.52).xyz * 2 - 1;
+        float3 pebbleNormal = RiverGravelNormal.Sample(LinearWrap, xz * 0.52).xyz * 2 - 1;
+        float2 bump = lerp(soilNormal.xy * (0.32 + 0.24 * soilCover), pebbleNormal.xy * 0.72,
+                          gravel);
+        normal = normalize(normal + float3(bump.x, 0, -bump.y));
+        roughness = lerp(roughness, 0.62, nearWater * (1 - wet));
     }
     return encodeMaterial(albedo, roughness, normal, 0, 0, 1);
 }
@@ -116,9 +138,16 @@ float3 surfaceLighting(float2 uv, float depth)
     float3 flashDirection = normalize(LightningSource.xyz - world + float3(0, 0.001, 0));
     float3 flash = (diffuse + metallic * F0) * lightningIrradiance(world)
                    * (0.15 + 0.85 * saturate(dot(normal, flashDirection)));
-    float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * surface.a;
-    return direct + indirect + flash + surface.rgb;
+    float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * abs(surface.a);
+    float forwardLight = pow(saturate(dot(-V, L)), 3);
+    float3 leafTransmission = surface.a < 0
+        ? diffuse * float3(0.84, 1.0, 0.34) * (0.035 + 0.17 * forwardLight) * solar
+          * cloudVisibility * saturate(L.y * 3) * lerp(0.28, 1, shadow)
+        : 0;
+    return direct + indirect + flash + surface.rgb + leafTransmission;
 }
+
+#include "river_water.hlsli"
 
 float4 upsampleClouds(float2 uv, float scene)
 {
@@ -290,6 +319,15 @@ float4 textureDebugView(float2 uv, int view)
         float depth = WorldRendering.y > 0.5 ? NearTerrainShadow.SampleLevel(LinearClamp, uv, 0) : 1;
         return float4(depth.xxx, 1);
     }
+    if (view == 31)
+    {
+        float depth = geometryDepth(uv);
+        float opaque = hasGeometry(depth) ? length(worldPosition(uv, depth) - CameraTime.xyz)
+                                          : Atmosphere.z;
+        float water = WorldRendering.x > 0.5
+                      && riverSurfaceDistance(worldRay(uv), opaque) < opaque ? 1 : 0;
+        return float4(water.xxx, 1);
+    }
     if (view == 10)
     {
         // 通常の射影深度は遠方がほぼ白になるため、復元した距離を対数表示する。
@@ -343,9 +381,14 @@ float4 CompositePS(ScreenVarying v) : SV_Target
         return textureDebugView(uv, (int)Controls.x);
 
     float depth = geometryDepth(uv);
-    float scene = sceneDistance(uv);
     bool geometry = hasGeometry(depth);
     float3 ray = worldRay(uv);
+    float opaque = geometry ? length(worldPosition(uv, depth) - CameraTime.xyz) : Atmosphere.z;
+    float scene = opaque;
+    [branch]
+    if (WorldRendering.x > 0.5)
+        scene = riverSurfaceDistance(ray, opaque);
+    bool water = scene < opaque;
     float3 sky = SkyTexture.SampleLevel(LinearClamp, uv, 0).rgb;
     float solarDisk =
         1 - smoothstep(0.0046, 0.0062, acos(clamp(dot(ray, SunDirection.xyz), -1, 1)));
@@ -371,7 +414,11 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     upsampleAerial(uv, scene, scattering, transmission, fog);
 
     // 線形色空間で背景・雲・空気遠近法・霧を合成する。cloud.a は透過率。
-    float3 base = geometry ? surfaceLighting(uv, depth) * transmission + scattering : sky;
+    float3 surface = geometry ? surfaceLighting(uv, depth) : 0;
+    [branch]
+    if (water)
+        surface = shadeRiver(uv, ray, scene, opaque, surface);
+    float3 base = geometry || water ? surface * transmission + scattering : sky;
     float3 color = base * cloud.a + cloud.rgb * transmission + scattering * (1 - cloud.a);
     color = color * fog.a + fog.rgb;
     color += lightningBolt(ray, scene, cloud.a);

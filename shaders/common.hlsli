@@ -1,6 +1,8 @@
 #ifndef CIRRUS_COMMON
 #define CIRRUS_COMMON
 
+#include "river_profile.hlsli"
+
 // ワールド座標・距離の単位はm。地表の原点を y=0 とする球形の惑星を使う。
 static const float PI = 3.14159265359;
 static const float PLANET_RADIUS = 6360000.0;
@@ -163,10 +165,29 @@ bool hasGeometry(float depth)
     return WorldRendering.x > 0.5 ? depth > 0 : depth < 0.999999;
 }
 
+float riverSurfaceDistance(float3 ray, float opaqueDistance)
+{
+    float slope = ray.y + ray.z * riverGrade;
+    if (slope >= -0.00001)
+        return opaqueDistance;
+    float distance = (riverLevel(CameraTime.z) - CameraTime.y) / slope;
+    if (distance < 0.15 || distance >= opaqueDistance)
+        return opaqueDistance;
+    float2 p = CameraTime.xz + ray.xz * distance;
+    if (abs(p.y) >= riverExtent || p.x < -15 || p.x > 114)
+        return opaqueDistance;
+    return riverBankDistance(p.x, p.y) <= 4.3 ? distance : opaqueDistance;
+}
+
 float sceneDistance(float2 uv)
 {
     float depth = geometryDepth(uv);
-    return hasGeometry(depth) ? length(worldPosition(uv, depth) - CameraTime.xyz) : Atmosphere.z;
+    float distance = hasGeometry(depth) ? length(worldPosition(uv, depth) - CameraTime.xyz)
+                                        : Atmosphere.z;
+    [branch]
+    if (WorldRendering.x > 0.5)
+        distance = riverSurfaceDistance(worldRay(uv), distance);
+    return distance;
 }
 
 float hg(float cosine, float g)

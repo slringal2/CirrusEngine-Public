@@ -14,6 +14,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{C946
 		shaders\formations.hlsli = shaders\formations.hlsli
 		shaders\noise.hlsl = shaders\noise.hlsl
 		shaders\rain.hlsl = shaders\rain.hlsl
+		shaders\river_profile.hlsli = shaders\river_profile.hlsli
+		shaders\river_water.hlsli = shaders\river_water.hlsli
 		shaders\lightning.hlsli = shaders\lightning.hlsli
 		shaders\scene.hlsl = shaders\scene.hlsl
 	EndProjectSection

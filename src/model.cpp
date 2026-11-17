@@ -145,38 +145,7 @@ struct ImageLoader
                     "Decode external glTF image");
         }
 
-        ComPtr<IWICBitmapFrameDecode> frame;
-        require(decoder->GetFrame(0, &frame), "Read glTF image frame");
-        UINT width, height;
-        require(frame->GetSize(&width, &height), "Read glTF image size");
-        if (!width || !height || width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION
-            || height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
-            invalidModel("image exceeds D3D11 texture dimensions");
-        ComPtr<IWICFormatConverter> rgba;
-        require(factory->CreateFormatConverter(&rgba), "Create glTF image converter");
-        require(rgba->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone,
-                                 nullptr, 0, WICBitmapPaletteTypeCustom),
-                "Convert glTF image to RGBA8");
-        UINT stride = width * 4;
-        std::vector<BYTE> pixels(static_cast<size_t>(stride) * height);
-        require(rgba->CopyPixels(nullptr, stride, static_cast<UINT>(pixels.size()), pixels.data()),
-                "Copy glTF image pixels");
-
-        D3D11_TEXTURE2D_DESC desc{};
-        desc.Width = width;
-        desc.Height = height;
-        desc.ArraySize = 1;
-        desc.Format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-        ComPtr<ID3D11Texture2D> texture;
-        ComPtr<ID3D11ShaderResourceView> view;
-        require(device->CreateTexture2D(&desc, nullptr, &texture), "Create glTF texture");
-        require(device->CreateShaderResourceView(texture.Get(), nullptr, &view),
-                "Create glTF texture view");
-        context->UpdateSubresource(texture.Get(), 0, nullptr, pixels.data(), stride, 0);
-        context->GenerateMips(view.Get());
+        auto view = uploadTexture(device, context, factory.Get(), decoder.Get(), srgb);
         images.emplace(key, view);
         return view;
     }

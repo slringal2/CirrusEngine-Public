@@ -49,6 +49,7 @@ cirrus::Options arguments()
     wchar_t exe[32768];
     GetModuleFileNameW(nullptr, exe, 32768);
     o.shaderDirectory = std::filesystem::path(exe).parent_path() / L"shaders";
+    o.assetsDirectory = std::filesystem::path(exe).parent_path() / L"assets";
     for (int i = 1; i < count; i++)
     {
         const auto &a = args[i];
@@ -150,6 +151,15 @@ cirrus::Options arguments()
             o.spawnX = std::stof(next());
             o.spawnZ = std::stof(next());
             customSpawn = true;
+        }
+        else if (a == L"--look")
+        {
+            float yaw = std::stof(next());
+            float pitch = std::stof(next());
+            if (!std::isfinite(yaw) || !std::isfinite(pitch) || std::abs(yaw) > 180
+                || std::abs(pitch) > 85)
+                throw std::runtime_error("Look angles must be yaw [-180,180] and pitch [-85,85]");
+            o.walkLook = DirectX::XMFLOAT2{yaw, pitch};
         }
         else if (a == L"--model")
             o.modelPath = next();
@@ -253,12 +263,14 @@ cirrus::Options arguments()
                              && o.cameraPath.empty() && o.formationMode == "none"
                              && o.formationFile.empty() && !o.weatherDemo
                              && o.benchmarkSeconds == 0;
-        o.camera = typicalLaunch || customSpawn || !o.modelPath.empty() || o.cameraPath == "walk"
+        o.camera = typicalLaunch || customSpawn || o.walkLook || !o.modelPath.empty()
+                           || o.cameraPath == "walk"
                        ? "walk"
                        : "valley";
     }
-    if ((customSpawn || o.cameraPath == "walk") && o.camera != "walk")
-        throw std::runtime_error("A world spawn and the walking path require --camera walk");
+    if ((customSpawn || o.walkLook || o.cameraPath == "walk") && o.camera != "walk")
+        throw std::runtime_error(
+            "World spawn, look angles and the walking path require --camera walk");
     if (o.camera == "walk" && !o.cameraPath.empty() && o.cameraPath != "walk")
         throw std::runtime_error("Exploration supports --camera-path walk");
     o.openWorld = o.camera == "walk" || !o.modelPath.empty();

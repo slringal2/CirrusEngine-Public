@@ -73,6 +73,7 @@ constexpr std::array<TextureViewInfo, static_cast<size_t>(DebugView::Count)> tex
     {"CLOUD SHADOW DEPTH", "RG16F / G", "Light-space occluder depth. White: clear or far."},
     {"METALLIC", "RGBA16F / A", "White: metal. Black: dielectric."},
     {"NEAR SHADOW DEPTH", "D32 / R32F", "Local terrain and tree shadows for walking."},
+    {"RIVER SURFACE", "Depth test", "White: water in front of the terrain. Black: dry or hidden."},
 }};
 
 std::string narrow(const wchar_t *text)
@@ -192,7 +193,8 @@ Renderer::Renderer(HWND window, const Options &options)
     if (options_.weatherDemo)
         weather_.setDemo(true);
     if (options_.openWorld)
-        world_ = std::make_unique<World>(device_.Get(), options_.vegetation);
+        world_ = std::make_unique<World>(device_.Get(), context_.Get(),
+                                         options_.assetsDirectory / L"world", options_.vegetation);
     timeLapse_ = options_.timeOfDay >= 0 && options_.daySeconds > 0;
     resetCamera();
     initializeResources();
@@ -1043,6 +1045,8 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
         ID3D11ShaderResourceView *maps[] = {world_ ? detailNoise_.Get() : nullptr,
                                             weatherMap_.srv.Get()};
         context_->PSSetShaderResources(1, 2, maps);
+        if (world_)
+            world_->bindTerrainMaterials(context_.Get());
     }
     context_->IASetInputLayout(shaders_.geometryLayout.Get());
     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1060,7 +1064,7 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
     context_->VSSetShader(shaders_.meshVS.Get(), nullptr, 0);
     context_->PSSetShader(shadow ? nullptr : shaders_.meshPS.Get(), nullptr, 0);
     if (world_ && (localPass || !shadow))
-        world_->drawPlants(context_.Get(), shadow);
+        world_->drawPlants(context_.Get(), shadow, shaders_.meshShadowPS.Get());
     for (const Mesh &mesh : model_.meshes)
     {
         auto *raster = mesh.doubleSided ? (shadow ? shadowRaster_.Get() : raster_.Get())
@@ -1071,8 +1075,8 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
                                   0);
         mesh.draw(context_.Get(), model_.instance.Get(), 1, shadow);
     }
-    ID3D11ShaderResourceView *emptyMaterials[5]{};
-    context_->PSSetShaderResources(32, 5, emptyMaterials);
+    ID3D11ShaderResourceView *emptyMaterials[10]{};
+    context_->PSSetShaderResources(32, 10, emptyMaterials);
     context_->OMSetRenderTargets(0, nullptr, nullptr);
     context_->PSSetShaderResources(0, shaderResourceCount, empty.data());
 }
@@ -1179,7 +1183,8 @@ void Renderer::frame(double dt, bool focused)
     {
         // Follow the same path and grounded motion as interactive walking.
         float z = camera_.position.z;
-        camera_.yaw = std::atan(0.088f * (std::cos(z * 0.022f) + std::cos(z * 0.008f)));
+        if (!options_.walkLook)
+            camera_.yaw = std::atan(0.088f * (std::cos(z * 0.022f) + std::cos(z * 0.008f)));
         moveCamera(1, 0, 0, dt, false);
     }
     if (options_.cameraPath == "pan")
@@ -1698,8 +1703,18 @@ void Renderer::resetCamera()
     if (walking_)
     {
         float x = options_.spawnX, z = options_.spawnZ;
-        camera_.position = {x, world_->ground(x, z) + eyeHeight, z};
-        camera_.pitch = -0.035f;
+        camera_.position = {x, 0, z};
+        world_->placeWalker(camera_.position);
+        if (options_.walkLook)
+        {
+            camera_.yaw = XMConvertToRadians(options_.walkLook->x);
+            camera_.pitch = XMConvertToRadians(options_.walkLook->y);
+        }
+        else
+        {
+            camera_.yaw = options_.modelPath.empty() ? 0.43f : 0.0f;
+            camera_.pitch = options_.modelPath.empty() ? -0.095f : -0.035f;
+        }
     }
     else if (options_.camera == "clouds")
         camera_.pitch = 0.40f;
@@ -1786,7 +1801,7 @@ void Renderer::key(UINT k)
     {
         walking_ = !walking_;
         if (walking_)
-            camera_.position.y = world_->ground(camera_.position.x, camera_.position.z) + eyeHeight;
+            world_->placeWalker(camera_.position);
         historyValid_ = false;
     }
     if (k == VK_F6)
@@ -1968,7 +1983,8 @@ std::string Renderer::diagnostics()
             << ", \"ground_m\": " << ground << ", \"eye_height_m\": " << camera_.position.y - ground
             << ", \"active_tiles\": " << world_->tiles()
             << ", \"tiles_built\": " << world_->tilesBuilt() << ", \"trees\": " << world_->trees()
-            << ", \"grass_tufts\": " << world_->grassTufts()
+            << ", \"grass_tufts\": " << world_->grassTufts() << ", \"ferns\": " << world_->ferns()
+            << ", \"bank_rocks\": " << world_->rocks()
             << ", \"near_shadow\": " << (constants_.worldRendering.y > 0.5f ? "true" : "false")
             << ", \"model_primitives\": " << model_.meshes.size() << "},\n";
     }

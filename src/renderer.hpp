@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -63,6 +64,7 @@ enum class DebugView
     CloudShadowDepth,
     Metallic,
     NearShadow,
+    RiverSurface,
     Count
 };
 
@@ -96,9 +98,10 @@ struct Options
     int textureAxis = 2;
     std::string camera;
     std::string cameraPath;
-    std::filesystem::path capture, shaderDirectory;
+    std::filesystem::path capture, shaderDirectory, assetsDirectory;
     bool openWorld = false, vegetation = true;
     float timeOfDay = -1, spawnX = -6.1f, spawnZ = -37;
+    std::optional<DirectX::XMFLOAT2> walkLook;
     double daySeconds = 0;
     std::filesystem::path modelPath;
     float modelScale = 1;

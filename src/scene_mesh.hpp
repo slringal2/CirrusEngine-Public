@@ -8,6 +8,9 @@
 #include <span>
 #include <vector>
 
+struct IWICImagingFactory;
+struct IWICBitmapDecoder;
+
 namespace cirrus
 {
 using Microsoft::WRL::ComPtr;
@@ -37,7 +40,8 @@ enum class MeshKind : UINT
 {
     Model,
     Grass,
-    Tree
+    Tree,
+    Foliage
 };
 
 struct MaterialData
@@ -72,6 +76,11 @@ ComPtr<ID3D11Buffer> immutableBuffer(ID3D11Device *device, UINT bind,
                                      std::span<const std::byte> data);
 Mesh makeMesh(ID3D11Device *device, std::span<const MeshVertex> vertices,
               std::span<const uint32_t> indices, const PbrMaterial &material);
+ComPtr<ID3D11ShaderResourceView> uploadTexture(ID3D11Device *device, ID3D11DeviceContext *context,
+                                               IWICImagingFactory *factory,
+                                               IWICBitmapDecoder *decoder, bool srgb);
+ComPtr<ID3D11ShaderResourceView> loadTexture(ID3D11Device *device, ID3D11DeviceContext *context,
+                                             const std::filesystem::path &file, bool srgb);
 
 struct StaticModel
 {

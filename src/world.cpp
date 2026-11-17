@@ -1,4 +1,5 @@
 #include "world.hpp"
+#include "../shaders/river_profile.hlsli"
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -12,9 +13,9 @@ using namespace DirectX;
 namespace
 {
 constexpr int cells = 32;
-constexpr int baseTile = 256;
-constexpr int farLod = 5;
-constexpr float treeSpacing = 22;
+constexpr int baseTile = 128;
+constexpr int farLod = 6;
+constexpr float treeSpacing = 19;
 constexpr float tau = 2 * std::numbers::pi_v<float>;
 
 float random01(int x, int z, uint32_t seed = 0)
@@ -51,7 +52,19 @@ float terrainHeight(float x, float z)
                       * (260 * ridge * ridge + 680 * noise(x / 3400, z / 3400, 10)
                          + 125 * noise(x / 750, z / 750, 17));
     float soil = 2.0f * noise(x / 48, z / 48, 21);
-    return 105 + rolling + mountains + soil;
+    soil += 1.1f * (noise(x / 19, z / 27, 76) - 0.5f);
+    float upland = 105 + rolling + mountains + soil;
+    if (std::abs(z) >= riverExtent || x < -116 || x > 222)
+        return upland;
+
+    float sandbars = noise(x / 8, z / 16, 71);
+    float bank = riverBankDistance(x, z) + (sandbars - 0.5f) * 4.4f;
+    float depth = 1.45f + 1.95f * noise(x / 28, z / 78, 72);
+    float wetBed = riverLevel(z) - depth * smooth(0, 13, -bank);
+    float dryBank = std::max(bank, 0.0f) * (0.27f + 0.18f * noise(x / 37, z / 53, 73));
+    dryBank += (noise(x / 17, z / 27, 74) - 0.43f) * 1.9f * smooth(0.5f, 17.0f, bank);
+    float strength = (1 - smooth(8, 88, bank)) * (1 - smooth(2180, riverExtent, std::abs(z)));
+    return std::lerp(upland, wetBed + dryBank, strength);
 }
 
 float trailCenter(float z)
@@ -80,14 +93,15 @@ std::optional<MeshInstance> treeInCell(int cellX, int cellZ)
     float z = (cellZ + 0.12f + 0.76f * random01(cellX, cellZ, 2)) * treeSpacing;
     float woods = noise(x / 160, z / 160, 42);
     if (std::abs(x - trailCenter(z)) < 4.2f || terrainHeight(x, z) > 1280
-        || random01(cellX, cellZ, 3) > std::lerp(0.20f, 0.91f, woods))
+        || (std::abs(z) < riverExtent && riverBankDistance(x, z) < 4.1f)
+        || random01(cellX, cellZ, 3) > std::lerp(0.07f, 0.90f, smooth(0.22f, 0.76f, woods)))
         return std::nullopt;
     float slope = std::hypot(terrainHeight(x + 3, z) - terrainHeight(x - 3, z),
                              terrainHeight(x, z + 3) - terrainHeight(x, z - 3))
                   / 6;
     if (slope > 0.65f)
         return std::nullopt;
-    return plant(x, 0, z, std::lerp(0.52f, 1.55f, random01(cellX, cellZ, 4)),
+    return plant(x, 0, z, std::lerp(0.48f, 1.38f, random01(cellX, cellZ, 4)),
                  tau * random01(cellX, cellZ, 5),
                  std::lerp(0.65f, 1.32f, random01(cellX, cellZ, 6)));
 }
@@ -97,143 +111,262 @@ struct MeshBuilder
     std::vector<MeshVertex> vertices;
     std::vector<uint32_t> indices;
 
-    void triangle(XMFLOAT3 a, XMFLOAT3 b, XMFLOAT3 c, XMFLOAT3 normal, XMFLOAT4 color, XMFLOAT4 tip)
+    void bark(XMVECTOR start, XMVECTOR end, float radius, float endRadius, int sides)
     {
-        auto first = static_cast<uint32_t>(vertices.size());
-        vertices.push_back({a, normal, {}, {}, {}, color});
-        vertices.push_back({b, normal, {}, {}, {}, color});
-        vertices.push_back({c, normal, {}, {}, {}, tip});
-        indices.insert(indices.end(), {first, first + 1, first + 2});
-    }
-
-    void cylinder(XMFLOAT3 start, XMFLOAT3 end, float radius, float endRadius, int sides,
-                  XMFLOAT4 color)
-    {
-        XMVECTOR p = XMLoadFloat3(&start), q = XMLoadFloat3(&end);
-        XMVECTOR axis = XMVector3Normalize(q - p);
+        XMVECTOR axis = XMVector3Normalize(end - start);
         XMVECTOR side = XMVector3Normalize(XMVector3Cross(axis, XMVectorSet(0, 0, 1, 0)));
         XMVECTOR other = XMVector3Cross(axis, side);
+        float repeat = XMVectorGetX(XMVector3Length(end - start)) * 0.72f;
         auto first = static_cast<uint32_t>(vertices.size());
-        for (int i = 0; i < sides; ++i)
+        for (int i = 0; i <= sides; ++i)
         {
             float angle = tau * i / sides;
             XMVECTOR n = side * std::cos(angle) + other * std::sin(angle);
             MeshVertex a, b;
             XMStoreFloat3(&a.normal, n);
             b.normal = a.normal;
-            XMStoreFloat3(&a.position, p + n * radius);
-            XMStoreFloat3(&b.position, q + n * endRadius);
-            a.color = b.color = color;
+            XMStoreFloat3(&a.position, start + n * radius);
+            XMStoreFloat3(&b.position, end + n * endRadius);
+            a.uv = {static_cast<float>(i) / sides, XMVectorGetY(start) * -0.72f};
+            b.uv = {a.uv.x, a.uv.y - repeat};
             vertices.push_back(a);
             vertices.push_back(b);
-            uint32_t lo = first + i * 2, next = first + (i + 1) % sides * 2;
-            indices.insert(indices.end(), {lo, next, lo + 1, next, next + 1, lo + 1});
+            if (i > 0)
+            {
+                uint32_t lo = first + (i - 1) * 2;
+                indices.insert(indices.end(), {lo, lo + 2, lo + 1, lo + 2, lo + 3, lo + 1});
+            }
         }
     }
-};
 
-Mesh makeGrass(ID3D11Device *device)
-{
-    MeshBuilder mesh;
-    for (int blade = 0; blade < 9; ++blade)
+    void leafStrip(std::span<const XMVECTOR> centers, XMVECTOR lateral, float width, int tile,
+                   float tint, float shadeAtRoot)
     {
-        float angle = tau * random01(blade, 1, 17);
-        float c = std::cos(angle), s = std::sin(angle);
-        float r = 0.15f * random01(blade, 2, 17);
-        float height = 0.22f + 0.38f * random01(blade, 3, 17);
-        float bend = 0.12f + random01(blade, 4, 17) * 0.24f;
-        float width = 0.016f + random01(blade, 5, 17) * 0.015f;
-        auto first = static_cast<uint32_t>(mesh.vertices.size());
-        for (int row = 0; row < 3; ++row)
+        constexpr float inset = 8.5f / 512;
+        float u = (tile % 2) * 0.5f + inset, v = (tile / 2) * 0.5f + inset;
+        constexpr float span = 0.5f - inset * 2;
+        auto first = static_cast<uint32_t>(vertices.size());
+        XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+        XMVECTOR face =
+            XMVector3Normalize(XMVector3Cross(lateral, centers.back() - centers.front()));
+        if (XMVectorGetY(face) < 0)
+            face = -face;
+        for (size_t row = 0; row < centers.size(); ++row)
         {
-            float t = row / 3.0f, center = r + bend * t * t;
-            XMFLOAT4 color{std::lerp(0.035f, 0.17f, t), std::lerp(0.075f, 0.24f, t),
-                           std::lerp(0.018f, 0.055f, t), 1};
-            for (float sign : {-1.0f, 1.0f})
+            float fraction = static_cast<float>(row) / static_cast<float>(centers.size() - 1);
+            for (int edge = 0; edge < 2; ++edge)
             {
-                float w = width * (1 - t * 0.72f) * sign;
-                mesh.vertices.push_back({{c * center - s * w, height * t, s * center + c * w},
-                                         {-0.34f * c, 0.94f, -0.34f * s},
-                                         {},
-                                         {},
-                                         {},
-                                         color});
+                float side = edge ? 1.0f : -1.0f;
+                MeshVertex vertex;
+                XMStoreFloat3(&vertex.position, centers[row] + lateral * (width * side * 0.5f));
+                XMVECTOR normal = up + face * 0.31f + lateral * (side * 0.19f);
+                XMStoreFloat3(&vertex.normal, XMVector3Normalize(normal));
+                vertex.uv = {u + span * edge, v + span * (1 - fraction)};
+                float shade = tint * std::lerp(shadeAtRoot, 1.0f, fraction);
+                vertex.color = {shade, shade, shade, 1};
+                vertices.push_back(vertex);
             }
             if (row > 0)
             {
-                uint32_t i = first + 2 * (row - 1);
-                mesh.indices.insert(mesh.indices.end(), {i, i + 1, i + 2, i + 1, i + 3, i + 2});
+                uint32_t i = first + static_cast<uint32_t>((row - 1) * 2);
+                indices.insert(indices.end(), {i, i + 1, i + 2, i + 2, i + 1, i + 3});
             }
         }
-        mesh.vertices.push_back({{c * (r + bend), height, s * (r + bend)},
-                                 {0, 1, 0},
-                                 {},
-                                 {},
-                                 {},
-                                 {0.29f, 0.34f, 0.09f, 1}});
-        mesh.indices.insert(mesh.indices.end(), {first + 4, first + 5, first + 6});
     }
+
+    Mesh create(ID3D11Device *device, const PbrMaterial &material) const
+    {
+        return makeMesh(device, vertices, indices, material);
+    }
+};
+
+PbrMaterial plantMaterial(ComPtr<ID3D11ShaderResourceView> leaves, MeshKind kind, float cutoff)
+{
     PbrMaterial material;
-    material.data.pbr.y = 0.86f;
-    material.data.flags[1] = static_cast<UINT>(MeshKind::Grass);
-    material.data.flags[2] = 1;
-    return makeMesh(device, mesh.vertices, mesh.indices, material);
+    material.textures[0] = std::move(leaves);
+    material.data.pbr.y = 0.84f;
+    material.data.flags = {1, static_cast<UINT>(kind), 1, 0};
+    material.data.emissionCutoff.w = cutoff;
+    return material;
 }
 
-Mesh makePine(ID3D11Device *device, bool detailed)
+Mesh makeGrass(ID3D11Device *device, const PbrMaterial &material, int variant)
 {
     MeshBuilder mesh;
-    const XMFLOAT4 bark{0.088f, 0.051f, 0.027f, 1};
-    mesh.cylinder({0, -0.8f, 0}, {0.12f, 11.8f, -0.06f}, 0.27f, 0.026f, detailed ? 8 : 5, bark);
-    const int layers = detailed ? 13 : 9;
-    for (int level = 0; level < layers; ++level)
+    for (int tuft = 0; tuft < 4; ++tuft)
     {
-        float h = (level + 0.15f) / layers;
-        float base = 1.8f + 10.65f * h;
-        const int branches = detailed ? 7 : 5;
-        for (int branch = 0; branch < branches; ++branch)
-        {
-            float angle = tau * branch / branches + level * 2.39996f
-                          + (random01(level, branch, 33) - 0.5f) * 0.3f;
-            float extent =
-                (2.9f * (1 - h) + 0.2f) * std::lerp(0.67f, 1.19f, random01(level, branch, 4));
-            float c = std::cos(angle), s = std::sin(angle);
-            float y = base + (random01(level, branch, 12) - 0.5f) * 0.70f;
-            if (detailed)
-                mesh.cylinder({0, y, 0}, {c * extent * 0.78f, y - 0.27f, s * extent * 0.78f},
-                              0.072f * (1 - h) + 0.012f, 0.01f, 4, bark);
+        float angle = 2.3999632f * tuft + 0.68f * variant;
+        float radius = 0.13f * random01(tuft, variant, 21);
+        auto direction = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
+        auto center = direction * radius;
+        float height = 0.24f + 0.19f * random01(tuft, variant, 22);
+        float lean = 0.06f + 0.15f * random01(tuft, variant, 23);
+        const XMVECTOR rows[] = {
+            center, center + direction * (lean * 0.25f) + XMVectorSet(0, height * 0.5f, 0, 0),
+            center + direction * lean + XMVectorSet(0, height, 0, 0)};
+        mesh.leafStrip(rows, XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0),
+                       0.41f + 0.19f * random01(tuft, variant, 25), (tuft + variant) % 4, 1.0f,
+                       0.58f);
+    }
+    return mesh.create(device, material);
+}
 
-            const int shoots = detailed ? 12 : 4;
-            for (int shoot = 0; shoot < shoots; ++shoot)
+Mesh makeCloseGrass(ID3D11Device *device, const PbrMaterial &material, int variant)
+{
+    MeshBuilder mesh;
+    for (int blade = 0; blade < 21; ++blade)
+    {
+        float angle = blade * 2.3999632f + random01(blade, variant, 22) * 0.7f;
+        XMVECTOR out = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
+        XMVECTOR side = XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0);
+        XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+        float radius = 0.23f * std::sqrt(random01(blade, variant, 51));
+        float height = std::lerp(0.12f, 0.52f, random01(blade, variant, 53));
+        float arch = std::lerp(0.045f, 0.33f, random01(blade, variant, 54));
+        float width = std::lerp(0.020f, 0.056f, random01(blade, variant, 55));
+        const XMVECTOR rows[] = {out * radius,
+                                 out * (radius + arch * 0.13f) + up * (height * 0.43f),
+                                 out * (radius + arch * 0.48f) + up * (height * 0.81f),
+                                 out * (radius + arch) + up * height};
+        float tint = std::lerp(0.69f, 1.28f, random01(blade, variant, 68));
+        mesh.leafStrip(rows, side, width, (blade + variant) % 4, tint, 0.54f);
+    }
+    return mesh.create(device, material);
+}
+
+Mesh makeFern(ID3D11Device *device, const PbrMaterial &material)
+{
+    MeshBuilder mesh;
+    for (int leaf = 0; leaf < 11; ++leaf)
+    {
+        float angle = leaf * 2.3999632f;
+        float reach = std::lerp(0.32f, 0.77f, random01(leaf, 0, 41));
+        float rise = std::lerp(0.27f, 0.57f, random01(leaf, 0, 42));
+        XMVECTOR direction = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
+        const XMVECTOR rows[] = {XMVectorZero(),
+                                 direction * reach * 0.41f + XMVectorSet(0, rise, 0, 0),
+                                 direction * reach + XMVectorSet(0, rise * 0.58f, 0, 0)};
+        mesh.leafStrip(rows, XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0), reach * 0.46f,
+                       leaf % 4, 0.90f + 0.23f * random01(leaf, 0, 43), 0.52f);
+    }
+    return mesh.create(device, material);
+}
+
+Mesh makeBankRock(ID3D11Device *device, const PbrMaterial &material)
+{
+    MeshBuilder mesh;
+    constexpr int sides = 12, rows = 7;
+    constexpr float pi = std::numbers::pi_v<float>;
+    for (int row = 0; row <= rows; ++row)
+    {
+        float latitude = pi * (static_cast<float>(row) / rows - 0.5f);
+        for (int col = 0; col <= sides; ++col)
+        {
+            float angle = tau * (col % sides) / sides;
+            XMVECTOR direction =
+                XMVectorSet(std::cos(angle) * std::cos(latitude), std::sin(latitude),
+                            std::sin(angle) * std::cos(latitude), 0);
+            float irregular = std::lerp(0.78f, 1.17f, random01(col % sides, row, 58));
+            MeshVertex vertex;
+            XMStoreFloat3(&vertex.position,
+                          direction * XMVectorSet(0.68f, 0.39f, 0.54f, 0) * irregular);
+            XMStoreFloat3(&vertex.normal,
+                          XMVector3Normalize(direction * XMVectorSet(1.47f, 2.56f, 1.85f, 0)));
+            vertex.uv = {static_cast<float>(col) / sides, 1 - static_cast<float>(row) / rows};
+            mesh.vertices.push_back(vertex);
+            if (row && col)
             {
-                float along = (shoot + 0.85f) / shoots;
-                float side = shoot % 2 == 0 ? 1.0f : -1.0f;
-                float r = extent * along;
-                float spread = (0.3f + 0.20f * random01(level * 11 + branch, shoot, 87)) * extent
-                               * (1 - 0.72f * along);
-                XMFLOAT3 root{c * r, y - along * 0.25f, s * r};
-                float lift = 0.38f + 0.53f * (1 - h) * random01(level + shoot, branch, 81);
-                XMFLOAT3 tip{c * (r + extent * 0.28f) - s * side * spread, root.y + lift,
-                             s * (r + extent * 0.28f) + c * side * spread};
-                XMFLOAT4 green{0.029f + h * 0.032f, 0.075f + h * 0.073f, 0.031f + h * 0.021f, 1};
-                XMFLOAT4 fresh{green.x * 1.19f, green.y * 1.20f, green.z * 1.17f, 1};
-                const float fan = extent * (detailed ? 0.135f : 0.25f) + 0.085f;
-                XMFLOAT3 middle{std::lerp(root.x, tip.x, 0.42f), std::lerp(root.y, tip.y, 0.42f),
-                                std::lerp(root.z, tip.z, 0.42f)};
-                mesh.triangle(root, {middle.x + s * fan, middle.y, middle.z - c * fan}, tip,
-                              {c * 0.45f, 0.79f, s * 0.45f}, green, fresh);
-                mesh.triangle(root, {middle.x - s * fan, middle.y + 0.07f, middle.z + c * fan}, tip,
-                              {-s * 0.53f, 0.84f, c * 0.53f}, green, fresh);
-                mesh.triangle(root, {middle.x, middle.y + fan, middle.z}, tip,
-                              {s * 0.66f, 0.71f, -c * 0.66f}, green, fresh);
+                uint32_t a = row * (sides + 1) + col;
+                uint32_t b = a - sides - 1;
+                mesh.indices.insert(mesh.indices.end(), {b - 1, a - 1, b, b, a - 1, a});
             }
         }
     }
-    PbrMaterial material;
-    material.data.pbr.y = 0.91f;
-    material.data.flags[1] = static_cast<UINT>(MeshKind::Tree);
-    material.data.flags[2] = 1;
-    return makeMesh(device, mesh.vertices, mesh.indices, material);
+    return mesh.create(device, material);
+}
+
+std::array<Mesh, 2> makeTree(ID3D11Device *device, const PbrMaterial &barkMaterial,
+                             const PbrMaterial &needleMaterial, int form, bool detailed)
+{
+    MeshBuilder wood, needles;
+    const float height = form == 0 ? 17.6f : 14.3f;
+    const float crownBase = form == 0 ? 3.15f : 4.1f;
+    const float crownWidth = form == 0 ? 4.15f : 4.9f;
+    const float rootRadius = form == 0 ? 0.35f : 0.45f;
+    auto stem = [&](float y)
+    {
+        float bend = std::clamp(y / height, 0.0f, 1.0f);
+        return XMVectorSet(bend * std::sin(bend * 3.8f + form) * 0.39f, y,
+                           bend * std::cos(bend * 6.1f + form) * 0.45f, 0);
+    };
+    const int segments = detailed ? 6 : 3;
+    for (int part = 0; part < segments; ++part)
+    {
+        float a = static_cast<float>(part) / segments, b = static_cast<float>(part + 1) / segments;
+        wood.bark(stem(std::lerp(-0.6f, height, a)), stem(std::lerp(-0.6f, height, b)),
+                  rootRadius * std::pow(1 - a, 0.68f) + (part == 0 ? 0.10f : 0.014f),
+                  rootRadius * std::pow(1 - b, 0.68f) + 0.014f, detailed ? 11 : 6);
+    }
+
+    constexpr int layers = 18;
+    for (int level = 0; level < layers; level += detailed ? 1 : 2)
+    {
+        const float crown = (level + 0.28f) / layers;
+        const int branches = level > 13 ? 3 : 5;
+        for (int branch = 0; branch < branches; ++branch)
+        {
+            const int seed = level * 7 + branch + 131 * form;
+            const float angle = branch * tau / branches + level * 2.3999632f
+                                + (random01(seed, 0, 2) - 0.5f) * 0.82f;
+            const float reach = (crownWidth * std::pow(1 - crown, 0.88f) + 0.32f)
+                                * std::lerp(0.48f, 1.22f, random01(seed, 0, 3));
+            const float y = std::lerp(crownBase, height, crown)
+                            + (random01(seed, 0, 5) - 0.5f) * (1.8f - crown);
+            const float droop = std::lerp(-1.23f, 0.46f, crown) * (reach * 0.28f);
+            const float fork = std::lerp(-0.52f, 0.52f, random01(seed, 0, 10));
+            const XMVECTOR out = XMVectorSet(std::cos(angle), 0, std::sin(angle), 0);
+            const XMVECTOR side = XMVectorSet(-std::sin(angle), 0, std::cos(angle), 0);
+            const XMVECTOR root = stem(y);
+            auto branchAt = [&](float fraction)
+            {
+                return root + out * (reach * fraction) + side * (fork * fraction * fraction)
+                       + XMVectorSet(0, droop * fraction + 0.59f * fraction * fraction, 0, 0);
+            };
+            if (detailed && level < 13)
+            {
+                float joint = 0.025f + 0.023f * (1 - crown);
+                wood.bark(root, branchAt(0.49f), 0.074f * (1 - crown) + 0.016f, joint, 5);
+                wood.bark(branchAt(0.49f), branchAt(0.92f), joint, 0.009f, 5);
+            }
+
+            const int sprays = detailed ? 9 : 5;
+            for (int shoot = 0; shoot < sprays; ++shoot)
+            {
+                float along = std::lerp(0.18f, 0.92f, (shoot + 0.45f) / sprays);
+                float spread = std::lerp(0.19f, 0.47f, random01(seed, shoot, 18));
+                spread *= (shoot % 2 ? 1 : -1) * reach * (1 - 0.64f * along);
+                float length = (0.66f + 0.40f * reach) * (1 - 0.34f * along);
+                const XMVECTOR base = branchAt(along);
+                const XMVECTOR tip =
+                    base + out * (length * 0.58f) + side * spread
+                    + XMVectorSet(0, length * std::lerp(-0.21f, 0.78f, random01(seed, shoot, 22)),
+                                  0, 0);
+                XMVECTOR axis = XMVector3Normalize(tip - base);
+                XMVECTOR across = XMVector3Normalize(XMVector3Cross(axis, XMVectorSet(0, 1, 0, 0)));
+                float roll = (random01(seed, shoot, 30) - 0.50f) * 2.24f;
+                XMVECTOR lateral =
+                    across * std::cos(roll) + XMVector3Cross(axis, across) * std::sin(roll);
+                const XMVECTOR rows[] = {base, tip};
+                const float width = length * (detailed ? 0.80f : 1.23f);
+                float tint = std::lerp(0.64f, 1.35f, random01(seed, shoot, 31));
+                needles.leafStrip(rows, lateral, width, (seed + shoot) % 4, tint, 0.56f);
+                if (detailed && shoot % 2 == 0)
+                    needles.leafStrip(rows, XMVector3Cross(axis, lateral), width * 0.83f,
+                                      (seed + shoot + 1) % 4, tint * 0.88f, 0.56f);
+            }
+        }
+    }
+    return {wood.create(device, barkMaterial), needles.create(device, needleMaterial)};
 }
 
 bool visible(XMFLOAT3 min, XMFLOAT3 max, FXMMATRIX matrix)
@@ -255,7 +388,9 @@ bool visible(XMFLOAT3 min, XMFLOAT3 max, FXMMATRIX matrix)
 }
 }
 
-World::World(ID3D11Device *device, bool vegetation) : device_(device), vegetation_(vegetation)
+World::World(ID3D11Device *device, ID3D11DeviceContext *context,
+             const std::filesystem::path &assets, bool vegetation)
+    : device_(device), vegetation_(vegetation)
 {
     std::vector<uint32_t> indices;
     for (int z = 0; z < cells; ++z)
@@ -278,11 +413,45 @@ World::World(ID3D11Device *device, bool vegetation) : device_(device), vegetatio
         }
     indices_ = immutableBuffer(device_, D3D11_BIND_INDEX_BUFFER, std::as_bytes(std::span(indices)));
     indexCount_ = static_cast<UINT>(indices.size());
+    auto texture = [&](const wchar_t *name, bool srgb = true)
+    {
+        return loadTexture(device, context, assets / name, srgb);
+    };
+    groundTextures_ = {texture(L"meadow.jpg"), texture(L"soil.jpg"),
+                       texture(L"soil-normal.jpg", false), texture(L"gravel.jpg"),
+                       texture(L"gravel-normal.jpg", false)};
+    PbrMaterial stone;
+    stone.data.flags = {5, 0, 1, 0};
+    stone.data.pbr = {0, 0.87f, 0.42f, 1};
+    stone.textures[0] = groundTextures_[3];
+    stone.textures[2] = groundTextures_[4];
+    rockMesh_ = makeBankRock(device, stone);
     if (vegetation_)
     {
-        grassMesh_ = makeGrass(device_);
-        closeTreeMesh_ = makePine(device_, true);
-        distantTreeMesh_ = makePine(device_, false);
+        auto grass = plantMaterial(texture(L"meadow-blades.png"), MeshKind::Grass, 0.37f);
+        grass.data.baseColor = {0.79f, 1.42f, 1.03f, 1};
+        auto blades = plantMaterial(texture(L"grass-blades-close.png"), MeshKind::Grass, 0.26f);
+        blades.data.baseColor = {0.58f, 0.96f, 0.79f, 1};
+        for (int variant = 0; variant < 2; ++variant)
+        {
+            grassMeshes_[variant] = makeCloseGrass(device, blades, variant);
+            grassMeshes_[variant + 2] = makeGrass(device, grass, variant);
+        }
+        fernMesh_ =
+            makeFern(device, plantMaterial(texture(L"fern-fronds.png"), MeshKind::Grass, 0.40f));
+
+        PbrMaterial bark;
+        bark.textures[0] = texture(L"bark.jpg");
+        bark.textures[2] = texture(L"bark-normal.jpg", false);
+        bark.data.flags = {5, static_cast<UINT>(MeshKind::Tree), 1, 0};
+        bark.data.pbr = {0, 0.91f, 0.83f, 1};
+        auto needles = plantMaterial(texture(L"fir-needles.png"), MeshKind::Foliage, 0.29f);
+        needles.data.baseColor = {0.71f, 1.65f, 0.93f, 1};
+        for (int form = 0; form < 2; ++form)
+        {
+            treeMeshes_[form] = makeTree(device, bark, needles, form, true);
+            treeMeshes_[form + 2] = makeTree(device, bark, needles, form, false);
+        }
     }
 }
 
@@ -367,17 +536,20 @@ void World::updateTerrain(float x, float z)
                   });
 }
 
+void World::uploadInstances(Instances &target, std::span<const MeshInstance> instances)
+{
+    target.count = static_cast<UINT>(instances.size());
+    target.buffer = instances.empty() ? nullptr
+                                      : immutableBuffer(device_, D3D11_BIND_VERTEX_BUFFER,
+                                                        std::as_bytes(instances));
+}
+
 void World::updatePlants(XMFLOAT3 camera)
 {
-    auto upload = [&](Instances &target, const std::vector<MeshInstance> &instances)
-    {
-        target.count = static_cast<UINT>(instances.size());
-        target.buffer = instances.empty() ? nullptr
-                                          : immutableBuffer(device_, D3D11_BIND_VERTEX_BUFFER,
-                                                            std::as_bytes(std::span(instances)));
-    };
-    std::vector<MeshInstance> close, distant, tufts;
-    constexpr float treeRadius = 1020, grassRadius = 82, spacing = 0.90f;
+    std::array<std::vector<MeshInstance>, 4> trees;
+    std::array<std::vector<MeshInstance>, 4> tufts;
+    std::vector<MeshInstance> ferns;
+    constexpr float treeRadius = 1040, grassRadius = 88, spacing = 0.56f;
     const int firstX = static_cast<int>(std::floor((camera.x - treeRadius) / treeSpacing));
     const int firstZ = static_cast<int>(std::floor((camera.z - treeRadius) / treeSpacing));
     const int range = static_cast<int>(std::ceil(treeRadius * 2 / treeSpacing)) + 1;
@@ -404,33 +576,108 @@ void World::updatePlants(XMFLOAT3 camera)
             if (distance > treeRadius)
                 continue;
             p.y = terrainSurface(p.x, p.z) - 0.13f;
-            (distance < 210 ? close : distant).push_back(*tree);
+            size_t form = random01(ix, iz, 58) < 0.69f ? 0 : 1;
+            size_t lod = distance < 155 ? 0 : 2;
+            trees[lod + form].push_back(*tree);
         }
 
     const int grassX = static_cast<int>(std::floor(camera.x / spacing));
     const int grassZ = static_cast<int>(std::floor(camera.z / spacing));
     const int grassRange = static_cast<int>(std::ceil(grassRadius / spacing));
     if (groundDetail_)
+    {
         for (int iz = grassZ - grassRange; iz <= grassZ + grassRange; ++iz)
             for (int ix = grassX - grassRange; ix <= grassX + grassRange; ++ix)
             {
                 float x = (ix + random01(ix, iz, 29)) * spacing;
                 float z = (iz + random01(ix, iz, 37)) * spacing;
                 float distance = std::hypot(x - camera.x, z - camera.z);
-                float soil = noise(x / 9, z / 9, 20);
-                float density = smooth(1.35f, 2.55f, std::abs(x - trailCenter(z)))
-                                * std::lerp(0.24f, 0.97f, soil)
-                                * (1 - smooth(32, grassRadius, distance));
+                if (distance > grassRadius)
+                    continue;
+                float soil = noise(x / 8, z / 8, 20);
+                float trail = std::abs(x - trailCenter(z)) + (soil - 0.5f) * 0.70f;
+                float bank = std::abs(z) < riverExtent ? riverBankDistance(x, z) : 100;
+                float reeds = 1 - smooth(0.4f, 6.5f, std::abs(bank - 3));
+                float meadow = noise(x / 23, z / 18, 51);
+                float density =
+                    std::lerp(0.16f, 0.98f, smooth(0.15f, 0.84f, soil * 0.65f + meadow * 0.35f));
+                density *= smooth(0.96f, 2.65f, trail) * (1 - smooth(29, grassRadius, distance));
+                density *= std::lerp(0.3f, 1.0f, smooth(-1.0f, 3.0f, bank));
                 if (random01(ix, iz, 17) >= density)
                     continue;
                 float y = ground(x, z);
-                tufts.push_back(plant(x, y - 0.035f, z,
-                                      std::lerp(0.48f, 1.37f, random01(ix, iz, 13)),
-                                      tau * random01(ix, iz, 32), std::lerp(0.7f, 1.18f, soil)));
+                if (bank < 3 && y < riverLevel(z) + 0.04f)
+                    continue;
+                float scale = std::lerp(0.59f, 1.43f, random01(ix, iz, 13)) * (1 + reeds * soil);
+                size_t variant = random01(ix, iz, 22) < 0.5f ? 0 : 1;
+                bool blades = distance < 13 + 12 * random01(ix, iz, 60)
+                              && random01(ix, iz, 61) < std::lerp(0.32f, 0.78f, reeds);
+                size_t lod = blades ? 0 : 2;
+                tufts[lod + variant].push_back(
+                    plant(x, y - 0.040f, z, scale, tau * random01(ix, iz, 32),
+                          std::lerp(0.66f, 1.22f, random01(ix, iz, 59))));
             }
-    upload(closeTrees_, close);
-    upload(distantTrees_, distant);
-    upload(grass_, tufts);
+
+        constexpr float fernSpacing = 3.2f;
+        int fernX = static_cast<int>(std::floor(camera.x / fernSpacing));
+        int fernZ = static_cast<int>(std::floor(camera.z / fernSpacing));
+        constexpr int fernRange = 18;
+        for (int iz = fernZ - fernRange; iz <= fernZ + fernRange; ++iz)
+            for (int ix = fernX - fernRange; ix <= fernX + fernRange; ++ix)
+            {
+                float x = (ix + random01(ix, iz, 43)) * fernSpacing;
+                float z = (iz + random01(ix, iz, 44)) * fernSpacing;
+                float bank = std::abs(z) < riverExtent ? riverBankDistance(x, z) : 100;
+                float moisture = noise(x / 16, z / 16, 80);
+                float density = (1 - smooth(36, 58, std::hypot(x - camera.x, z - camera.z)))
+                                * moisture * moisture * (bank < 14 ? 1.07f : 0.21f);
+                if (bank < 2.4f || std::abs(x - trailCenter(z)) < 2.45f
+                    || random01(ix, iz, 45) >= density)
+                    continue;
+                ferns.push_back(plant(x, ground(x, z) - 0.05f, z,
+                                      std::lerp(0.55f, 1.48f, random01(ix, iz, 46)),
+                                      tau * random01(ix, iz, 47), 0.77f + 0.33f * moisture));
+            }
+    }
+    for (size_t i = 0; i < trees_.size(); ++i)
+        uploadInstances(trees_[i], trees[i]);
+    for (size_t i = 0; i < grass_.size(); ++i)
+        uploadInstances(grass_[i], tufts[i]);
+    uploadInstances(ferns_, ferns);
+}
+
+void World::updateRocks(XMFLOAT3 camera)
+{
+    std::vector<MeshInstance> rocks;
+    // The larger stones break the shoreline and remain in place when the bank streams.
+    if (std::abs(camera.x) < 260 && std::abs(camera.z) < riverExtent + 128)
+    {
+        constexpr float spacing = 3.0f;
+        int z0 = static_cast<int>(std::floor(camera.z / spacing));
+        for (int iz = z0 - 38; iz <= z0 + 38; ++iz)
+        {
+            float z = (iz + random01(iz, 0, 74)) * spacing;
+            if (std::abs(z) >= riverExtent)
+                continue;
+            for (int side : {-1, 1})
+                for (int i = 0; i < 3; ++i)
+                {
+                    float offset = std::lerp(-3.4f, 11.0f, random01(iz, side * 3 + i, 78));
+                    float x = riverCenter(z) + side * (riverHalfWidth(z) + offset);
+                    float cover = noise(x / 8, z / 15, 79);
+                    if (std::hypot(x - camera.x, z - camera.z) > 118
+                        || std::abs(x - trailCenter(z)) < 1.25f
+                        || random01(iz, side * 3 + i, 77) > 0.73f * cover)
+                        continue;
+                    float size = random01(iz, side * 3 + i, 82);
+                    float scale = std::lerp(0.22f, 2.0f, size * size * size);
+                    rocks.push_back(plant(x, ground(x, z) - scale * 0.07f, z, scale,
+                                          tau * random01(iz, side * 3 + i, 83),
+                                          0.66f + 0.58f * cover));
+                }
+        }
+    }
+    uploadInstances(rocks_, rocks);
 }
 
 void World::update(XMFLOAT3 camera)
@@ -448,11 +695,12 @@ void World::update(XMFLOAT3 camera)
     int px = static_cast<int>(std::floor(camera.x / plantCell));
     int pz = static_cast<int>(std::floor(camera.z / plantCell));
     bool ground = camera.y - this->ground(camera.x, camera.z) < 120;
-    if (vegetation_
-        && (terrainChanged || px != plantX_ || pz != plantZ_ || ground != groundDetail_))
+    if (terrainChanged || px != plantX_ || pz != plantZ_ || ground != groundDetail_)
     {
         groundDetail_ = ground;
-        updatePlants(camera);
+        if (vegetation_)
+            updatePlants(camera);
+        updateRocks(camera);
         plantX_ = px;
         plantZ_ = pz;
     }
@@ -461,6 +709,31 @@ void World::update(XMFLOAT3 camera)
 float World::ground(float x, float z) const
 {
     return sampledTerrain(x, z, baseTile / cells);
+}
+
+void World::placeWalker(XMFLOAT3 &position) const
+{
+    float y = ground(position.x, position.z);
+    if (std::abs(position.z) < riverExtent && riverBankDistance(position.x, position.z) < 4.3f
+        && y < riverLevel(position.z) - 0.40f)
+    {
+        const float origin = position.x;
+        // A spawn or landing inside the river moves to the nearest shallow bank.
+        for (float offset = 0.5f; offset <= 27.0f && y < riverLevel(position.z) - 0.40f;
+             offset += 0.5f)
+            for (float side : {-1.0f, 1.0f})
+            {
+                float x = origin + side * offset;
+                float candidate = ground(x, position.z);
+                if (candidate >= riverLevel(position.z) - 0.40f)
+                {
+                    position.x = x;
+                    y = candidate;
+                    break;
+                }
+            }
+    }
+    position.y = y + eyeHeight;
 }
 
 void World::walk(XMFLOAT3 &position, float dx, float dz) const
@@ -474,7 +747,11 @@ void World::walk(XMFLOAT3 &position, float dx, float dz) const
         if (std::abs(x) > worldLimit || std::abs(z) > worldLimit)
             return false;
         float distance = std::hypot(x - position.x, z - position.z);
-        if (std::abs(ground(x, z) - y) > distance * 1.08f)
+        float nextGround = ground(x, z);
+        if (std::abs(nextGround - y) > distance * 1.08f)
+            return false;
+        if (std::abs(z) < riverExtent && riverBankDistance(x, z) < 2
+            && nextGround < riverLevel(z) - 0.40f && nextGround < y)
             return false;
         if (!vegetation_)
             return true;
@@ -523,14 +800,33 @@ void World::drawTerrain(ID3D11DeviceContext *context, FXMMATRIX viewProjection) 
     }
 }
 
-void World::drawPlants(ID3D11DeviceContext *context, bool shadow) const
+void World::bindTerrainMaterials(ID3D11DeviceContext *context) const
 {
-    if (closeTrees_.count)
-        closeTreeMesh_.draw(context, closeTrees_.buffer.Get(), closeTrees_.count, shadow);
-    if (distantTrees_.count)
-        distantTreeMesh_.draw(context, distantTrees_.buffer.Get(), distantTrees_.count, shadow);
-    if (grass_.count && !shadow)
-        grassMesh_.draw(context, grass_.buffer.Get(), grass_.count, false);
+    ID3D11ShaderResourceView *views[5];
+    for (size_t i = 0; i < groundTextures_.size(); ++i)
+        views[i] = groundTextures_[i].Get();
+    context->PSSetShaderResources(37, static_cast<UINT>(groundTextures_.size()), views);
+}
+
+void World::drawPlants(ID3D11DeviceContext *context, bool shadow,
+                       ID3D11PixelShader *shadowMask) const
+{
+    auto draw = [&](const Mesh &mesh, const Instances &instances)
+    {
+        if (!instances.count)
+            return;
+        if (shadow)
+            context->PSSetShader(mesh.alphaMask ? shadowMask : nullptr, nullptr, 0);
+        mesh.draw(context, instances.buffer.Get(), instances.count, shadow);
+    };
+    for (size_t i = 0; i < trees_.size(); ++i)
+        for (const auto &mesh : treeMeshes_[i])
+            draw(mesh, trees_[i]);
+    draw(fernMesh_, ferns_);
+    draw(rockMesh_, rocks_);
+    size_t grassBatches = shadow ? 2 : grass_.size();
+    for (size_t i = 0; i < grassBatches; ++i)
+        draw(grassMeshes_[i], grass_[i]);
 }
 
 XMFLOAT3 solarDirection(double hour)

@@ -1,4 +1,5 @@
 #include "scene_mesh.hpp"
+#include <wincodec.h>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -79,5 +80,60 @@ void Mesh::draw(ID3D11DeviceContext *context, ID3D11Buffer *instances, UINT coun
         context->PSSetSamplers(3, 5, filters);
     }
     context->DrawIndexedInstanced(indexCount, count, 0, 0, 0);
+}
+
+ComPtr<ID3D11ShaderResourceView> uploadTexture(ID3D11Device *device, ID3D11DeviceContext *context,
+                                               IWICImagingFactory *factory,
+                                               IWICBitmapDecoder *decoder, bool srgb)
+{
+    ComPtr<IWICBitmapFrameDecode> frame;
+    require(decoder->GetFrame(0, &frame), "Read image frame");
+    UINT width, height;
+    require(frame->GetSize(&width, &height), "Read image size");
+    if (!width || !height || width > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION
+        || height > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
+        throw std::runtime_error("Image exceeds D3D11 texture dimensions");
+
+    ComPtr<IWICFormatConverter> rgba;
+    require(factory->CreateFormatConverter(&rgba), "Create image converter");
+    require(rgba->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone,
+                             nullptr, 0, WICBitmapPaletteTypeCustom),
+            "Convert image to RGBA8");
+    UINT stride = width * 4;
+    std::vector<BYTE> pixels(static_cast<size_t>(stride) * height);
+    require(rgba->CopyPixels(nullptr, stride, static_cast<UINT>(pixels.size()), pixels.data()),
+            "Copy image pixels");
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.ArraySize = 1;
+    desc.Format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    ComPtr<ID3D11Texture2D> texture;
+    ComPtr<ID3D11ShaderResourceView> view;
+    require(device->CreateTexture2D(&desc, nullptr, &texture), "Create material texture");
+    require(device->CreateShaderResourceView(texture.Get(), nullptr, &view),
+            "Create material view");
+    context->UpdateSubresource(texture.Get(), 0, nullptr, pixels.data(), stride, 0);
+    context->GenerateMips(view.Get());
+    return view;
+}
+
+ComPtr<ID3D11ShaderResourceView> loadTexture(ID3D11Device *device, ID3D11DeviceContext *context,
+                                             const std::filesystem::path &file, bool srgb)
+{
+    ComPtr<IWICImagingFactory> factory;
+    require(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                             IID_PPV_ARGS(&factory)),
+            "Create world image decoder");
+    ComPtr<IWICBitmapDecoder> decoder;
+    const std::string operation = "Decode world texture " + file.filename().string();
+    require(factory->CreateDecoderFromFilename(file.c_str(), nullptr, GENERIC_READ,
+                                               WICDecodeMetadataCacheOnLoad, &decoder),
+            operation.c_str());
+    return uploadTexture(device, context, factory.Get(), decoder.Get(), srgb);
 }
 }
