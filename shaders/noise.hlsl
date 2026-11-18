@@ -10,7 +10,7 @@ cbuffer NoiseParameters : register(b1)
 RWTexture3D<float4> NoiseOutput : register(u0);
 RWTexture2D<float4> WeatherOutput : register(u0);
 RWTexture2D<float2> DisplacementOutput : register(u1);
-RWTexture2D<float2> CloudMapOutput : register(u0);
+RWTexture2D<float4> CloudMapOutput : register(u0);
 RWTexture2D<float4> CloudHeightOutput : register(u1);
 
 float3 periodicCell(float3 p, float period)
@@ -102,7 +102,31 @@ void NoiseCS(uint3 id : SV_DispatchThreadID)
     NoiseOutput[id] = float4(remap01(perlinWorley, 0.42, 0.94), w0, w1, w2);
 }
 
-// 2D天候マップ。R: 被覆率、G: 湿度・降水の変調、B: 雲形の地域差。
+// 周期境界をまたいで、不規則な中心と半径を持つ積雲の水平断面を作る。
+float cumulusCore(float2 uv)
+{
+    const float cells = 15;
+    float2 position = uv * cells;
+    float2 origin = floor(position);
+    float2 local = frac(position);
+    float core = 0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y)
+        [unroll]
+        for (int x = -1; x <= 1; ++x)
+        {
+            float2 neighbor = float2(x, y);
+            float3 cell = periodicCell(float3(origin + neighbor, 0), cells);
+            float3 seed = hash33(cell + float3(3.1, 7.4, 12.8));
+            float2 center = neighbor + lerp(0.09, 0.91, seed.xy);
+            float radius = lerp(0.29, 0.65, seed.z);
+            float2 delta = (local - center) / radius;
+            core = max(core, saturate(1 - dot(delta, delta)));
+        }
+    return core;
+}
+
+// 2D天候マップ。RGBA は被覆率、湿度、雲形の地域差、積雲中心への近さ。
 [numthreads(8, 8, 1)]
 void WeatherCS(uint3 id : SV_DispatchThreadID)
 {
@@ -120,14 +144,14 @@ void WeatherCS(uint3 id : SV_DispatchThreadID)
     }
     float type = valueNoise(float3(uv * 16, 3.2), 16);
     float rain = valueNoise(float3(uv * 8, 5.6), 8);
-    WeatherOutput[id.xy] = float4(coverage, rain, type, 1);
-
     // 同じ周期を持つ独立2成分。雲のレイマーチでXY面とXZ面から参照する。
     float2 coarse = float2(valueNoise(float3(uv * 9, 2.17), 9),
                            valueNoise(float3(uv * 9, 5.31), 9));
     float2 fine = float2(valueNoise(float3(uv * 23, 8.46), 23),
                          valueNoise(float3(uv * 23, 1.57), 23));
     DisplacementOutput[id.xy] = lerp(coarse, fine, 0.32);
+    float2 cumulusUv = uv + float2(0.038, 0.067) + (coarse - 0.5) * 0.018;
+    WeatherOutput[id.xy] = float4(coverage, rain, type, cumulusCore(cumulusUv));
 }
 
 float2 cloudHeightThreshold(float h, float type)
@@ -150,13 +174,30 @@ void CloudMapCS(uint3 id : SV_DispatchThreadID)
         return;
     float2 uv = (id.xy + 0.5) / float2(w, h);
     // R/G は下層・上層の被覆率。大きな天候分布を共有し、上層にだけずらした分布を混ぜる。
-    float3 regional = WeatherMap.SampleLevel(LinearWrap, uv, 0).rgb;
+    float4 regional = WeatherMap.SampleLevel(LinearWrap, uv, 0);
     float upper = WeatherMap.SampleLevel(LinearWrap, uv + float2(0.37, 0.17), 0).r;
     float2 mask = float2(regional.r, lerp(regional.r, upper, 0.46));
     float lowSun = 1 - smoothstep(-0.08, 0.45, SunDirection.y);
     float2 weatherBias = CloudLayer.z - 0.018 + float2(0.018, 0) * lowSun;
     weatherBias.y += (Weather.x - 0.65) * 0.06 + regional.g * Weather.y * 0.04;
-    CloudMapOutput[id.xy] = saturate((mask - 0.5) * 1.05 + weatherBias);
+    float2 coverage = saturate((mask - 0.5) * 1.05 + weatherBias);
+    float2 heightBounds = float2(0, 1);
+    if (CUMULUS_CLOUDS)
+    {
+        float cumulus = cumulusAmount();
+        float core = regional.a;
+        float separation = smoothstep(0.03, 0.42, core);
+        float2 cumulusCoverage = saturate(coverage + core * 0.22) * separation;
+        coverage = lerp(coverage, cumulusCoverage, cumulus);
+
+        // 1 - r² の平方根から雲の厚みを求め、B/Aに雲底と雲頂を書き込む。
+        float2 structure = CloudDisplacement.SampleLevel(LinearWrap, uv * 3 + float2(0.19, 0.34), 0);
+        float centerHeight = lerp(0.28, 0.67, smoothstep(0.16, 0.84, structure.y));
+        float halfThickness = sqrt(core) * lerp(0.28, 0.56, structure.x);
+        float2 cumulusBounds = clamp(centerHeight + float2(-1, 1) * halfThickness, 0, 1);
+        heightBounds = lerp(heightBounds, cumulusBounds, cumulus);
+    }
+    CloudMapOutput[id.xy] = float4(coverage, heightBounds);
 
     if (id.x == 0 && id.y < 128)
     {

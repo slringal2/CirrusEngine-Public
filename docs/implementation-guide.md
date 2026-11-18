@@ -26,7 +26,7 @@ flowchart LR
 | 入道雲の大まかな3D形状 | [`cloud_volume.hpp`](../src/cloud_volume.hpp): `cloudControlCells`, `bakeCloudControlVolume` |
 | 密度と渦の座標変換 | [`formations.hlsli`](../shaders/formations.hlsli): `sampleTowerCloud`, `compositeFormationDensity` |
 | 雲の配置マップと高度LUT | [noise.hlsl](../shaders/noise.hlsl) の CloudMapCS |
-| 通常の雲海・散乱の共通式 | [`common.hlsli`](../shaders/common.hlsli): `backgroundCloudDensity`, `cloudDensitySample` |
+| 通常の雲海・散乱の共通式 | [`common.hlsli`](../shaders/common.hlsli) の `backgroundCloudShape`、`cloudDensitySample` |
 | 雲の描画・自己遮蔽・再構成 | [`clouds.hlsl`](../shaders/clouds.hlsl): `traceCloudRay`, `ShadowCS`, `TemporalCS`, `RepairCS` |
 | 天空光と雨霧 | [atmosphere.hlsl](../shaders/atmosphere.hlsl) の SkyAmbientCS と AerialCS |
 | GPUリソースと描画順 | [`renderer.cpp`](../src/renderer.cpp): `initializeResources`, `resources`, `frame` |
@@ -105,9 +105,12 @@ accumulatedT *= segmentT
 
 ## 6. スキャッタリングと影
 
-`lightOpticalDepth`は太陽方向へ35 mから歩幅を広げ、近傍では細部を含む密度を積分します。単一散乱は前方と後方のHG位相関数に`exp(-tau)`を掛けます。多重散乱は方向と減衰を弱めた項と等方の項で近似します。
+`lightOpticalDepth`は太陽方向へ35 mから歩幅を広げ、近傍では細部を含む密度を積分します。
 
-雲の天空光は、上方120・360・900 mの雲密度から減衰を見積もります。高さによる天空光の色と合わせ、上に雲が重なるところが暗くなるようにします。近い視線サンプル間では、距離と密度差が小さい場合に太陽と天空の遮蔽を共有します。`SkyAmbientCS`は空の散乱を1色にまとめて、地表と霧の照明へ渡します。
+- **Classic** は前方・後方のHG位相関数で単一散乱を計算し、指向性を広げた項と等方の項で多重散乱を近似します。上方120・360・900 mの雲密度から天空光の遮蔽を見積もり、雲が重なる場所を暗くします。
+- **Cumulus** は `CloudMapCS` がB/Aに焼いた雲底・雲頂で高度を正規化します。太陽方向の短いレイと雲影マップを組み合わせ、2つのHG位相関数で散乱を近似します。`SkyAmbientCS` が1色に集約した天空光を雲の環境光に使います。
+
+雲の配置・影・レイマーチ・画素修復は起動時に両スタイルをコンパイルします。F4を押すと同じスタイルのシェーダー4つに切り替え、雲影と配置マップを作り直して全論理画素を描画します。
 
 `ShadowCS`は48km四方の各テクセルを太陽側から進み、透過率の4乗を重みに遮蔽深度を更新します。Highでは768²、通常層は40区間、大型雲が上に出ると24区間を追加します。RG16Fに残存透過率と指数化した深度を保存し、受光点の深度で復号します。半影の幅に応じて参照ミップを広げます。地形の影は2048²の深度マップと3×3 PCFです。[講演スライド28–36と実装対応](cloud-research.md#rockstarのsiggraph-2019講演)。
 

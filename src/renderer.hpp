@@ -30,6 +30,12 @@ enum class Quality
     Ultra
 };
 
+enum class CloudStyle
+{
+    Classic,
+    Cumulus
+};
+
 // 既存の0～8を保ち、scene.hlsl の textureDebugView と同じ番号で共有する。
 enum class DebugView
 {
@@ -73,6 +79,7 @@ struct Options
     int width = 1600, height = 900, frames = 48;
     WeatherKind weather = WeatherKind::PartlyCloudy;
     Quality quality = Quality::High;
+    CloudStyle cloudStyle = CloudStyle::Classic;
     float elevation = 28, azimuth = -26, exposure = 1.0f;
     bool headless = false, warp = false, checkShaders = false, ui = true, shadows = true,
          clouds = true;
@@ -140,13 +147,19 @@ struct Texture
     ComPtr<ID3D11UnorderedAccessView> uav;
 };
 
+struct CloudShaderSet
+{
+    ComPtr<ID3D11ComputeShader> mapCS, shadowCS, marchCS, repairCS;
+};
+
 struct ShaderSet
 {
     ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS, grassVS;
     ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS,
         grassPS;
-    ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, cloudMapCS, transmittanceCS, skyCS,
-        skyAmbientCS, shadowCS, cloudCS, temporalCS, repairCS, aerialCS, grassPlacementCS;
+    ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, transmittanceCS, skyCS, skyAmbientCS,
+        temporalCS, aerialCS, grassPlacementCS;
+    std::array<CloudShaderSet, 2> cloudStyles;
     ComPtr<ID3D11InputLayout> geometryLayout, meshLayout;
 };
 

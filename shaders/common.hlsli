@@ -3,6 +3,12 @@
 
 #include "river_profile.hlsli"
 
+#ifndef CIRRUS_CUMULUS_CLOUDS
+#define CIRRUS_CUMULUS_CLOUDS 0
+#endif
+
+static const bool CUMULUS_CLOUDS = CIRRUS_CUMULUS_CLOUDS != 0;
+
 // ワールド座標・距離の単位はm。地表の原点を y=0 とする球形の惑星を使う。
 static const float PI = 3.14159265359;
 static const float PLANET_RADIUS = 6360000.0;
@@ -78,7 +84,7 @@ Texture2D<float4> RainTexture : register(t18);
 Texture2D<uint> CloudReconstruction : register(t19);
 Texture3D<float> TowerControlVolume : register(t20);
 Texture3D<float4> CloudWarpVolume : register(t21);
-Texture2D<float2> CloudMap : register(t22);
+Texture2D<float4> CloudMap : register(t22);
 Texture2D<float4> CloudHeightLut : register(t23);
 Texture2D<float2> CloudDisplacement : register(t24);
 Texture2D<float4> SkyAmbient : register(t25);
@@ -233,7 +239,13 @@ float3 sunTransmittance(float3 p)
         .rgb;
 }
 
-float2 cloudPlacement(float2 advectedXZ)
+float cumulusAmount()
+{
+    // 降水の少ない天候で、雲塊が上へ盛り上がる形を強める。
+    return smoothstep(0.38, 0.88, Weather.x) * (1 - smoothstep(0.18, 0.67, Weather.y));
+}
+
+float4 cloudPlacement(float2 advectedXZ)
 {
     return CloudMap.SampleLevel(LinearWrap, advectedXZ / 65536.0, 0);
 }
@@ -264,13 +276,65 @@ struct BackgroundCloudSample
     float density;
     float3 shapePosition;
     float3 warp;
+    float shape;
+    float profile;
+    float threshold;
 };
+
+float cumulusDensity(float shape, float threshold, float erosion, float cumulus)
+{
+    float density = saturate(remap01(shape, threshold, 1) * lerp(1.85, 1.72, cumulus));
+    // 薄い縁を強く削り、密度の高い中心を残す。
+    density = remap01(density, erosion * (1 - density * 0.55), 1);
+    return density * lerp(1, smoothstep(0, 0.28, density), cumulus * 0.60);
+}
+
+BackgroundCloudSample cumulusCloudShape(float3 p, float h)
+{
+    BackgroundCloudSample result = (BackgroundCloudSample)0;
+    // 配置マップのB/Aに焼いた底と頂を使い、位置ごとに高さを正規化する。
+    float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
+    float4 placement = cloudPlacement(shapePosition.xz);
+    float localHeight = (h - placement.b) / max(placement.a - placement.b, 0.01);
+    float cumulus = cumulusAmount();
+    float upperWeight = smoothstep(0.25, 0.72, localHeight) * lerp(1, 0.28, cumulus);
+    float coverage = lerp(placement.r, placement.g, upperWeight);
+    float type = saturate(Weather.x + (placement.g - placement.r) * 0.70);
+
+    // 積雲は底と頂を絞って丸め、降水が強まると同じプロファイルから曇天へ補間する。
+    float bottom = smoothstep(0, lerp(0.055, 0.20, cumulus), localHeight);
+    float crownStart = lerp(lerp(0.20, 0.38, type), 0.66, cumulus);
+    float crownEnd = lerp(lerp(0.46, 0.98, type), 1.0, cumulus);
+    float profile = bottom * (1 - smoothstep(crownStart, crownEnd, localHeight));
+    if (profile <= 0 || coverage <= 0)
+        return result;
+
+    shapePosition.xz += float2(h * h * 480.0, -h * 220.0) * lerp(1, 0.55, cumulus);
+    shapePosition.xz *= lerp(1, 1.06, cumulus);
+    shapePosition.y *= lerp(lerp(1.5, 0.9, type), 0.83, cumulus);
+    // Perlin–Worley の大きな塊に GBA の小さな膨らみを重ねる。
+    float4 base = BaseNoise.SampleLevel(LinearWrap,
+                                      shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0);
+    float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
+    float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
+    envelope = lerp(envelope, 0.09 + 0.91 * envelope, cumulus);
+    result.shape = envelope * profile;
+    result.profile = profile;
+    result.threshold = 1 - coverage;
+    result.density = cumulusDensity(result.shape, result.threshold, 0, cumulus);
+    result.shapePosition = shapePosition;
+    result.warp = base.gba - 0.5;
+    return result;
+}
 
 BackgroundCloudSample backgroundCloudShape(float3 p, float h)
 {
     BackgroundCloudSample result = (BackgroundCloudSample)0;
     if (h <= 0 || h >= 1)
         return result;
+
+    if (CUMULUS_CLOUDS)
+        return cumulusCloudShape(p, h);
 
     // 天候デモと同じ65.536 km周期の場で、雲量と鉛直方向の雲種を決める。
     float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
@@ -301,10 +365,27 @@ BackgroundCloudSample backgroundCloudShape(float3 p, float h)
     return result;
 }
 
+float detailCumulusCloud(BackgroundCloudSample background)
+{
+    float cumulus = cumulusAmount();
+    float3 detailPosition = background.shapePosition - float3(0, Wind.z, 0);
+    float3 detailUv = detailPosition * 0.00075 + background.warp * 0.07;
+    float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, 0);
+    // RGBで膨らみを刻み、B/Aで縁を侵食する。粗い形から密度を削るため、空区間の外へは広がらない。
+    float3 lobeWeights =
+        lerp(float3(0.115, 0.054, 0.036), float3(0.205, 0.042, 0.026), cumulus);
+    float shape = background.shape - dot(1 - noise.rgb, lobeWeights) * background.profile;
+    float erosion = dot(1 - noise.ba, float2(0.21, 0.23));
+    return cumulusDensity(shape, background.threshold, erosion, cumulus);
+}
+
 float detailBackgroundCloud(BackgroundCloudSample background)
 {
     if (background.density <= 0)
         return 0;
+    if (CUMULUS_CLOUDS)
+        return detailCumulusCloud(background);
+
     // 表面の凹凸と薄い縁を別の周波数で削り、密度の高い中心を残す。
     float3 detailPosition = background.shapePosition - float3(0, Wind.z, 0);
     float3 noise = DetailNoise.SampleLevel(LinearWrap,

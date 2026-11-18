@@ -87,6 +87,16 @@ cirrus::Options arguments()
             o.fullCloudLighting = true;
         else if (a == L"--no-checkerboard")
             o.checkerboard = false;
+        else if (a == L"--cloud-style")
+        {
+            const auto style = next();
+            if (style == L"classic")
+                o.cloudStyle = cirrus::CloudStyle::Classic;
+            else if (style == L"cumulus")
+                o.cloudStyle = cirrus::CloudStyle::Cumulus;
+            else
+                throw std::runtime_error("Cloud style must be classic or cumulus");
+        }
         else if (a == L"--formations")
         {
             o.formationMode = ascii(next());
