@@ -1581,7 +1581,7 @@ void Renderer::drawUi()
             : "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save";
     ui_.text(38, static_cast<float>(height_) - 56, help, 0xffbdccc3, 0.72f);
     if (!status_.empty())
-        ui_.text(28, static_cast<float>(height_) - 94, status_, 0xffc4dfca, 0.73f);
+        ui_.text(38, static_cast<float>(height_) - 39, status_, 0xffc4dfca, 0.73f);
     if (paused_)
         ui_.text(350, weather_.demo() ? 108.0f : 80.0f, "PAUSED", 0xffd3e9cc, 0.85f);
     if (weather_.demo() && !options_.textureViewer)
