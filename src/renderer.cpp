@@ -69,7 +69,7 @@ constexpr std::array<TextureViewInfo, static_cast<size_t>(DebugView::Count)> tex
      true},
     {"SMOOTH CLOUD WARP", "RGBA16F / RGB", "Periodic smooth XYZ displacement, encoded in [0,1].",
      true},
-    {"CLOUD PLACEMENT", "RG16F", "R/G: lower/upper cloud coverage. Period: 65.536 km."},
+    {"CLOUD PLACEMENT", "RGBA16F / RG", "R/G: lower/upper cloud coverage. Period: 65.536 km."},
     {"CLOUD HEIGHT LUT", "RGBA8 / RGB", "RG: density thresholds. B: softness. Height goes down."},
     {"CLOUD SHADOW DEPTH", "RG16F / G", "Light-space occluder depth. White: clear or far."},
     {"METALLIC", "RGBA16F / A", "White: metal. Black: dielectric."},
@@ -125,11 +125,12 @@ float terrainHeight(float x, float z)
     return hills + distant * (ridge * 2200 + fbm(x * 0.00022f, z * 0.00022f) * 450);
 }
 
-ComPtr<ID3DBlob> compile(const std::filesystem::path &path, const char *entry, const char *profile)
+ComPtr<ID3DBlob> compile(const std::filesystem::path &path, const char *entry, const char *profile,
+                        const D3D_SHADER_MACRO *defines = nullptr)
 {
     ComPtr<ID3DBlob> shader, errors;
     HRESULT hr =
-        D3DCompileFromFile(path.c_str(), nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, entry, profile,
+        D3DCompileFromFile(path.c_str(), defines, D3D_COMPILE_STANDARD_FILE_INCLUDE, entry, profile,
                            D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3
                                | D3DCOMPILE_WARNINGS_ARE_ERRORS,
                            0, &shader, &errors);
@@ -316,9 +317,10 @@ ShaderSet Renderer::compileShaders()
                                            &result),
                 entry);
     };
-    auto cs = [&](const wchar_t *file, const char *entry, ComPtr<ID3D11ComputeShader> &result)
+    auto cs = [&](const wchar_t *file, const char *entry, ComPtr<ID3D11ComputeShader> &result,
+                  const D3D_SHADER_MACRO *defines = nullptr)
     {
-        auto code = compile(path(file), entry, "cs_5_0");
+        auto code = compile(path(file), entry, "cs_5_0", defines);
         require(device_->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(),
                                              nullptr, &result),
                 entry);
@@ -339,15 +341,22 @@ ShaderSet Renderer::compileShaders()
     cs(L"grass.hlsl", "GrassPlacementCS", s.grassPlacementCS);
     cs(L"noise.hlsl", "NoiseCS", s.noiseCS);
     cs(L"noise.hlsl", "WeatherCS", s.weatherCS);
-    cs(L"noise.hlsl", "CloudMapCS", s.cloudMapCS);
     cs(L"atmosphere.hlsl", "TransmittanceCS", s.transmittanceCS);
     cs(L"atmosphere.hlsl", "SkyCS", s.skyCS);
     cs(L"atmosphere.hlsl", "SkyAmbientCS", s.skyAmbientCS);
     cs(L"atmosphere.hlsl", "AerialCS", s.aerialCS);
-    cs(L"clouds.hlsl", "ShadowCS", s.shadowCS);
-    cs(L"clouds.hlsl", "CloudCS", s.cloudCS);
     cs(L"clouds.hlsl", "TemporalCS", s.temporalCS);
-    cs(L"clouds.hlsl", "RepairCS", s.repairCS);
+    // 雲の配置・影・描画・画素修復を同じ密度モデルの組で切り替える。
+    const D3D_SHADER_MACRO cumulus[] = {{"CIRRUS_CUMULUS_CLOUDS", "1"}, {nullptr, nullptr}};
+    for (size_t i = 0; i < s.cloudStyles.size(); ++i)
+    {
+        auto &style = s.cloudStyles[i];
+        const auto *defines = i == static_cast<size_t>(CloudStyle::Cumulus) ? cumulus : nullptr;
+        cs(L"noise.hlsl", "CloudMapCS", style.mapCS, defines);
+        cs(L"clouds.hlsl", "ShadowCS", style.shadowCS, defines);
+        cs(L"clouds.hlsl", "CloudCS", style.marchCS, defines);
+        cs(L"clouds.hlsl", "RepairCS", style.repairCS, defines);
+    }
     D3D11_INPUT_ELEMENT_DESC layout[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -476,7 +485,7 @@ void Renderer::initializeResources()
     require(device_->CreateDepthStencilState(&dd, &depthOff_), "No depth state");
     weatherMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true, true);
     cloudDisplacement_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
-    cloudMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true);
+    cloudMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     cloudHeightLut_ = makeTexture(1, 128, DXGI_FORMAT_R8G8B8A8_UNORM, false, true);
     // 透過率 LUT は高度×太陽光の角度。背景の空はカメラ視線ごとに計算する。
     // 空の環境光は上半球の散乱を平均した 1 テクセルを霧と地表で共有する。
@@ -1236,6 +1245,8 @@ void Renderer::frame(double dt, bool focused)
     updateConstants();
     startTiming();
 
+    const auto &cloudShaders = shaders_.cloudStyles[static_cast<size_t>(options_.cloudStyle)];
+
     // 1. 大気の太陽透過率LUT → 雲の配置・高度LUT → 雲影。
     auto input = resources();
     // LUTの内容は湿度由来のエアロゾル倍率だけに依存する。静止天候では再利用する。
@@ -1254,7 +1265,7 @@ void Renderer::frame(double dt, bool focused)
     {
         input = resources();
         input[22] = input[23] = nullptr;
-        compute(shaders_.cloudMapCS.Get(), 64, 64, 1,
+        compute(cloudShaders.mapCS.Get(), 64, 64, 1,
                 {cloudMap_.uav.Get(), cloudHeightLut_.uav.Get()}, input);
         cachedCloudMapWeather_ = cloudMapWeather;
     }
@@ -1262,7 +1273,7 @@ void Renderer::frame(double dt, bool focused)
     {
         input = resources();
         input[3] = nullptr;
-        compute(shaders_.shadowCS.Get(), (shadowSize_ + 7) / 8, (shadowSize_ + 7) / 8, 1,
+        compute(cloudShaders.shadowCS.Get(), (shadowSize_ + 7) / 8, (shadowSize_ + 7) / 8, 1,
                 {shadowMap_.uav.Get()}, input);
         // 地面や霧のサンプルは、雲から遠いほど粗いミップを読んで軟らかい影を作る。
         context_->GenerateMips(shadowMap_.srv.Get());
@@ -1297,13 +1308,13 @@ void Renderer::frame(double dt, bool focused)
         // 最初のフレームと視点切り替え時は履歴側へ全画素を直接描く。
         // これにより、通常フレームの生バッファは半分の容量でよい。
         context_->ClearUnorderedAccessViewUint(reconstruction_.uav.Get(), clearMask);
-        compute(shaders_.cloudCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+        compute(cloudShaders.marchCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
                 {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         ++fullCloudFrames_;
     }
     else
     {
-        compute(shaders_.cloudCS.Get(), (rawCloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+        compute(cloudShaders.marchCS.Get(), (rawCloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
                 {cloudRaw_.uav.Get(), metaRaw_.uav.Get()}, input);
         if (checkerActive_)
             ++checkerFrames_;
@@ -1328,7 +1339,7 @@ void Renderer::frame(double dt, bool focused)
             // 履歴が成立しなかった未計算画素だけ、同じ積分で埋め直す。
             // historyIndex_は修復完了まで切り替えず、出力とのSRV競合を防ぐ。
             input = resources();
-            compute(shaders_.repairCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+            compute(cloudShaders.repairCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
                     {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         }
     }
@@ -1524,7 +1535,11 @@ void Renderer::drawUi()
             options_.checkerboard = !options_.checkerboard;
             makeTargets();
         }
-        if (ui_.button(44, 447, 254, 32, "TEXTURES [F3]"))
+        const char *styleLabel =
+            options_.cloudStyle == CloudStyle::Classic ? "CLASSIC [F4]" : "CUMULUS [F4]";
+        if (ui_.button(44, 447, 122, 32, styleLabel, false, 0.7f))
+            key(VK_F4);
+        if (ui_.button(176, 447, 122, 32, "TEXTURES [F3]", false, 0.7f))
             options_.textureViewer = true;
         if (width_ >= 920)
         {
@@ -1566,7 +1581,7 @@ void Renderer::drawUi()
             : "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save";
     ui_.text(38, static_cast<float>(height_) - 56, help, 0xffbdccc3, 0.72f);
     if (!status_.empty())
-        ui_.text(28, static_cast<float>(height_) - 94, status_, 0xffc4dfca, 0.73f);
+        ui_.text(38, static_cast<float>(height_) - 39, status_, 0xffc4dfca, 0.73f);
     if (paused_)
         ui_.text(350, weather_.demo() ? 108.0f : 80.0f, "PAUSED", 0xffd3e9cc, 0.85f);
     if (weather_.demo() && !options_.textureViewer)
@@ -1798,6 +1813,15 @@ void Renderer::key(UINT k)
         options_.debugView = (options_.debugView + 1) % static_cast<int>(DebugView::Count);
     if (k == VK_F3)
         options_.textureViewer = !options_.textureViewer;
+    if (k == VK_F4)
+    {
+        options_.cloudStyle =
+            options_.cloudStyle == CloudStyle::Classic ? CloudStyle::Cumulus : CloudStyle::Classic;
+        // 切り替えたフレームから、新しい密度で配置・影・全画素を計算する。
+        cachedCloudMapWeather_ = {-1, -1, -1, -1};
+        shadowValid_ = false;
+        historyValid_ = false;
+    }
     if (k == VK_F12)
         captureRequested_ = true;
     if (k == VK_F7)
@@ -1997,6 +2021,8 @@ std::string Renderer::diagnostics()
         << ", \"height\": " << height_ << ",\n";
     out << "  \"weather\": \"" << weatherName(weather_.target()) << "\", \"quality\": \""
         << qualityNames[static_cast<int>(options_.quality)] << "\",\n";
+    out << "  \"cloud_style\": \""
+        << (options_.cloudStyle == CloudStyle::Classic ? "classic" : "cumulus") << "\",\n";
     out << "  \"sun_elevation\": " << options_.elevation
         << ", \"sun_azimuth\": " << options_.azimuth << ",\n";
     out << "  \"solar_hour\": " << options_.timeOfDay << ",\n";
