@@ -69,7 +69,7 @@ constexpr std::array<TextureViewInfo, static_cast<size_t>(DebugView::Count)> tex
      true},
     {"SMOOTH CLOUD WARP", "RGBA16F / RGB", "Periodic smooth XYZ displacement, encoded in [0,1].",
      true},
-    {"CLOUD PLACEMENT", "RG16F", "R/G: lower/upper cloud coverage. Period: 65.536 km."},
+    {"CLOUD PLACEMENT", "RGBA16F / RG", "RG: lower/upper coverage. BA: normalized base/top."},
     {"CLOUD HEIGHT LUT", "RGBA8 / RGB", "RG: density thresholds. B: softness. Height goes down."},
     {"CLOUD SHADOW DEPTH", "RG16F / G", "Light-space occluder depth. White: clear or far."},
     {"METALLIC", "RGBA16F / A", "White: metal. Black: dielectric."},
@@ -476,7 +476,7 @@ void Renderer::initializeResources()
     require(device_->CreateDepthStencilState(&dd, &depthOff_), "No depth state");
     weatherMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true, true);
     cloudDisplacement_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
-    cloudMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16_FLOAT, false, true);
+    cloudMap_ = makeTexture(512, 512, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     cloudHeightLut_ = makeTexture(1, 128, DXGI_FORMAT_R8G8B8A8_UNORM, false, true);
     // 透過率 LUT は高度×太陽光の角度。背景の空はカメラ視線ごとに計算する。
     // 空の環境光は上半球の散乱を平均した 1 テクセルを雲・霧・地表で共有する。

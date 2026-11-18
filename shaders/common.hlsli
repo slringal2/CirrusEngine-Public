@@ -78,7 +78,7 @@ Texture2D<float4> RainTexture : register(t18);
 Texture2D<uint> CloudReconstruction : register(t19);
 Texture3D<float> TowerControlVolume : register(t20);
 Texture3D<float4> CloudWarpVolume : register(t21);
-Texture2D<float2> CloudMap : register(t22);
+Texture2D<float4> CloudMap : register(t22);
 Texture2D<float4> CloudHeightLut : register(t23);
 Texture2D<float2> CloudDisplacement : register(t24);
 Texture2D<float4> SkyAmbient : register(t25);
@@ -233,7 +233,13 @@ float3 sunTransmittance(float3 p)
         .rgb;
 }
 
-float2 cloudPlacement(float2 advectedXZ)
+float cumulusAmount()
+{
+    // 降水の少ない積雲の天候では、雲塊が上へ盛り上がる形を強める。
+    return smoothstep(0.38, 0.88, Weather.x) * (1 - smoothstep(0.18, 0.67, Weather.y));
+}
+
+float4 cloudPlacement(float2 advectedXZ)
 {
     return CloudMap.SampleLevel(LinearWrap, advectedXZ / 65536.0, 0);
 }
@@ -264,26 +270,33 @@ float backgroundCloudDensity(float3 p, float h, bool detail)
     if (h <= 0 || h >= 1)
         return 0;
 
-    // 雲の被覆率を高度に応じて下層から上層へ補間する。下層の値は雨霧も参照する。
+    // B/A に焼いた雲底と雲頂で高さを正規化する。山のように盛り上がる場所と低い雲ができる。
     float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
-    float2 placement = cloudPlacement(shapePosition.xz);
-    float coverage = lerp(placement.x, placement.y, smoothstep(0.25, 0.72, h));
-    float type = saturate(Weather.x + (placement.y - placement.x) * 0.70);
+    float4 placement = cloudPlacement(shapePosition.xz);
+    float localHeight = (h - placement.b) / max(placement.a - placement.b, 0.01);
+    float cumulus = cumulusAmount();
+    float upperWeight = smoothstep(0.25, 0.72, localHeight) * lerp(1, 0.28, cumulus);
+    float coverage = lerp(placement.r, placement.g, upperWeight);
+    float type = saturate(Weather.x + (placement.g - placement.r) * 0.70);
 
-    // 雲底をそろえ、積雲では上へ厚く、層雲では低く広がる高度プロファイルを作る。
-    float bottom = smoothstep(0.0, 0.055, h);
-    float top = 1 - smoothstep(lerp(0.20, 0.38, type), lerp(0.46, 0.98, type), h);
+    // 積雲の底と頂を両方絞り、上下に丸みを付ける。曇天へは同じ高度プロファイルから補間する。
+    float bottom = smoothstep(0, lerp(0.055, 0.20, cumulus), localHeight);
+    float crownStart = lerp(lerp(0.20, 0.38, type), 0.66, cumulus);
+    float crownEnd = lerp(lerp(0.46, 0.98, type), 1.0, cumulus);
+    float top = 1 - smoothstep(crownStart, crownEnd, localHeight);
     float profile = bottom * top;
     if (profile <= 0 || coverage <= 0)
         return 0;
 
-    shapePosition.xz += float2(h * h * 480.0, -h * 220.0);
-    shapePosition.y *= lerp(1.5, 0.9, type);
+    shapePosition.xz += float2(h * h * 480.0, -h * 220.0) * lerp(1, 0.55, cumulus);
+    shapePosition.xz *= lerp(1, 1.06, cumulus);
+    shapePosition.y *= lerp(lerp(1.5, 0.9, type), 0.83, cumulus);
     // R の Perlin–Worley で大きな塊を作り、同じ読み取りの GBA で小さな膨らみを重ねる。
     float4 base = BaseNoise.SampleLevel(LinearWrap,
                                         shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0);
     float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
     float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
+    envelope = lerp(envelope, 0.09 + 0.91 * envelope, cumulus);
     // coverage は形のしきい値へ使い、雲が少ない天候でも濃い雲の中心を残す。
     float threshold = 1 - coverage;
     float shape = envelope * profile;
@@ -296,12 +309,15 @@ float backgroundCloudDensity(float3 p, float h, bool detail)
         float3 detailPosition = shapePosition - float3(0, Wind.z, 0);
         float3 detailUv = detailPosition * 0.00075 + (base.gba - 0.5) * 0.07;
         float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, 0);
-        shape -= dot(1 - noise.rgb, float3(0.115, 0.054, 0.036)) * profile;
+        float3 lobeWeights =
+            lerp(float3(0.115, 0.054, 0.036), float3(0.205, 0.042, 0.026), cumulus);
+        shape -= dot(1 - noise.rgb, lobeWeights) * profile;
         erosion = dot(1 - noise.ba, float2(0.21, 0.23));
     }
-    float density = saturate(remap01(shape, threshold, 1) * 1.85);
+    float density = saturate(remap01(shape, threshold, 1) * lerp(1.85, 1.72, cumulus));
     // 低密度の縁ほど強く削り、密度の高い中心部は残す。
-    return remap01(density, erosion * (1 - density * 0.55), 1) * CloudLayer.w;
+    density = remap01(density, erosion * (1 - density * 0.55), 1);
+    return density * lerp(1, smoothstep(0, 0.28, density), cumulus * 0.60) * CloudLayer.w;
 }
 
 // 視線・太陽遮蔽・雲影に共通の背景雲海＋局所形状を返す。
