@@ -235,7 +235,7 @@ float3 sunTransmittance(float3 p)
 
 float2 cloudPlacement(float2 advectedXZ)
 {
-    return CloudMap.SampleLevel(LinearWrap, advectedXZ / 32768.0, 0);
+    return CloudMap.SampleLevel(LinearWrap, advectedXZ / 65536.0, 0);
 }
 
 float3 cloudHeightProfile(float h)
@@ -264,15 +264,44 @@ float backgroundCloudDensity(float3 p, float h, bool detail)
     if (h <= 0 || h >= 1)
         return 0;
 
-    float3 advected = p - float3(Wind.x, 0, Wind.y);
-    float2 displacement = float2(410, -260) * h * h;
-    float2 placement = cloudPlacement(advected.xz + displacement);
-    float3 profile = cloudHeightProfile(h);
-    float2 shape = smoothstep(profile.xy, profile.xy + float2(0.19, 0.22), placement);
-    float density = max(shape.x, shape.y);
-    if (detail && density > 0)
-        density = erodeCloudShape(density, advected, profile.z);
-    return density * CloudLayer.w;
+    // 雲の被覆率を高度に応じて下層から上層へ補間する。下層の値は雨霧も参照する。
+    float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
+    float2 placement = cloudPlacement(shapePosition.xz);
+    float coverage = lerp(placement.x, placement.y, smoothstep(0.25, 0.72, h));
+    float type = saturate(Weather.x + (placement.y - placement.x) * 0.70);
+
+    // 雲底をそろえ、積雲では上へ厚く、層雲では低く広がる高度プロファイルを作る。
+    float bottom = smoothstep(0.0, 0.055, h);
+    float top = 1 - smoothstep(lerp(0.20, 0.38, type), lerp(0.46, 0.98, type), h);
+    float profile = bottom * top;
+    if (profile <= 0 || coverage <= 0)
+        return 0;
+
+    shapePosition.xz += float2(h * h * 480.0, -h * 220.0);
+    shapePosition.y *= lerp(1.5, 0.9, type);
+    // R の Perlin–Worley で大きな塊を作り、同じ読み取りの GBA で小さな膨らみを重ねる。
+    float4 base = BaseNoise.SampleLevel(LinearWrap,
+                                        shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0);
+    float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
+    float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
+    // coverage は形のしきい値へ使い、雲が少ない天候でも濃い雲の中心を残す。
+    float threshold = 1 - coverage;
+    float shape = envelope * profile;
+    float erosion = 0;
+
+    if (detail && shape > threshold)
+    {
+        // RGB で表面に丸い膨らみを刻み、細かい B/A で縁を侵食する。
+        // 詳細は粗い形状を削るため、視線の空区間スキップと同じ範囲に収まる。
+        float3 detailPosition = shapePosition - float3(0, Wind.z, 0);
+        float3 detailUv = detailPosition * 0.00075 + (base.gba - 0.5) * 0.07;
+        float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, 0);
+        shape -= dot(1 - noise.rgb, float3(0.115, 0.054, 0.036)) * profile;
+        erosion = dot(1 - noise.ba, float2(0.21, 0.23));
+    }
+    float density = saturate(remap01(shape, threshold, 1) * 1.85);
+    // 低密度の縁ほど強く削り、密度の高い中心部は残す。
+    return remap01(density, erosion * (1 - density * 0.55), 1) * CloudLayer.w;
 }
 
 // 視線・太陽遮蔽・雲影に共通の背景雲海＋局所形状を返す。

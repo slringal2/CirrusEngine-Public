@@ -23,9 +23,9 @@ C++20 / Direct3D 11で動く描画エンジンです。風で波打つ草原と�
 
 静的モデルではベースカラー、金属度、粗さ、法線、AO、発光のテクスチャを読み、地形・草木と同じディファードGGX照明を使います。対応する材質や地形タイル、歩行、時計の実装は[探索とPBRの実装ガイド](docs/exploration.md)を参照してください。
 
-RockstarのSIGGRAPH 2019講演をもとに、通常の雲を二層の雲マップ・高度LUT・Perlin–Worley侵食で生成する方式へ変更しました。雲に入るレイ区間は細分し、太陽から見た遮蔽深度で地表・霧・雲の照明を計算します。[採用した方式と講演スライド](docs/cloud-research.md#rockstarのsiggraph-2019講演)。
+通常の雲は二層の被覆率マップで広がりを制御し、3D Perlin–Worleyで大きな塊、Worleyの複数帯域で丸い膨らみと細かな縁を作ります。雲に入るレイ区間の細分と、地表・霧・雲で共有する遮蔽深度はRockstarのSIGGRAPH 2019講演を参考にしています。[雲の密度の実装](docs/implementation-guide.md#3-ノイズから最終密度を求める) · [講演スライド](docs/cloud-research.md#rockstarのsiggraph-2019講演)。
 
-![晴れ間と雲影の変更前後。上が旧版、下が新版](docs/images/rdr2-cloud-comparison.jpg)
+![二層の雲マップと指数雲影を導入したときの比較](docs/images/rdr2-cloud-comparison.jpg)
 
 ## 実装済み
 

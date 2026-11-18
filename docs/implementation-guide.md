@@ -6,7 +6,7 @@
 flowchart LR
     A[天候と風・カメラ] --> B[GPU定数]
     C[3D制御ボリューム] --> D[共通の雲密度]
-    M[二層の雲マップと高度LUT] --> D
+    M[二層の被覆率マップと3Dノイズ] --> D
     N[2D変位と3D Perlin-Worley] --> D
     K[空の散乱光を縮約] --> E
     B --> D
@@ -67,16 +67,17 @@ C++で生成したfloat列を16bitへ変換し、変更不可の`R16_FLOAT`テ�
 
 ## 3. ノイズから最終密度を求める
 
-`noise.hlsl`で周期的なPerlin勾配ノイズとWorleyを生成します。通常の雲では、`CloudMapCS`が雲量・雲種・降水量・太陽高度に応じて512²の雲マップと1×128の高度LUTを更新します。雲マップのRは下層、Gは上層です。サンプル位置から風の移動量を引き、32.768km周期のXZ座標へ写します。高度LUTのRGは各層の密度しきい値、Bは侵食後の柔らかさです。被覆率の階調を滑らかに維持するため、`smoothstep`で水平の雲マップから粗い密度を作ります。
+`CloudMapCS`は512²のマップのRに下層、Gに上層の被覆率を保存します。通常の雲はサンプル位置から風の移動量を引き、65.536 km周期のXZ座標でマップを読みます。被覆率は高さに応じて下層から上層へ補間し、雲塊が残るしきい値に使います。
 
-詳細評価では1枚の2D変位テクスチャをXY面とXZ面で読み、それらをXYZの変位へ組み立てます。ずらした位置で128³のPerlin–Worleyを1回読み、低密度の縁を削ります。
+粗い密度は128³の基本ノイズを一度読み、RのPerlin–Worleyで大きな塊を、GBAのWorleyで膨らみを作り、雲底と雲頂で密度がゼロに近づく高度プロファイルを掛けて求めます。雲が残る位置では詳細ノイズを一度読み、RGBの4・8・16セル帯域で丸い輪郭を削り、BとAの16・32セル帯域で細かな縁を作ります。詳細評価は粗い密度を減らすので、粗い評価で空だった区間を飛ばせます。ノイズの生成式を編集したときはエンジンを再起動してテクスチャを焼き直します。
 
 ```text
-shape = max(lowerLayer, upperLayer)
-density = saturate((shape - erosion) / (softness - erosion))
+threshold = 1 - coverage
+density = saturate((shape - threshold) / coverage * 1.85)
+density = saturate((density - edgeErosion) / (1 - edgeErosion))
 ```
 
-`sampleTowerCloud`は3D制御ボリュームから粗い密度を読み、同じ`erodeCloudShape`を使います。渦の領域では雲量と高度LUTで形を決め、背景の雲海へ滑らかにつなぎます。入道雲の密度は加算し、視線・自己遮蔽・雲影の全てが合成済みの密度を読みます。粗い形状が空の点では侵食を省きます。[Rockstarの講演スライド14–18](https://advances.realtimerendering.com/s2019/slides_public_release.pptx)。
+`sampleTowerCloud`は3D制御ボリューム、渦は雲量と1×128の高度LUTから粗い形を読みます。高度LUTのRGはしきい値、Bは侵食の柔らかさです。どちらも`erodeCloudShape`で2D変位を加えた位置のPerlin–Worleyを読み、表面を削ります。視線・自己遮蔽・雲影は合成後の密度を共有します。[Rockstarの講演スライド14–18](https://advances.realtimerendering.com/s2019/slides_public_release.pptx)。
 
 ## 4. 渦を動かす
 

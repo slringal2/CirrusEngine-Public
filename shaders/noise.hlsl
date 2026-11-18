@@ -84,10 +84,11 @@ void NoiseCS(uint3 id : SV_DispatchThreadID)
     float3 p = (id + 0.5) / NoiseSize;
     float w0 = worley(p * 4, 4), w1 = worley(p * 8, 8), w2 = worley(p * 16, 16);
 
-    // 詳細用ボリュームはRGBに周波数の異なるWorleyを保存する。
+    // 詳細用ボリュームの RGBA に、4/8/16/32 セルの Worley を格納する。
     if (NoiseKind == 1)
     {
-        NoiseOutput[id] = float4(w0, w1, w2, 1);
+        float w3 = worley(p * 32, 32);
+        NoiseOutput[id] = float4(w0, w1, w2, w3);
         return;
     }
 
@@ -148,15 +149,14 @@ void CloudMapCS(uint3 id : SV_DispatchThreadID)
     if (any(id.xy >= uint2(w, h)))
         return;
     float2 uv = (id.xy + 0.5) / float2(w, h);
-    float2 warp = CloudDisplacement.SampleLevel(LinearWrap, uv + float2(0.19, 0.34), 1) - 0.5;
-    float3 regional = WeatherMap.SampleLevel(LinearWrap, uv + warp * 0.105, 0).rgb;
-    float upper = WeatherMap.SampleLevel(LinearWrap,
-                                         uv.yx + warp.yx * 0.12 + float2(0.37, 0.17), 0).r;
-    float2 mask = float2(lerp(regional.r, regional.b, 0.22), upper);
-    float2 weatherBias = float2(0.49, 0.40) + (CloudLayer.z - 0.28) * float2(0.56, 0.48);
-    weatherBias.x += 0.032 * (1 - smoothstep(-0.08, 0.45, SunDirection.y)) * Weather.z;
+    // R/G は下層・上層の被覆率。大きな天候分布を共有し、上層にだけずらした分布を混ぜる。
+    float3 regional = WeatherMap.SampleLevel(LinearWrap, uv, 0).rgb;
+    float upper = WeatherMap.SampleLevel(LinearWrap, uv + float2(0.37, 0.17), 0).r;
+    float2 mask = float2(regional.r, lerp(regional.r, upper, 0.46));
+    float lowSun = 1 - smoothstep(-0.08, 0.45, SunDirection.y);
+    float2 weatherBias = CloudLayer.z - 0.018 + float2(0.018, 0) * lowSun;
     weatherBias.y += (Weather.x - 0.65) * 0.06 + regional.g * Weather.y * 0.04;
-    CloudMapOutput[id.xy] = saturate((mask - 0.5) * float2(1.22, 1.30) + weatherBias);
+    CloudMapOutput[id.xy] = saturate((mask - 0.5) * 1.05 + weatherBias);
 
     if (id.x == 0 && id.y < 128)
     {
