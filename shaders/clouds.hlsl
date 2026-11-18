@@ -57,15 +57,13 @@ void ShadowCS(uint3 id : SV_DispatchThreadID)
     ShadowOutput[id.xy] = float2(transmittance, (1 - transmittance) * encodedDepth);
 }
 
-// 近い自己遮蔽は二次レイで拾い、二次レイの終点から先は雲影マップで評価する。
+// 天候デモの雲照明に合わせ、太陽方向の二次レイで自己遮蔽を評価する。
 float lightOpticalDepth(float3 p)
 {
     if (SunDirection.y <= 0)
         return 0;
     float height = altitude(p);
-    // 上端までの距離と天候に応じた上限の小さい方まで、細部ノイズ込みの密度を積分する。
-    float distance = min((FormationLayer.y - height) / max(SunDirection.y, 0.05),
-                         lerp(1250, 5000, Weather.x));
+    float distance = min((FormationLayer.y - height) / max(SunDirection.y, 0.05), 20000);
     distance = max(distance, 0);
     float tau = 0;
     float begin = 0;
@@ -77,18 +75,19 @@ float lightOpticalDepth(float3 p)
     for (int i = 0; i < steps; i++)
     {
         float end = min(distance, begin + stepLength);
-        float3 samplePosition = p + SunDirection.xyz * (0.5 * (begin + end));
-        tau += cloudDensity(samplePosition, true) * cloudExtinction() * (end - begin);
+        float sampleDistance = 0.5 * (begin + end);
+        // 太陽方向を軸に少しずつ位置をずらし、離れた雲塊の遮蔽も拾う。
+        float3 cone = float3(sin(i * 2.39996), cos(i * 2.39996), sin(i * 1.3))
+                      * (sampleDistance * 0.006);
+        float3 samplePosition = p + SunDirection.xyz * sampleDistance + cone;
+        tau += cloudDensity(samplePosition, i < 6) * cloudExtinction() * (end - begin);
         begin = end;
         stepLength *= 1.65;
-        if (begin >= distance || tau > 14)
+        if (begin >= distance || tau > 18)
             break;
     }
 
-    float distantVisibility = cloudShadow(p + SunDirection.xyz * begin);
-    // 遠方の透過率を -log(T) で光学的厚さへ変換して加える。
-    // 呼び出し側の exp(-tau) は「近傍の透過率 × 遠方の透過率」になる。
-    return tau - log(max(distantVisibility, 0.0001));
+    return tau;
 }
 
 struct CloudRayResult
@@ -128,6 +127,14 @@ float2 cloudSegment(float3 ray, float scene)
     return float2(start, min(end, 100000.0));
 }
 
+float coarseCloudStep(float3 p, out float height, out float h, out BackgroundCloudSample background)
+{
+    height = altitude(p);
+    h = (height - CloudLayer.x) / CloudLayer.y;
+    background = backgroundCloudShape(p, h);
+    return compositeFormationDensity(p, height, h, false, background.density * CloudLayer.w).x;
+}
+
 // 通常描画と、履歴が使えない画素の修復で同じ積分を使う。
 CloudRayResult traceCloudRay(uint2 pixel)
 {
@@ -161,10 +168,10 @@ CloudRayResult traceCloudRay(uint2 pixel)
     // 太陽円盤は背景よりずっと明るいので、その付近では透過率をさらに追う。
     // 通常は T < 0.005 で打ち切り、太陽方向に近い視線は 0.00005 まで積分する。
     float transmittanceLimit = mu > 0.9996 ? 0.00005 : 0.005;
-    float phase = hg(mu, 0.80);
-    float broadPhase = hg(mu, 0.80 * (2.0 / 3.0));
-    float3 skyAmbient = SkyAmbient.Load(int3(0, 0, 0)).rgb;
-    float cachedTau = 0, cachedDensity = 0, cachedDistance = -1e9;
+    float phase = 0.85 * hg(mu, 0.70) + 0.15 * hg(mu, -0.20);
+    float broadPhase = 0.85 * hg(mu, 0.35) + 0.15 * hg(mu, -0.10);
+    float isotropicPhase = 1 / (4 * PI);
+    float cachedTau = 0, cachedSkyVisibility = 1, cachedDensity = 0, cachedDistance = -1e9;
     bool haveLighting = false;
     int refinement = 0;
     float cursor = start;
@@ -180,7 +187,9 @@ CloudRayResult traceCloudRay(uint2 pixel)
         float ds = min(remainingDistance, max(minStep, baseStep * exp2(-refinement)));
         float t = cursor + jitter * ds;
         float3 p = CameraTime.xyz + ray * t;
-        float coarse = cloudDensity(p, false);
+        float height, backgroundHeight;
+        BackgroundCloudSample background;
+        float coarse = coarseCloudStep(p, height, backgroundHeight, background);
 
         // Bauer (2019), slide 50. 粗い形状に当たった区間を同じ始点から最大3回二分する。
         [loop]
@@ -190,7 +199,7 @@ CloudRayResult traceCloudRay(uint2 pixel)
             ds = max(minStep, ds * 0.5);
             t = cursor + jitter * ds;
             p = CameraTime.xyz + ray * t;
-            coarse = cloudDensity(p, false);
+            coarse = coarseCloudStep(p, height, backgroundHeight, background);
         }
         cursor += ds;
         if (coarse < 0.001)
@@ -199,7 +208,10 @@ CloudRayResult traceCloudRay(uint2 pixel)
             haveLighting = false;
             continue;
         }
-        float2 cloudSample = cloudDensitySample(p, true);
+        // 粗い形状で読んだノイズ座標を使い、ここでは縁の侵食だけを追加する。
+        float backgroundDensity = detailBackgroundCloud(background) * CloudLayer.w;
+        float2 cloudSample = compositeFormationDensity(p, height, backgroundHeight, true,
+                                                       backgroundDensity);
         float density = cloudSample.x;
         if (density < 0.001)
         {
@@ -209,35 +221,40 @@ CloudRayResult traceCloudRay(uint2 pixel)
         // h はその点に寄与する雲の内部での相対高度。雷の寄与を雲の上側で強める。
         float h = cloudSample.y;
         float reuseDistance = clamp(t * 2.4 / RenderSize.y, 20, 160);
-        // 奇数のステップでは、直前の点と距離・密度が近ければ太陽側の光学的厚さを再利用する。
-        // 視線側の密度・透過率は区間ごとに求める。空の区間では光学的厚さのキャッシュを無効にする。
-        bool reuseLighting = CloudPerformance.z > 0.5 && (i & 1) != 0 && haveLighting
+        // 最後に照明を計算した点と距離・密度が近ければ太陽と天空の遮蔽を再利用する。
+        // 視線側の密度・透過率は区間ごとに求める。空の区間では照明のキャッシュを無効にする。
+        bool reuseLighting = CloudPerformance.z > 0.5 && haveLighting
                              && t - cachedDistance < reuseDistance
                              && abs(density - cachedDensity) < max(0.04, density * 0.2);
         [branch]
         if (!reuseLighting)
         {
             cachedTau = lightOpticalDepth(p);
+            // 上へ120/360/900 mの点を調べ、雲の上から届く光を厚みに応じて減らす。
+            float upDensity = cloudDensity(p + float3(0, 120, 0), false) * 120
+                              + cloudDensity(p + float3(0, 360, 0), false) * 240
+                              + cloudDensity(p + float3(0, 900, 0), false) * 540;
+            cachedSkyVisibility = exp(-upDensity * cloudExtinction() * 0.6);
             cachedDensity = density;
             cachedDistance = t;
             haveLighting = true;
         }
         float tau = cachedTau;
 
-        // 2オクターブのHG。消散が強い雲では後方にも散るよう位相に下限を置く。
-        // 1回散乱は g = 0.80 の鋭い前方成分。多重散乱の近似には幅の広い位相を使う。
+        // 前方と後方を混ぜた単一散乱に、広い位相と等方の2項を足して内部の光を残す。
         float extinction = density * cloudExtinction();
-        float backScatter = remap01(extinction, 0.0015, 0.012) / PI;
-        float single = max(phase, backScatter) * exp(-tau);
-        // 多重散乱は係数 0.53 で混ぜ、光学的厚さを 0.35 倍して雲の奥にも光を残す。
-        float multiple = 0.53 * max(broadPhase, backScatter * 0.36) * exp(-tau * 0.35);
+        float single = phase * exp(-tau);
+        float multiple = 0.32 * broadPhase * exp(-tau * 0.45)
+                         + 0.18 * isotropicPhase * exp(-tau * 0.12);
+        float powder = 1 - exp(-density * 4);
         // tau は雲による遮蔽。太陽 → サンプル間の大気による波長別の減衰を別途掛ける。
         float3 sunlight = SolarExposure.rgb * sunTransmittance(p);
 
-        // 天空光の可視性には、太陽遮蔽のために求めた光学的厚さを再利用する。
-        // 1 テクセルにまとめた空の環境光を使い、降水の強い雲ほど寄与を抑える。
-        float3 ambient = skyAmbient * lerp(0.19, 0.86, exp(-tau * 0.28)) * lerp(1, 0.52, Weather.y);
-        float3 lighting = sunlight * (single + multiple) + ambient;
+        // 高い位置の雲を明るくし、上に雲が重なる場所や降水の強い雲の天空光を抑える。
+        float3 ambient = lerp(float3(0.08, 0.11, 0.17), float3(0.38, 0.51, 0.70), h)
+                         * (0.07 + 0.93 * saturate(SunDirection.y * 3 + 0.10));
+        ambient *= (0.12 + 0.88 * cachedSkyVisibility) * lerp(1, 0.53, Weather.y);
+        float3 lighting = sunlight * (single + multiple) * (0.85 + 0.15 * powder) + ambient;
         lighting += lightningIrradiance(p) * (0.3 + 0.7 * h);
 
         // 前から後ろへ合成する。今回失われる透過光の割合を散乱光の重みにする。

@@ -358,7 +358,7 @@ float4 textureDebugView(float2 uv, int view)
     if (view == 25)
         return float4(CloudWarpVolume.SampleLevel(LinearWrap, noiseSlice(uv), 0).rgb, 1);
     if (view == 26)
-        return float4(CloudMap.SampleLevel(LinearWrap, uv, 0).rg, 0, 1);
+        return float4(CloudMap.SampleLevel(LinearWrap, uv, 0), 0, 1);
     if (view == 27)
         return float4(cloudHeightProfile(uv.y), 1);
     if (view == 28)

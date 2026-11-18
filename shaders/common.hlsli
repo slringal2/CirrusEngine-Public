@@ -78,7 +78,7 @@ Texture2D<float4> RainTexture : register(t18);
 Texture2D<uint> CloudReconstruction : register(t19);
 Texture3D<float> TowerControlVolume : register(t20);
 Texture3D<float4> CloudWarpVolume : register(t21);
-Texture2D<float4> CloudMap : register(t22);
+Texture2D<float2> CloudMap : register(t22);
 Texture2D<float4> CloudHeightLut : register(t23);
 Texture2D<float2> CloudDisplacement : register(t24);
 Texture2D<float4> SkyAmbient : register(t25);
@@ -233,13 +233,7 @@ float3 sunTransmittance(float3 p)
         .rgb;
 }
 
-float cumulusAmount()
-{
-    // 降水の少ない積雲の天候では、雲塊が上へ盛り上がる形を強める。
-    return smoothstep(0.38, 0.88, Weather.x) * (1 - smoothstep(0.18, 0.67, Weather.y));
-}
-
-float4 cloudPlacement(float2 advectedXZ)
+float2 cloudPlacement(float2 advectedXZ)
 {
     return CloudMap.SampleLevel(LinearWrap, advectedXZ / 65536.0, 0);
 }
@@ -265,59 +259,60 @@ float erodeCloudShape(float baseDensity, float3 p, float softness)
 
 #include "formations.hlsli"
 
-float backgroundCloudDensity(float3 p, float h, bool detail)
+struct BackgroundCloudSample
 {
+    float density;
+    float3 shapePosition;
+    float3 warp;
+};
+
+BackgroundCloudSample backgroundCloudShape(float3 p, float h)
+{
+    BackgroundCloudSample result = (BackgroundCloudSample)0;
     if (h <= 0 || h >= 1)
-        return 0;
+        return result;
 
-    // B/A に焼いた雲底と雲頂で高さを正規化する。山のように盛り上がる場所と低い雲ができる。
+    // 天候デモと同じ65.536 km周期の場で、雲量と鉛直方向の雲種を決める。
     float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
-    float4 placement = cloudPlacement(shapePosition.xz);
-    float localHeight = (h - placement.b) / max(placement.a - placement.b, 0.01);
-    float cumulus = cumulusAmount();
-    float upperWeight = smoothstep(0.25, 0.72, localHeight) * lerp(1, 0.28, cumulus);
-    float coverage = lerp(placement.r, placement.g, upperWeight);
-    float type = saturate(Weather.x + (placement.g - placement.r) * 0.70);
-
-    // 積雲の底と頂を両方絞り、上下に丸みを付ける。曇天へは同じ高度プロファイルから補間する。
-    float bottom = smoothstep(0, lerp(0.055, 0.20, cumulus), localHeight);
-    float crownStart = lerp(lerp(0.20, 0.38, type), 0.66, cumulus);
-    float crownEnd = lerp(lerp(0.46, 0.98, type), 1.0, cumulus);
-    float top = 1 - smoothstep(crownStart, crownEnd, localHeight);
+    float3 regional = WeatherMap.SampleLevel(LinearWrap, shapePosition.xz / 65536.0, 0).rgb;
+    float coverage = saturate(CloudLayer.z + (regional.r - 0.5) * 1.05);
+    float type = saturate(Weather.x + (regional.b - 0.5) * 0.32);
+    float bottom = smoothstep(0.0, 0.055, h);
+    float top = 1 - smoothstep(lerp(0.20, 0.38, type), lerp(0.46, 0.98, type), h);
     float profile = bottom * top;
-    if (profile <= 0 || coverage <= 0)
-        return 0;
-
-    shapePosition.xz += float2(h * h * 480.0, -h * 220.0) * lerp(1, 0.55, cumulus);
-    shapePosition.xz *= lerp(1, 1.06, cumulus);
-    shapePosition.y *= lerp(lerp(1.5, 0.9, type), 0.83, cumulus);
-    // R の Perlin–Worley で大きな塊を作り、同じ読み取りの GBA で小さな膨らみを重ねる。
-    float4 base = BaseNoise.SampleLevel(LinearWrap,
-                                        shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0);
-    float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
-    float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
-    envelope = lerp(envelope, 0.09 + 0.91 * envelope, cumulus);
-    // coverage は形のしきい値へ使い、雲が少ない天候でも濃い雲の中心を残す。
     float threshold = 1 - coverage;
-    float shape = envelope * profile;
-    float erosion = 0;
+    // 大きな形の値は最大1。高度プロファイルだけで空と判定できる点は3Dノイズを読まない。
+    if (profile <= threshold)
+        return result;
 
-    if (detail && shape > threshold)
-    {
-        // RGB で表面に丸い膨らみを刻み、細かい B/A で縁を侵食する。
-        // 詳細は粗い形状を削るため、視線の空区間スキップと同じ範囲に収まる。
-        float3 detailPosition = shapePosition - float3(0, Wind.z, 0);
-        float3 detailUv = detailPosition * 0.00075 + (base.gba - 0.5) * 0.07;
-        float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, 0);
-        float3 lobeWeights =
-            lerp(float3(0.115, 0.054, 0.036), float3(0.205, 0.042, 0.026), cumulus);
-        shape -= dot(1 - noise.rgb, lobeWeights) * profile;
-        erosion = dot(1 - noise.ba, float2(0.21, 0.23));
-    }
-    float density = saturate(remap01(shape, threshold, 1) * lerp(1.85, 1.72, cumulus));
-    // 低密度の縁ほど強く削り、密度の高い中心部は残す。
-    density = remap01(density, erosion * (1 - density * 0.55), 1);
-    return density * lerp(1, smoothstep(0, 0.28, density), cumulus * 0.60) * CloudLayer.w;
+    shapePosition.xz += float2(h * h * 480.0, -h * 220.0);
+    shapePosition.y *= lerp(1.5, 0.9, type);
+    // 低周波の変位で大きな雲塊を曲げ、中間スケールのWorleyで大小の膨らみを付ける。
+    float3 warp = BaseNoise.SampleLevel(LinearWrap, shapePosition * 0.00018 + 0.37, 1).gba - 0.5;
+    shapePosition += warp * 340.0;
+    float base = BaseNoise.SampleLevel(LinearWrap,
+                                      shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0).r;
+    float3 billows = DetailNoise.SampleLevel(LinearWrap, shapePosition * 0.00075, 0).rgb;
+    float cells = dot(billows, float3(0.55, 0.30, 0.15));
+    float shape = saturate(base + (cells - 0.43) * 0.65) * profile;
+    result.density = saturate(remap01(shape, threshold, 1) * 2.1);
+    result.shapePosition = shapePosition;
+    result.warp = warp;
+    return result;
+}
+
+float detailBackgroundCloud(BackgroundCloudSample background)
+{
+    if (background.density <= 0)
+        return 0;
+    // 表面の凹凸と薄い縁を別の周波数で削り、密度の高い中心を残す。
+    float3 detailPosition = background.shapePosition - float3(0, Wind.z, 0);
+    float3 noise = DetailNoise.SampleLevel(LinearWrap,
+                                          detailPosition * 0.0022 + background.warp * 0.17, 0).rgb;
+    float erosion = dot(1 - noise, float3(0.625, 0.25, 0.125));
+    float fine = DetailNoise.SampleLevel(LinearWrap, detailPosition * 0.0067, 0).g;
+    float edgeErosion = (erosion * 0.38 + (1 - fine) * 0.10) * (1 - background.density * 0.55);
+    return remap01(background.density, edgeErosion, 1);
 }
 
 // 視線・太陽遮蔽・雲影に共通の背景雲海＋局所形状を返す。
@@ -327,7 +322,9 @@ float2 cloudDensitySample(float3 p, bool detail)
         return 0;
     float height = altitude(p);
     float h = (height - CloudLayer.x) / CloudLayer.y;
-    return compositeFormationDensity(p, height, h, detail, backgroundCloudDensity(p, h, detail));
+    BackgroundCloudSample background = backgroundCloudShape(p, h);
+    float density = detail ? detailBackgroundCloud(background) : background.density;
+    return compositeFormationDensity(p, height, h, detail, density * CloudLayer.w);
 }
 
 float cloudDensity(float3 p, bool detail)
