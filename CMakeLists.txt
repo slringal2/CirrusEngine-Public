@@ -17,6 +17,8 @@ else()
 endif()
 
 if(WIN32)
+  option(CIRRUS_BUILD_TEXTURE_STUDIO "Include the .NET 8 WinForms texture studio" OFF)
+
   add_executable(CirrusEngine WIN32 src/main.cpp src/renderer.cpp src/ui.cpp src/world.cpp src/scene_mesh.cpp src/model.cpp src/grass.cpp)
   set(CIRRUS_SHADERS shaders/common.hlsli shaders/formations.hlsli shaders/noise.hlsl shaders/clouds.hlsl shaders/atmosphere.hlsl shaders/scene.hlsl shaders/rain.hlsl shaders/lightning.hlsli shaders/mesh.hlsl shaders/geometry.hlsli)
   list(APPEND CIRRUS_SHADERS shaders/river_profile.hlsli shaders/river_water.hlsli shaders/grass.hlsl shaders/meadow.hlsli)
@@ -38,6 +40,20 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:CirrusEngine>/assets"
     VERBATIM)
   add_dependencies(CirrusEngine cirrus_shaders)
+  if(CIRRUS_BUILD_TEXTURE_STUDIO)
+    find_program(CIRRUS_DOTNET dotnet REQUIRED)
+    add_custom_target(CirrusTextureStudio ALL
+      COMMAND "${CMAKE_COMMAND}" -E env --unset=LIB DOTNET_CLI_UI_LANGUAGE=en-US
+        "${CIRRUS_DOTNET}" publish
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/CirrusTextureStudio/CirrusTextureStudio.csproj"
+        --configuration "$<CONFIG>" --no-self-contained --nologo
+        --artifacts-path "${CMAKE_CURRENT_BINARY_DIR}/texture-studio-artifacts"
+        --output "$<TARGET_FILE_DIR:CirrusEngine>/TextureStudio"
+      VERBATIM)
+    add_dependencies(CirrusEngine CirrusTextureStudio)
+    install(DIRECTORY "$<TARGET_FILE_DIR:CirrusEngine>/TextureStudio" DESTINATION .
+      PATTERN "*.pdb" EXCLUDE)
+  endif()
   install(TARGETS CirrusEngine RUNTIME DESTINATION .)
   install(DIRECTORY shaders DESTINATION .)
   install(DIRECTORY assets DESTINATION .)

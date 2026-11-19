@@ -105,7 +105,7 @@ struct Options
     int textureAxis = 2;
     std::string camera;
     std::string cameraPath;
-    std::filesystem::path capture, shaderDirectory, assetsDirectory;
+    std::filesystem::path capture, shaderDirectory, assetsDirectory, cloudTextureDirectory;
     bool openWorld = false, vegetation = true;
     float timeOfDay = -1, spawnX = -6.1f, spawnZ = -37;
     std::optional<DirectX::XMFLOAT2> startLook;
@@ -253,6 +253,7 @@ class Renderer
     ComPtr<ID3D11ShaderResourceView> terrainDepthSRV_, nearDepthSRV_;
     ComPtr<ID3D11Buffer> frameBuffer_, passBuffer_, noiseBuffer_, vertices_, indices_;
     ComPtr<ID3D11ShaderResourceView> baseNoise_, detailNoise_, towerControl_, cloudWarp_;
+    UINT baseNoiseSize_ = 128, detailNoiseSize_ = 128;
     double towerBakeMs_ = 0;
     ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_, terrainSampler_;
     ComPtr<ID3D11RasterizerState> raster_, meshRaster_, shadowRaster_, meshShadowRaster_;

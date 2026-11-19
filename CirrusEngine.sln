@@ -4,6 +4,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CirrusEngine", "CirrusEngine.vcxproj", "{189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CirrusTextureStudio", "tools\CirrusTextureStudio\CirrusTextureStudio.csproj", "{8546817E-2D55-4405-95F8-E92F971936C3}"
+	ProjectSection(ProjectDependencies) = postProject
+		{189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56} = {189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56}
+	EndProjectSection
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{C946F89A-47C0-4DDE-BE81-81AEF46895E0}"
 	ProjectSection(SolutionItems) = preProject
 		shaders\atmosphere.hlsl = shaders\atmosphere.hlsl
@@ -42,6 +47,10 @@ Global
 		{189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56}.Release|x64.Build.0 = Release|x64
 		{189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56}.Debug|x64.ActiveCfg = Debug|x64
 		{189E5A2B-9F5B-4ABD-A72A-9F50F7B7CB56}.Debug|x64.Build.0 = Debug|x64
+		{8546817E-2D55-4405-95F8-E92F971936C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{8546817E-2D55-4405-95F8-E92F971936C3}.Release|x64.Build.0 = Release|Any CPU
+		{8546817E-2D55-4405-95F8-E92F971936C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8546817E-2D55-4405-95F8-E92F971936C3}.Debug|x64.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

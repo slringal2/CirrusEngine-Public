@@ -6,3 +6,5 @@ captures/
 logs/
 *.user
 *.suo
+tools/CirrusTextureStudio/bin/
+tools/CirrusTextureStudio/obj/

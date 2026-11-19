@@ -128,6 +128,12 @@ cirrus::Options arguments()
         }
         else if (a == L"--shader-dir")
             o.shaderDirectory = next();
+        else if (a == L"--cloud-textures")
+        {
+            o.cloudTextureDirectory = next();
+            if (o.cloudTextureDirectory.empty())
+                throw std::runtime_error("--cloud-textures requires a DDS pack directory");
+        }
         else if (a == L"--camera")
             o.camera = ascii(next());
         else if (a == L"--camera-path")

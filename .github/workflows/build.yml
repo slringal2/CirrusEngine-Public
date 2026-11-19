@@ -11,8 +11,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
+        with:
+          dotnet-version: '8.0.x'
       - name: Configure
-        run: cmake --preset windows
+        run: cmake --preset windows -DCIRRUS_BUILD_TEXTURE_STUDIO=ON
       - name: Build
         run: cmake --build --preset release --parallel
       - name: Weather invariants and WARP shader compilation
@@ -22,7 +25,7 @@ jobs:
         run: |
           $cirrusMSBuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\Current\Bin\MSBuild.exe
           foreach ($cirrusConfig in @('Release','Debug')) {
-            & $cirrusMSBuild CirrusEngine.sln /m "/p:Configuration=$cirrusConfig" /p:Platform=x64 /nologo /v:minimal
+            & $cirrusMSBuild CirrusEngine.sln /restore /m "/p:Configuration=$cirrusConfig" /p:Platform=x64 /nologo /v:minimal
             if ($LASTEXITCODE -ne 0) { throw "Native $cirrusConfig build failed" }
           }
       - name: Shader failure diagnostics

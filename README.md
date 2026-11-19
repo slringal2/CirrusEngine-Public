@@ -61,11 +61,11 @@ ctest --preset release
 .\build\Release\CirrusEngine.exe
 ```
 
-Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、`Release | x64` または `Debug | x64` でビルドできます。CMakeの事前実行は不要です。出力は `out\vs\Release\CirrusEngine.exe`（Debug は `out\vs\Debug`）です。
+Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、`Release | x64` または `Debug | x64` でビルドできます。CMakeの事前実行は不要です。出力は `out\vs\Release\CirrusEngine.exe`（Debug は `out\vs\Debug`）です。ソリューション全体のビルドには、C#ツール用の.NET 8 SDKとVisual Studioの「.NET デスクトップ開発」も必要です。
 
 `Shaders` ソリューションフォルダにHLSLがまとまっています。Visual StudioのビルドはC++のリンク後にシェーダーをコピーし、全25エントリーポイントをHLSLコンパイラーで検証します。シェーダーのエラーもビルド失敗になります。
 
-`start.cmd` をダブルクリックすると、未ビルドの場合はビルドして起動します。配布物は `cmake --install build --config Release --prefix out/CirrusEngine` で生成できます。実行ファイルと `shaders`、`assets` フォルダを一緒に配置してください。
+`start.cmd` をダブルクリックすると、未ビルドの場合はビルドして起動します。配布物は `cmake --install build --config Release --prefix out/CirrusEngine` で生成できます。実行ファイルと `shaders`、`assets` フォルダを一緒に配置してください。C#ツールも同梱する場合は、[テクスチャ生成ツール](#テクスチャ生成ツール)の手順で構成します。
 
 ## 操作
 
@@ -196,6 +196,37 @@ vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
 ```
 
 ![Texture inspector / actual GPU rendering](docs/images/texture-inspector.png)
+
+## テクスチャ生成ツール
+
+**Cirrus Texture Studio** はC#のWindowsアプリです。雲の基本形状を作るPerlin–Worley、輪郭用の詳細Worley、天候マップ、雲の変位マップを周期境界付きで生成します。シード、3Dの解像度（32³・64³・128³）、密度と雲量の補正を指定できます。元のGPUシェーダーと同じ用途・チャンネル構成で、シードに応じて異なる雲の分布を作ります。
+
+1. 配布フォルダの **`TextureStudio\CirrusTextureStudio.exe`** を開きます。Visual Studioからビルドした場合は `out\vs\Release\TextureStudio` にあります。実行には **.NET 8 Desktop Runtime（x64）** が必要です。
+2. **生成** を押し、X・Y・Zの断面や色チャンネルを選びます。**3×3 タイル** で繰り返しを確認でき、表示中の断面をPNGで保存できます。
+3. **DDS パックを書き出す** で4つのテクスチャと生成設定を保存し、**エンジンでプレビュー** で同じパックを使った飛行ビューを開きます。
+
+| DDS | 内容 |
+| --- | --- |
+| `base-noise.dds` | RGBA16Fの3Dテクスチャ。RがPerlin–Worley、G/B/Aが4/8/16セルのWorley |
+| `detail-noise.dds` | RGBA16Fの3Dテクスチャ。R/G/B/Aが4/8/16/32セルのWorley |
+| `weather-map.dds` | 512²のRGBA16F。R/G/B/Aが雲量・湿度・雲種・積雲の芯 |
+| `cloud-displacement.dds` | 512²のRG16F。雲塊の位置を曲げる2成分の変位 |
+
+パックはDX10拡張付きの単一ミップDDSです。読み込み後にDirect3Dでミップを生成します。 [MicrosoftのDDS形式ガイド](https://learn.microsoft.com/ja-jp/windows/win32/direct3ddds/dx-graphics-dds-pguide)
+
+コマンドラインから試す場合は、書き出したフォルダを指定します。`--cloud-textures` を省略した起動では、従来どおりGPUが標準テクスチャを生成します。
+
+```powershell
+.\out\CirrusEngine\CirrusEngine.exe --camera fly --cloud-textures "C:\path\to\CirrusTextures-17-xxxxxxxx"
+```
+
+.NET 8 SDKを入れた開発環境では、次の手順で同梱版を生成できます。
+
+```powershell
+cmake --preset windows -DCIRRUS_BUILD_TEXTURE_STUDIO=ON
+cmake --build --preset release --parallel
+cmake --install build --config Release --prefix out/CirrusEngine
+```
 
 ## 再現可能な画像保存
 

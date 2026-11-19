@@ -92,6 +92,62 @@ std::string narrow(const wchar_t *text)
     return result;
 }
 
+struct NoiseDdsHeader
+{
+    uint32_t magic, size, flags, height, width, pitch, depth, mipCount;
+    uint32_t reserved[11];
+    uint32_t pixelFormatSize, pixelFormatFlags, fourCC, colorBits, channelMasks[4];
+    uint32_t caps, caps2, caps3, caps4, reserved2;
+    uint32_t format, resourceDimension, miscFlag, arraySize, alphaMode;
+};
+static_assert(sizeof(NoiseDdsHeader) == 148);
+
+struct NoiseDds
+{
+    UINT size = 0, pitch = 0;
+    std::vector<uint16_t> texels;
+};
+
+NoiseDds readNoiseDds(const std::filesystem::path &path, DXGI_FORMAT format, bool volume)
+{
+    std::ifstream file(path, std::ios::binary);
+    const std::string name = path.filename().string();
+    if (!file)
+        throw std::runtime_error("Cloud texture pack is missing " + name);
+
+    // Studioが出力する、単一ミップ・非圧縮のDX10 DDSに対応する。寸法は確保前に検証する。
+    NoiseDdsHeader header{};
+    if (!file.read(reinterpret_cast<char *>(&header), sizeof(header)))
+        throw std::runtime_error("Incomplete DDS header: " + name);
+    const bool supportedSize = volume ? header.width == 32 || header.width == 64 || header.width == 128
+                                      : header.width == 512;
+    const UINT channels = format == DXGI_FORMAT_R16G16_FLOAT ? 2 : 4;
+    const UINT dimension =
+        volume ? D3D11_RESOURCE_DIMENSION_TEXTURE3D : D3D11_RESOURCE_DIMENSION_TEXTURE2D;
+    if (header.magic != 0x20534444 || header.size != 124 || header.pixelFormatSize != 32
+        || (header.pixelFormatFlags & 4) == 0 || header.fourCC != 0x30315844
+        || !supportedSize || header.height != header.width
+        || header.format != static_cast<uint32_t>(format)
+        || header.resourceDimension != dimension || header.arraySize != 1 || header.miscFlag != 0
+        || header.mipCount > 1 || header.depth != (volume ? header.width : 0)
+        || header.pitch != header.width * channels * sizeof(uint16_t))
+        throw std::runtime_error("Unsupported cloud texture DDS header: " + name);
+
+    NoiseDds data;
+    data.size = header.width;
+    data.pitch = header.pitch;
+    const size_t depth = volume ? header.width : 1;
+    data.texels.resize(static_cast<size_t>(data.size) * data.size * depth * channels);
+    const auto bytes = static_cast<std::streamsize>(data.texels.size() * sizeof(uint16_t));
+    if (!file.read(reinterpret_cast<char *>(data.texels.data()), bytes)
+        || file.peek() != std::char_traits<char>::eof())
+        throw std::runtime_error("Unexpected cloud texture DDS data length: " + name);
+    // 半精度の0～1だけを許可し、NaNや負の密度がレイマーチへ入るのを防ぐ。
+    if (std::any_of(data.texels.begin(), data.texels.end(), [](uint16_t value) { return value > 0x3c00; }))
+        throw std::runtime_error("Cloud texture texels must be finite values between 0 and 1: " + name);
+    return data;
+}
+
 float hash(int x, int y)
 {
     uint32_t h = static_cast<uint32_t>(x) * 374761393u + static_cast<uint32_t>(y) * 668265263u;
@@ -547,8 +603,16 @@ void Renderer::initializeResources()
         const float clear[] = {0, 0, 0, 16};
         context_->ClearUnorderedAccessViewFloat(cloudOcclusion_.uav.Get(), clear);
     }
-    auto generate = [&](UINT size, UINT kind, ComPtr<ID3D11ShaderResourceView> &output)
+    const auto &packDirectory = options_.cloudTextureDirectory;
+    auto makeCloudNoise = [&](const wchar_t *name, UINT &size, UINT kind,
+                              ComPtr<ID3D11ShaderResourceView> &output)
     {
+        NoiseDds imported;
+        if (!packDirectory.empty())
+        {
+            imported = readNoiseDds(packDirectory / name, DXGI_FORMAT_R16G16B16A16_FLOAT, true);
+            size = imported.size;
+        }
         D3D11_TEXTURE3D_DESC d{};
         d.Width = d.Height = d.Depth = size;
         d.MipLevels = 0;
@@ -560,6 +624,13 @@ void Renderer::initializeResources()
         ComPtr<ID3D11Texture3D> texture;
         require(device_->CreateTexture3D(&d, nullptr, &texture), "Noise texture");
         require(device_->CreateShaderResourceView(texture.Get(), nullptr, &output), "Noise SRV");
+        if (!imported.texels.empty())
+        {
+            context_->UpdateSubresource(texture.Get(), 0, nullptr, imported.texels.data(),
+                                        imported.pitch, imported.pitch * size);
+            context_->GenerateMips(output.Get());
+            return;
+        }
         D3D11_UNORDERED_ACCESS_VIEW_DESC ud{};
         ud.Format = d.Format;
         ud.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
@@ -578,9 +649,9 @@ void Renderer::initializeResources()
                 {});
         context_->GenerateMips(output.Get());
     };
-    // 基本形状用Perlin-Worleyと輪郭用Worleyを、それぞれ128³で生成する。
-    generate(128, 0, baseNoise_);
-    generate(128, 1, detailNoise_);
+    // 通常は128³をGPUで生成し、パックが指定されたときはDDSからミップ0を読む。
+    makeCloudNoise(L"base-noise.dds", baseNoiseSize_, 0, baseNoise_);
+    makeCloudNoise(L"detail-noise.dds", detailNoiseSize_, 1, detailNoise_);
     // 解析的なセル群は起動時だけ評価。レイの各点では共有3Dテクスチャを1回読む。
     const auto bakeBegin = std::chrono::steady_clock::now();
     const auto control = bakeCloudControlVolume();
@@ -620,8 +691,20 @@ void Renderer::initializeResources()
     towerBakeMs_ =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - bakeBegin)
             .count();
-    compute(shaders_.weatherCS.Get(), 64, 64, 1,
-            {weatherMap_.uav.Get(), cloudDisplacement_.uav.Get()}, {});
+    if (packDirectory.empty())
+        compute(shaders_.weatherCS.Get(), 64, 64, 1,
+                {weatherMap_.uav.Get(), cloudDisplacement_.uav.Get()}, {});
+    else
+    {
+        const auto weather = readNoiseDds(packDirectory / L"weather-map.dds",
+                                          DXGI_FORMAT_R16G16B16A16_FLOAT, false);
+        const auto displacement = readNoiseDds(packDirectory / L"cloud-displacement.dds",
+                                               DXGI_FORMAT_R16G16_FLOAT, false);
+        context_->UpdateSubresource(weatherMap_.texture.Get(), 0, nullptr, weather.texels.data(),
+                                    weather.pitch, 0);
+        context_->UpdateSubresource(cloudDisplacement_.texture.Get(), 0, nullptr,
+                                    displacement.texels.data(), displacement.pitch, 0);
+    }
     context_->GenerateMips(weatherMap_.srv.Get());
     context_->GenerateMips(cloudDisplacement_.srv.Get());
     makeShadowDepth(terrainDepthView_, terrainDepthSRV_);
@@ -630,7 +713,11 @@ void Renderer::initializeResources()
     else
         makeTerrain();
     ui_.initialize(device_.Get());
-    log("Generated periodic Perlin-Worley 128^3 / Worley 128^3 noise and weather field.");
+    if (packDirectory.empty())
+        log("Generated periodic Perlin-Worley 128^3 / Worley 128^3 noise and weather field.");
+    else
+        log("Loaded cloud texture DDS pack (base " + std::to_string(baseNoiseSize_) + "^3, detail "
+            + std::to_string(detailNoiseSize_) + "^3, weather/displacement 512^2).");
 }
 
 void Renderer::makeShadowDepth(ComPtr<ID3D11DepthStencilView> &dsv,
@@ -1827,8 +1914,24 @@ void Renderer::drawTextureInspector()
 
     int textureWidth = width_, textureHeight = height_;
     if (info.volume)
-        textureWidth = textureHeight =
-            view == DebugView::CloudWarp ? cloudWarpSize : cloudControlSize;
+    {
+        switch (view)
+        {
+        case DebugView::PerlinWorley:
+        case DebugView::BaseWorley:
+            textureWidth = textureHeight = static_cast<int>(baseNoiseSize_);
+            break;
+        case DebugView::DetailWorley:
+            textureWidth = textureHeight = static_cast<int>(detailNoiseSize_);
+            break;
+        case DebugView::CloudWarp:
+            textureWidth = textureHeight = cloudWarpSize;
+            break;
+        default:
+            textureWidth = textureHeight = cloudControlSize;
+            break;
+        }
+    }
     else
         switch (view)
         {
@@ -2370,6 +2473,9 @@ std::string Renderer::diagnostics()
         << ", \"analytical_clear_pixels\": " << reconstructionCounts[3]
         << ", \"checker_frames\": " << checkerFrames_
         << ", \"full_refresh_frames\": " << fullCloudFrames_ << "},\n";
+    out << "  \"cloud_textures\": {\"source\": \""
+        << (options_.cloudTextureDirectory.empty() ? "procedural" : "dds")
+        << "\", \"base_size\": " << baseNoiseSize_ << ", \"detail_size\": " << detailNoiseSize_ << "},\n";
     out << "  \"tower_control_volume\": {\"size\": " << cloudControlSize
         << ", \"format\": \"R16_FLOAT\", \"bytes\": "
         << cloudControlSize * cloudControlSize * cloudControlSize * 2
