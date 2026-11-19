@@ -55,11 +55,14 @@ cbuffer Frame : register(b0)
     float4 LightningSource;   // xyz: 放電の始点[m]、w: 枝形状のシード
     float4 LightningTarget;   // xyz: 落雷地点[m]、w: 放電からの経過時間[s]
     float4 CloudPerformance;  // xy: 雲影生成後の風の移動量[m]、z: 照明共有、w: 雲影の経過秒
-    float4 Checkerboard;      // x: 今回は半数を計算、y: 偶奇、z: 生バッファの幅
+    float4 Checkerboard;      // x: 0=全画素 / 1=2相 / 2=4相、y: 位相、zw: 生バッファのサイズ
     float4 WorldRendering;    // x: exploration / reversed Z, y: near shadows, z: solar clock
     float4 FormationControls; // 領域数, 強度, 回転の積算位相[s], フレームの回転位相差[s]
     float4 FormationLayer;    // 全領域を含む雲底・雲頂高度、雲影の投影面[m]
     CloudFormation Formations[8];
+    float4 CloudOcclusionRegion; // xy: 風を引いたXZ中心[m]、z: 幅[m]、w: 有効フラグ
+    float4 CameraForward;  // xyz: カメラの前方単位ベクトル
+    float4 NearCloudParams; // x: 視錐台の奥行き[m]、y: 近い雲の変形量、z: スライス数、w: 変形範囲[m]
 };
 
 Texture3D<float4> BaseNoise : register(t0);
@@ -90,6 +93,7 @@ Texture2D<float2> CloudDisplacement : register(t24);
 Texture2D<float4> SkyAmbient : register(t25);
 Texture2D<float> NearTerrainShadow : register(t26);
 Texture2D<float4> GSurface : register(t27);
+Texture3D<float4> NearCloudIntegrated : register(t31);
 SamplerState LinearClamp : register(s0);
 SamplerState LinearWrap : register(s1);
 SamplerComparisonState ShadowCompare : register(s2);
@@ -160,6 +164,50 @@ float3 worldRay(float2 uv)
 {
     float sampleDepth = WorldRendering.x > 0.5 ? 0.0008 : 0.995;
     return normalize(worldPosition(uv, sampleDepth) - CameraTime.xyz);
+}
+
+float viewDepthCosine(float3 ray)
+{
+    return max(dot(ray, CameraForward.xyz), 0.001);
+}
+
+float nearCloudRayEnd(float3 ray)
+{
+    return NearCloudParams.x / viewDepthCosine(ray);
+}
+
+struct NearCloudSample
+{
+    float4 color;
+    float3 uv;
+    float scale;
+};
+
+NearCloudSample sampleNearCloud(float2 uv, float3 ray, float scene)
+{
+    const float4 clear = float4(0, 0, 0, 1);
+    NearCloudSample result;
+    result.color = clear;
+    result.uv = float3(uv, 0);
+    result.scale = 0;
+
+    [branch]
+    if (NearCloudParams.x > 0)
+    {
+        // スライスの奥側の面に累積値を置く。地形が途中にある場合はその面まで補間する。
+        float slices = NearCloudParams.z;
+        float normalizedDepth = saturate(scene * viewDepthCosine(ray) / NearCloudParams.x);
+        float squaredSlice = normalizedDepth * slices * slices;
+        float previousFace = floor(sqrt(squaredSlice));
+        float fraction = saturate((squaredSlice - previousFace * previousFace) / (2 * previousFace + 1));
+        result.uv.z = (previousFace + fraction - 0.5) / slices;
+
+        // 格子の最初の面までは、視点の透明な値から補間する。
+        result.scale = saturate(squaredSlice);
+        float4 integrated = NearCloudIntegrated.SampleLevel(LinearClamp, result.uv, 0);
+        result.color = lerp(clear, integrated, result.scale);
+    }
+    return result;
 }
 
 float geometryDepth(float2 uv)
@@ -396,6 +444,28 @@ float detailBackgroundCloud(BackgroundCloudSample background)
     return remap01(background.density, edgeErosion, 1);
 }
 
+BackgroundCloudSample sampleBackgroundCloud(float3 p, float h)
+{
+    [branch]
+    if (NearCloudParams.y > 0)
+    {
+        float3 offset = p - CameraTime.xyz;
+        float radius = NearCloudParams.w;
+        [branch]
+        if (dot(offset, offset) < radius * radius)
+        {
+            // 風に沿う3D変位を近くで強く使い、遠方の雲底・雲頂へ滑らかにつなぐ。
+            float strength = NearCloudParams.y * (1 - smoothstep(720, radius, length(offset)));
+            float3 advected = p - float3(Wind.x, 0, Wind.y);
+            float3 warp = CloudWarpVolume.SampleLevel(
+                LinearWrap, advected * 0.00023 + float3(0.13, 0.31, 0.61), 0).rgb - 0.5;
+            p += warp * float3(240, 820, 240) * strength * lerp(1, 0.45, Weather.y);
+            h = (altitude(p) - CloudLayer.x) / CloudLayer.y;
+        }
+    }
+    return backgroundCloudShape(p, h);
+}
+
 // 視線・太陽遮蔽・雲影に共通の背景雲海＋局所形状を返す。
 float2 cloudDensitySample(float3 p, bool detail)
 {
@@ -403,7 +473,7 @@ float2 cloudDensitySample(float3 p, bool detail)
         return 0;
     float height = altitude(p);
     float h = (height - CloudLayer.x) / CloudLayer.y;
-    BackgroundCloudSample background = backgroundCloudShape(p, h);
+    BackgroundCloudSample background = sampleBackgroundCloud(p, h);
     float density = detail ? detailBackgroundCloud(background) : background.density;
     return compositeFormationDensity(p, height, h, detail, density * CloudLayer.w);
 }

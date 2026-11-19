@@ -87,7 +87,7 @@
     <Copy SourceFiles="@(CirrusAssetFile)" DestinationFiles="@(CirrusAssetFile->'$(OutDir)assets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="ValidateCirrusShaders" AfterTargets="CopyCirrusShaders" Condition="'$(DesignTimeBuild)'!='true'">
-    <Message Text="Validating all 25 HLSL entry points (warnings as errors)..." Importance="high" />
+    <Message Text="Validating HLSL entry points and cloud variants (warnings as errors)..." Importance="high" />
     <Exec Command="&quot;$(TargetPath)&quot; --check-shaders --warp" WorkingDirectory="$(OutDir)" />
   </Target>
 </Project>

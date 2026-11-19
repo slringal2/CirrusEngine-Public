@@ -1,5 +1,17 @@
 #include "common.hlsli"
 
+#ifndef CIRRUS_CLASSIC_FAST
+#define CIRRUS_CLASSIC_FAST 0
+#endif
+
+static const bool CLASSIC_FAST = CIRRUS_CLASSIC_FAST != 0;
+static const float MAX_CLOUD_DISTANCE = 100000;
+Texture3D<float4> NearCloudLighting : register(t28);
+Texture3D<float4> CloudOcclusion : register(t29);
+Texture2D<uint> PreviousReconstruction : register(t30);
+RWTexture3D<float4> CloudOcclusionOutput : register(u0);
+RWTexture3D<float4> NearCloudOutput : register(u0);
+RWTexture3D<float> NearCloudMomentOutput : register(u1);
 RWTexture2D<float2> ShadowOutput : register(u0);
 RWTexture2D<float4> CloudOutput : register(u0);
 RWTexture2D<float2> MetadataOutput : register(u1);
@@ -102,6 +114,172 @@ float lightOpticalDepth(float3 p)
     return tau;
 }
 
+float classicSkyVisibility(float3 p)
+{
+    // 上に重なる雲の密度で天空光を減衰させる。直接計算とキャッシュ生成で同じ式を使う。
+    float upDensity = cloudDensity(p + float3(0, 120, 0), false) * 120
+                      + cloudDensity(p + float3(0, 360, 0), false) * 240
+                      + cloudDensity(p + float3(0, 900, 0), false) * 540;
+    return exp(-upDensity * cloudExtinction() * 0.6);
+}
+
+float2 cloudPhases(float mu)
+{
+    float single = CUMULUS_CLOUDS ? hg(mu, 0.80) : 0.85 * hg(mu, 0.70) + 0.15 * hg(mu, -0.20);
+    float broad = CUMULUS_CLOUDS ? hg(mu, 0.80 * (2.0 / 3.0))
+                                  : 0.85 * hg(mu, 0.35) + 0.15 * hg(mu, -0.10);
+    return float2(single, broad);
+}
+
+float3 shadeCloud(float3 p, float2 cloud, float tau, float skyVisibility, float2 phases,
+                  float3 skyAmbient)
+{
+    float density = cloud.x, h = cloud.y;
+    float3 sunlight = SolarExposure.rgb * sunTransmittance(p);
+    float3 lighting;
+    if (CUMULUS_CLOUDS)
+    {
+        float backScatter = remap01(density * cloudExtinction(), 0.0015, 0.012) / PI;
+        float single = max(phases.x, backScatter) * exp(-tau);
+        float multiple = 0.53 * max(phases.y, backScatter * 0.36) * exp(-tau * 0.35);
+        float3 ambient = skyAmbient * lerp(0.19, 0.86, exp(-tau * 0.28))
+                         * lerp(1, 0.52, Weather.y);
+        lighting = sunlight * (single + multiple) + ambient;
+    }
+    else
+    {
+        float single = phases.x * exp(-tau);
+        float multiple = 0.32 * phases.y * exp(-tau * 0.45)
+                         + 0.18 / (4 * PI) * exp(-tau * 0.12);
+        float powder = 1 - exp(-density * 4);
+        float3 ambient = lerp(float3(0.08, 0.11, 0.17), float3(0.38, 0.51, 0.70), h)
+                         * (0.07 + 0.93 * saturate(SunDirection.y * 3 + 0.10));
+        ambient *= (0.12 + 0.88 * skyVisibility) * lerp(1, 0.53, Weather.y);
+        lighting = sunlight * (single + multiple) * (0.85 + 0.15 * powder) + ambient;
+    }
+    // 直射が届きにくい雲にも、周りから多重散乱した光を加える。
+    float daylight = smoothstep(-0.04, 0.22, SunDirection.y);
+    float fill = (1 - exp(-tau * 0.25)) * daylight * lerp(1, 0.62, Weather.y);
+    lighting += float3(0.12, 0.135, 0.155) * fill;
+    return lighting + lightningIrradiance(p) * (0.3 + 0.7 * h);
+}
+
+float2 nearSliceDepth(uint z, uint slices)
+{
+    float2 f = float2(z, z + 1) / slices;
+    return NearCloudParams.x * f * f;
+}
+
+// 視錐台の各セルに、消散で割った散乱光と単位距離あたりの消散を保存する。
+[numthreads(4, 4, 4)]
+void LightNearCloudCS(uint3 id : SV_DispatchThreadID)
+{
+    uint width, height, slices;
+    NearCloudOutput.GetDimensions(width, height, slices);
+    if (any(id >= uint3(width, height, slices)))
+        return;
+    float2 uv = (id.xy + 0.5) / float2(width, height);
+    float3 ray = worldRay(uv);
+    float2 depths = nearSliceDepth(id.z, slices);
+    float distance = (depths.x + depths.y) * 0.5 / viewDepthCosine(ray);
+    float3 p = CameraTime.xyz + ray * distance;
+    float2 cloud = cloudDensitySample(p, true);
+    if (cloud.x < 0.001)
+    {
+        NearCloudOutput[id] = 0;
+        return;
+    }
+    float tau = lightOpticalDepth(p);
+    float skyVisibility = CUMULUS_CLOUDS ? 1 : classicSkyVisibility(p);
+    float3 skyAmbient = CUMULUS_CLOUDS ? SkyAmbient.Load(int3(0, 0, 0)).rgb : 0;
+    float2 phases = cloudPhases(dot(ray, SunDirection.xyz));
+    float3 light = shadeCloud(p, cloud, tau, skyVisibility, phases, skyAmbient);
+    NearCloudOutput[id] = float4(light, cloud.x * cloudExtinction());
+}
+
+// 視点側から各列を積分し、各スライス奥面での光・透過率・距離モーメントを累積する。
+[numthreads(8, 8, 1)]
+void IntegrateNearCloudCS(uint3 id : SV_DispatchThreadID)
+{
+    uint width, height, slices;
+    NearCloudOutput.GetDimensions(width, height, slices);
+    if (any(id.xy >= uint2(width, height)))
+        return;
+    float2 uv = (id.xy + 0.5) / float2(width, height);
+    float inverseCosine = 1 / viewDepthCosine(worldRay(uv));
+    float3 radiance = 0;
+    float T = 1, moment = 0;
+    [loop]
+    for (uint z = 0; z < slices; ++z)
+    {
+        float2 depths = nearSliceDepth(z, slices);
+        float4 medium = NearCloudLighting.Load(int4(id.xy, z, 0));
+        float interval = (depths.y - depths.x) * inverseCosine;
+        float segmentT = exp(-medium.a * interval);
+        float weight = T * (1 - segmentT);
+        radiance += weight * medium.rgb;
+        moment += weight * (depths.x + depths.y) * 0.5;
+        T *= segmentT;
+        NearCloudOutput[uint3(id.xy, z)] = float4(radiance, T);
+        NearCloudMomentOutput[uint3(id.xy, z)] = moment;
+    }
+}
+
+float3 scaleOcclusionForVariance(float3 values)
+{
+    // 太陽側の光学的厚さ、天空光の可視性、密度のばらつきを一つの指標にまとめる。
+    return values * float3(1, 4, 2);
+}
+
+[numthreads(4, 4, 4)]
+void CloudOcclusionCS(uint3 id : SV_DispatchThreadID)
+{
+    uint3 size;
+    CloudOcclusionOutput.GetDimensions(size.x, size.y, size.z);
+    if (any(id >= size))
+        return;
+
+    float3 uvw = (id + 0.5) / float3(size);
+    float2 xz = CloudOcclusionRegion.xy + Wind.xy + (uvw.xz - 0.5) * CloudOcclusionRegion.z;
+    float height = CloudLayer.x + uvw.y * CloudLayer.y;
+    // 高度の逆変換。planetCenter は探索カメラに追従するため、同じ曲率を使う。
+    float2 radial = xz - planetCenter().xz;
+    float radialSquared = dot(radial, radial);
+    float radius = PLANET_RADIUS + height;
+    float y = height - radialSquared / (radius + sqrt(max(radius * radius - radialSquared, 0)));
+    float3 p = float3(xz.x, y, xz.y);
+    float density = cloudDensity(p, true);
+    if (density < 0.12)
+    {
+        // 空や薄い雲の近くを補間した結果は、分散の条件で直接計算へ戻す。
+        CloudOcclusionOutput[id] = float4(0, 0, 0, 16);
+        return;
+    }
+
+    float3 values = float3(lightOpticalDepth(p), classicSkyVisibility(p), density);
+    float3 scaled = scaleOcclusionForVariance(values);
+    CloudOcclusionOutput[id] = float4(values, dot(scaled, scaled));
+}
+
+bool sharedCloudOcclusion(float3 p, float h, float density, out float2 visibility)
+{
+    visibility = 0;
+    float2 xz = (p.xz - Wind.xy - CloudOcclusionRegion.xy) / CloudOcclusionRegion.z + 0.5;
+    if (any(xz < 0.02) || any(xz > 0.98))
+        return false;
+
+    float4 cached = CloudOcclusion.SampleLevel(LinearClamp, float3(xz.x, h, xz.y), 0);
+    float3 scaled = scaleOcclusionForVariance(cached.xyz);
+    // trilinear(E[x²]) - trilinear(E[x])² が小さく、密度も近いときだけ共有する。
+    float variance = max(cached.w - dot(scaled, scaled), 0);
+    float tolerance = 0.18 + 0.012 * min(cached.x, 10);
+    if (variance > tolerance * tolerance
+        || abs(cached.z - density) > max(0.035, density * 0.15))
+        return false;
+    visibility = cached.xy;
+    return true;
+}
+
 struct CloudRayResult
 {
     // color.rgb は HDR 散乱光、color.a は残存透過率。metadata.xy は雲とシーンの距離 [m]。
@@ -109,17 +287,42 @@ struct CloudRayResult
     float2 metadata;
 };
 
-// 地形深度で切った雲層の区間。空間補間せずに「雲なし」を確定できる。
+float2 cloudLayerRoots(float3 ray, float shellHeight)
+{
+    float3 origin = CameraTime.xyz - planetCenter();
+    float y = CameraTime.y;
+    float b = dot(origin, ray);
+    // 惑星半径の二乗同士を引くと、雲層の境界を横切るときに精度を失う。
+    float c = dot(origin.xz, origin.xz)
+              + (y - shellHeight) * (2 * PLANET_RADIUS + y + shellHeight);
+    float discriminant = b * b - c;
+    if (discriminant < 0)
+        return float2(-1, -1);
+    float root = sqrt(discriminant);
+    float farRoot = -b - (b >= 0 ? root : -root);
+    float other = abs(farRoot) > 0.0001 ? c / farRoot : -b;
+    return float2(min(farRoot, other), max(farRoot, other));
+}
+
+// 地形と視錐台の奥面で切った遠景雲の区間。
 float2 cloudSegment(float3 ray, float scene)
 {
-    float2 outer =
-        sphereIntersection(CameraTime.xyz, ray, PLANET_RADIUS + CloudLayer.x + CloudLayer.y);
-    float2 inner = sphereIntersection(CameraTime.xyz, ray, PLANET_RADIUS + CloudLayer.x);
-    float start = max(outer.x, 0), end = min(outer.y, scene);
-    if (altitude(CameraTime.xyz) < CloudLayer.x)
-        start = max(start, inner.y);
-    else if (inner.x > 0)
-        end = min(end, inner.x);
+    float margin = 430 * NearCloudParams.y;
+    float2 outer = cloudLayerRoots(ray, CloudLayer.x + CloudLayer.y + margin);
+    float2 inner = cloudLayerRoots(ray, CloudLayer.x - margin);
+    float firstDistance = nearCloudRayEnd(ray);
+    float lastDistance = min(scene, MAX_CLOUD_DISTANCE);
+    float start = max(outer.x, firstDistance), end = min(outer.y, lastDistance);
+    if (inner.y > inner.x)
+    {
+        // 内球に入る手前と、反対側で雲層に戻る区間の両方を候補に残す。
+        float before = min(end, inner.x);
+        float after = max(start, inner.y);
+        if (before <= start)
+            start = after;
+        else if (after >= end)
+            end = before;
+    }
     bool hit = end > start;
     [loop]
     for (int i = 0; i < (int)FormationControls.x; ++i)
@@ -127,8 +330,8 @@ float2 cloudSegment(float3 ray, float scene)
         if (Formations[i].shape.y <= 0)
             continue;
         float2 extra = formationRayInterval(CameraTime.xyz, ray, Formations[i]);
-        extra.x = max(extra.x, 0);
-        extra.y = min(extra.y, min(scene, 100000.0));
+        extra.x = max(extra.x, firstDistance);
+        extra.y = min(extra.y, lastDistance);
         if (extra.y > extra.x)
         {
             start = hit ? min(start, extra.x) : extra.x;
@@ -136,15 +339,16 @@ float2 cloudSegment(float3 ray, float scene)
             hit = true;
         }
     }
-    return float2(start, min(end, 100000.0));
+    return float2(start, end);
 }
 
 float coarseCloudStep(float3 p, out float height, out float h, out BackgroundCloudSample background)
 {
     height = altitude(p);
     h = (height - CloudLayer.x) / CloudLayer.y;
-    background = backgroundCloudShape(p, h);
-    return compositeFormationDensity(p, height, h, false, background.density * CloudLayer.w).x;
+    background = sampleBackgroundCloud(p, h);
+    float density = background.density * CloudLayer.w;
+    return compositeFormationDensity(p, height, h, false, density).x;
 }
 
 // 通常描画と、履歴が使えない画素の修復で同じ積分を使う。
@@ -167,10 +371,24 @@ CloudRayResult traceCloudRay(uint2 pixel)
         return result;
     }
 
-    int steps = (int)RenderSize.z;
-    float emptyStep = clamp(5 * (end - start) / steps, 175, 850);
-    // 同じピクセルでもフレームごとに区間内の採取位置をずらし、帯状の誤差を分散する。
-    float jitter = frac(hash12(pixel) + Wind.w * 0.61803398875);
+    int distantSteps = (int)RenderSize.z;
+    // 視錐台のすぐ先も小さな歩幅で進み、近い雲塊から遠景へつなぐ。
+    bool nearView = NearCloudParams.x > 0 || NearCloudParams.y > 0;
+    float fineDistance = nearView ? max(0, min(end, NearCloudParams.w) - start) : 0;
+    int fineSteps = (int)ceil(fineDistance / 40);
+    float fineStepLength = fineDistance / max(fineSteps, 1);
+    int steps = distantSteps + fineSteps;
+    float emptyStep = nearView ? 175 : clamp(5 * (end - start) / distantSteps, 175, 850);
+
+    // 雲と同じ高度では、地形深度が跳ぶと手前のサンプル位置まで変わり、地平線に帯が出る。
+    // この視点では距離に応じて歩幅を広げ、地形や雲層の端で止まるまで同じ間隔で進む。
+    float growthStart = max(max(start, NearCloudParams.w), 1);
+    float minStepGrowth = nearView
+        ? exp2(log2(MAX_CLOUD_DISTANCE / growthStart) / distantSteps) - 1 : 0;
+    // Fastは2×2内で区間の採取位置をそろえ、別フレームで描いた画素間の差を抑える。
+    // 境界に近い位置を避け、位相更新や修復でも同じ位置を読む。
+    float jitter = CLASSIC_FAST ? lerp(0.25, 0.75, hash12(pixel >> 1))
+                                : frac(hash12(pixel) + Wind.w * 0.61803398875);
 
     // T はカメラから現在位置まで残った光の割合。radiance は蓄積した散乱光。
     float T = 1;
@@ -180,13 +398,11 @@ CloudRayResult traceCloudRay(uint2 pixel)
     // 太陽円盤は背景よりずっと明るいので、その付近では透過率をさらに追う。
     // 通常は T < 0.005 で打ち切り、太陽方向に近い視線は 0.00005 まで積分する。
     float transmittanceLimit = mu > 0.9996 ? 0.00005 : 0.005;
-    float phase = CUMULUS_CLOUDS ? hg(mu, 0.80) : 0.85 * hg(mu, 0.70) + 0.15 * hg(mu, -0.20);
-    float broadPhase = CUMULUS_CLOUDS ? hg(mu, 0.80 * (2.0 / 3.0))
-                                      : 0.85 * hg(mu, 0.35) + 0.15 * hg(mu, -0.10);
-    float isotropicPhase = 1 / (4 * PI);
+    float2 phases = cloudPhases(mu);
     float3 skyAmbient = CUMULUS_CLOUDS ? SkyAmbient.Load(int3(0, 0, 0)).rgb : 0;
     float cachedTau = 0, cachedSkyVisibility = 1, cachedDensity = 0, cachedDistance = -1e9;
-    bool haveLighting = false;
+    bool haveLighting = false, cachedFromVolume = false;
+    bool shareAcrossRays = CLASSIC_FAST && CloudOcclusionRegion.w > 0.5 && mu < 0.96;
     int refinement = 0;
     float cursor = start;
 
@@ -194,12 +410,15 @@ CloudRayResult traceCloudRay(uint2 pixel)
     for (int i = 0; i < steps && cursor < end; i++)
     {
         // 区間を同じ予算内で最後まで積分できる歩幅を下限にする。
+        bool fineStep = i < fineSteps;
         float remainingDistance = end - cursor;
-        float minStep = remainingDistance / (steps - i);
+        float minStep = nearView ? cursor * minStepGrowth : remainingDistance / (steps - i);
+        minStep = min(minStep, remainingDistance);
         float distanceScale = lerp(0.60, 1, saturate(cursor / 18000));
         float baseStep = emptyStep * distanceScale;
-        float ds = min(remainingDistance, max(minStep, baseStep * exp2(-refinement)));
-        float t = cursor + jitter * ds;
+        float ds = fineStep ? min(fineStepLength, remainingDistance)
+                            : min(remainingDistance, max(minStep, baseStep * exp2(-refinement)));
+        float t = cursor + (fineStep ? 0.5 : jitter) * ds;
         float3 p = CameraTime.xyz + ray * t;
         float height, backgroundHeight;
         BackgroundCloudSample background;
@@ -207,7 +426,7 @@ CloudRayResult traceCloudRay(uint2 pixel)
 
         // Bauer (2019), slide 50. 粗い形状に当たった区間を同じ始点から最大3回二分する。
         [loop]
-        while (coarse >= 0.001 && refinement < 3 && ds > minStep * 1.15)
+        while (!fineStep && coarse >= 0.001 && refinement < 3 && ds > minStep * 1.15)
         {
             refinement++;
             ds = max(minStep, ds * 0.5);
@@ -215,7 +434,7 @@ CloudRayResult traceCloudRay(uint2 pixel)
             p = CameraTime.xyz + ray * t;
             coarse = coarseCloudStep(p, height, backgroundHeight, background);
         }
-        cursor += ds;
+        cursor = fineStep && i + 1 == fineSteps ? start + fineDistance : cursor + ds;
         if (coarse < 0.001)
         {
             refinement = max(0, refinement - 1);
@@ -232,61 +451,45 @@ CloudRayResult traceCloudRay(uint2 pixel)
             haveLighting = false;
             continue;
         }
-        // h はその点に寄与する雲の内部での相対高度。雷の寄与を雲の上側で強める。
-        float h = cloudSample.y;
         float reuseDistance = clamp(t * 2.4 / RenderSize.y, 20, 160);
         // 距離と密度の近い点では遮蔽を再利用する。Cumulusは奇数ステップでのみ再利用する。
         // 視線側の密度・透過率は区間ごとに求め、空の区間で照明のキャッシュを無効にする。
+        bool allowSharedOcclusion = shareAcrossRays && t >= 1500 && density >= 0.12
+                                    && backgroundHeight > 0.06 && backgroundHeight < 0.94;
+        float densityTolerance =
+            cachedFromVolume ? max(0.025, density * 0.12) : max(0.04, density * 0.2);
         bool reuseLighting = CloudPerformance.z > 0.5 && haveLighting
                              && (!CUMULUS_CLOUDS || (i & 1) != 0)
+                             && (!cachedFromVolume || allowSharedOcclusion)
                              && t - cachedDistance < reuseDistance
-                             && abs(density - cachedDensity) < max(0.04, density * 0.2);
+                             && abs(density - cachedDensity) < densityTolerance;
         [branch]
         if (!reuseLighting)
         {
-            cachedTau = lightOpticalDepth(p);
-            if (!CUMULUS_CLOUDS)
+            float2 visibility = 0;
+            cachedFromVolume = false;
+            [branch]
+            if (allowSharedOcclusion)
+                cachedFromVolume = sharedCloudOcclusion(p, backgroundHeight, density, visibility);
+            [branch]
+            if (cachedFromVolume)
             {
-                // 上へ120/360/900 mの点を調べ、雲の上から届く光を厚みに応じて減らす。
-                float upDensity = cloudDensity(p + float3(0, 120, 0), false) * 120
-                                  + cloudDensity(p + float3(0, 360, 0), false) * 240
-                                  + cloudDensity(p + float3(0, 900, 0), false) * 540;
-                cachedSkyVisibility = exp(-upDensity * cloudExtinction() * 0.6);
+                cachedTau = visibility.x;
+                cachedSkyVisibility = visibility.y;
+            }
+            else
+            {
+                cachedTau = lightOpticalDepth(p);
+                if (!CUMULUS_CLOUDS)
+                    cachedSkyVisibility = classicSkyVisibility(p);
             }
             cachedDensity = density;
             cachedDistance = t;
             haveLighting = true;
         }
-        float tau = cachedTau;
-
         float extinction = density * cloudExtinction();
-        // tau は雲による遮蔽。太陽 → サンプル間の大気による波長別の減衰を別途掛ける。
-        float3 sunlight = SolarExposure.rgb * sunTransmittance(p);
-
-        float3 lighting;
-        if (CUMULUS_CLOUDS)
-        {
-            // 2オクターブのHG。消散が強い雲では後方にも散るよう位相に下限を置く。
-            float backScatter = remap01(extinction, 0.0015, 0.012) / PI;
-            float single = max(phase, backScatter) * exp(-tau);
-            float multiple = 0.53 * max(broadPhase, backScatter * 0.36) * exp(-tau * 0.35);
-            float3 ambient = skyAmbient * lerp(0.19, 0.86, exp(-tau * 0.28))
-                             * lerp(1, 0.52, Weather.y);
-            lighting = sunlight * (single + multiple) + ambient;
-        }
-        else
-        {
-            // 単一散乱に広い位相と等方の2項を足し、上に雲が重なる場所では天空光を抑える。
-            float single = phase * exp(-tau);
-            float multiple = 0.32 * broadPhase * exp(-tau * 0.45)
-                             + 0.18 * isotropicPhase * exp(-tau * 0.12);
-            float powder = 1 - exp(-density * 4);
-            float3 ambient = lerp(float3(0.08, 0.11, 0.17), float3(0.38, 0.51, 0.70), h)
-                             * (0.07 + 0.93 * saturate(SunDirection.y * 3 + 0.10));
-            ambient *= (0.12 + 0.88 * cachedSkyVisibility) * lerp(1, 0.53, Weather.y);
-            lighting = sunlight * (single + multiple) * (0.85 + 0.15 * powder) + ambient;
-        }
-        lighting += lightningIrradiance(p) * (0.3 + 0.7 * h);
+        float3 lighting = shadeCloud(p, cloudSample, cachedTau, cachedSkyVisibility, phases,
+                                      skyAmbient);
 
         // 前から後ろへ合成する。今回失われる透過光の割合を散乱光の重みにする。
         // attenuation はこの区間だけの透過率。T は視点から区間の手前までの累積透過率。
@@ -309,17 +512,30 @@ CloudRayResult traceCloudRay(uint2 pixel)
     return result;
 }
 
+bool fourPhaseClouds()
+{
+    return CLASSIC_FAST && Checkerboard.x > 1.5;
+}
+
+int2 checkerboardOffset()
+{
+    int phase = (int)Checkerboard.y;
+    return int2(phase & 1, phase >> 1);
+}
+
 [numthreads(8, 8, 1)]
 void CloudCS(uint3 id : SV_DispatchThreadID)
 {
-    uint2 size = uint2(Checkerboard.x > 0.5 ? Checkerboard.z : RenderSize.x, RenderSize.y);
+    uint2 size = (uint2)(Checkerboard.x > 0.5 ? Checkerboard.zw : RenderSize.xy);
     if (any(id.xy >= size))
         return;
     uint2 pixel = id.xy;
-    if (Checkerboard.x > 0.5)
+    if (fourPhaseClouds())
+        pixel = id.xy * 2 + (uint2)checkerboardOffset();
+    else if (Checkerboard.x > 0.5)
         pixel.x = id.x * 2 + ((id.y + (uint)Checkerboard.y) & 1);
-    // 奇数幅の末尾にできる未使用セルも初期化する。
-    if (pixel.x >= (uint)RenderSize.x)
+    // 奇数の幅や高さで最後にできる未使用セルも初期化する。
+    if (any(pixel >= (uint2)RenderSize.xy))
     {
         CloudOutput[id.xy] = float4(0, 0, 0, 1);
         MetadataOutput[id.xy] = Atmosphere.zz;
@@ -332,11 +548,15 @@ void CloudCS(uint3 id : SV_DispatchThreadID)
 
 bool tracedPixel(int2 pixel)
 {
+    if (fourPhaseClouds())
+        return all((pixel & 1) == checkerboardOffset());
     return Checkerboard.x < 0.5 || ((pixel.x + pixel.y) & 1) == (int)Checkerboard.y;
 }
 
 int2 rawPixel(int2 pixel)
 {
+    if (fourPhaseClouds())
+        return pixel >> 1;
     return int2(Checkerboard.x > 0.5 ? pixel.x >> 1 : pixel.x, pixel.y);
 }
 
@@ -347,13 +567,17 @@ void TemporalCS(uint3 id : SV_DispatchThreadID)
         return;
     int2 pixel = id.xy;
     float2 uv = (id.xy + 0.5) / RenderSize.xy;
+    bool fourPhase = fourPhaseClouds();
     bool traced = tracedPixel(pixel);
+    bool nearSun = false;
     float scene = sceneDistance(uv);
     float4 current = float4(0, 0, 0, 1);
     float2 meta = float2(Atmosphere.z, scene);
     if (!traced)
     {
-        float2 interval = cloudSegment(worldRay(uv), scene);
+        float3 ray = worldRay(uv);
+        float2 interval = cloudSegment(ray, scene);
+        nearSun = fourPhase && dot(ray, SunDirection.xyz) > 0.995;
         if (interval.y <= interval.x || Controls.w < 0.5)
         {
             CloudOutput[pixel] = current;
@@ -373,14 +597,21 @@ void TemporalCS(uint3 id : SV_DispatchThreadID)
     bool haveBounds = traced;
     float4 neighbors = 0;
     float neighborWeight = 0, distanceMoment = 0, opacityWeight = 0;
-    // 生バッファは横方向に詰めている。未計算画素を絶対に読み出さない。
-    // 欠けた画素の代表距離は、同じ地形深度を持つ上下左右から推定する。
+    // 4相では未計算画素を囲む4点から距離を推定する。
+    // 今回描いた画素は上下左右のサンプルを使い、履歴を片側の色だけで制限しない。
+    int2 first = pixel - 1;
+    if (fourPhase)
+        first = traced ? pixel - 2 : pixel - ((pixel - checkerboardOffset()) & 1);
+    int stride = fourPhase ? 2 : 1;
     [unroll]
-    for (int y = -1; y <= 1; y++)
+    for (int y = 0; y < 3; ++y)
         [unroll]
-        for (int x = -1; x <= 1; x++)
+        for (int x = 0; x < 3; ++x)
         {
-            int2 q = pixel + int2(x, y);
+            int offset = abs(x - 1) + abs(y - 1);
+            if (fourPhase && (traced ? offset > 1 : (x == 2 || y == 2)))
+                continue;
+            int2 q = first + int2(x, y) * stride;
             if (any(q < 0) || any(q >= (int2)RenderSize.xy) || !tracedPixel(q))
                 continue;
             float4 v = CloudTexture.Load(int3(rawPixel(q), 0));
@@ -393,8 +624,13 @@ void TemporalCS(uint3 id : SV_DispatchThreadID)
                 minimum = min(minimum, v);
                 maximum = max(maximum, v);
             }
-            if (!traced && abs(x) + abs(y) == 1)
+            if (!traced && (fourPhase || offset == 1))
             {
+                if (fourPhase)
+                {
+                    float2 spatial = saturate(1 - abs(float2(q - pixel)) * 0.5);
+                    w *= spatial.x * spatial.y;
+                }
                 neighbors += v * w;
                 neighborWeight += w;
                 float opacity = (1 - v.a) * w;
@@ -407,9 +643,17 @@ void TemporalCS(uint3 id : SV_DispatchThreadID)
         current = neighbors / neighborWeight;
         meta.x = opacityWeight > 0.0001 ? distanceMoment / opacityWeight : Atmosphere.z;
     }
-    // 深度境界では、小さい重みの合計だけが閾値を超える場合がある。
-    // 色の有効範囲が空なら履歴をクランプせず、必ず修復に回す。
-    if (!traced && (!haveBounds || neighborWeight <= 0.001))
+    // 4相では雲の縁や明暗差が大きい箇所、太陽円盤の近くも直接積分する。
+    const float3 luminance = float3(0.2126, 0.7152, 0.0722);
+    bool detailEdge = false;
+    if (fourPhase && !traced && haveBounds)
+    {
+        float contrast = dot(maximum.rgb - minimum.rgb, luminance);
+        detailEdge = maximum.a - minimum.a > 0.18
+                     || (minimum.a < 0.92 && maximum.a > 0.99)
+                     || contrast > 0.05 + 0.3 * dot(maximum.rgb, luminance);
+    }
+    if (!traced && (!haveBounds || neighborWeight <= 0.001 || nearSun || detailEdge))
     {
         CloudOutput[pixel] = current;
         MetadataOutput[pixel] = meta;
@@ -453,12 +697,34 @@ void TemporalCS(uint3 id : SV_DispatchThreadID)
         }
     }
 
-    // 0: 今回計算、1: 履歴から再構成、2: 履歴不成立のため後段で再計算。
-    ReconstructionOutput[pixel] = traced ? 0 : (valid > 0.5 ? 1 : 2);
-    float4 old = clamp(HistoryTexture.SampleLevel(LinearClamp, previousUV, 0), minimum, maximum);
+    float4 old = HistoryTexture.SampleLevel(LinearClamp, previousUV, 0);
+    float4 clampedHistory = clamp(old, minimum, maximum);
     float historyWeight = Checkerboard.x > 0.5 ? min(PreviousWind.z, 0.8) : PreviousWind.z;
+    uint age = 0;
+    if (fourPhase && valid > 0.5)
+    {
+        int2 historyPixel = clamp(int2(previousUV * RenderSize.xy), 0, int2(RenderSize.xy) - 1);
+        age = (PreviousReconstruction.Load(int3(historyPixel, 0)) >> 2) + 1;
+        if (traced)
+        {
+            // 前回の更新から空いた時間に合わせ、古い明るさの残り方を調整する。
+            historyWeight = pow(abs(historyWeight), (float)min(age, 4u));
+        }
+        else
+        {
+            // 位相ごとの色の範囲は履歴の採否に使う。有効な色を毎フレーム切り詰めると明滅する。
+            float brightnessError = abs(dot(old.rgb - clampedHistory.rgb, luminance));
+            float brightnessTolerance = 0.04 + 0.15 * dot(clampedHistory.rgb, luminance);
+            if (age > 3 || abs(old.a - clampedHistory.a) > 0.06
+                || brightnessError > brightnessTolerance)
+                valid = 0;
+        }
+    }
+    // 下位2bitは計算・履歴・修復・透明。履歴を採用したときは上位に経過フレーム数。
+    ReconstructionOutput[pixel] = traced ? 0u : (valid > 0.5 ? (1u | (age << 2)) : 2u);
     float weight = valid * (traced ? historyWeight : 1);
-    CloudOutput[id.xy] = lerp(current, old, weight);
+    float4 history = fourPhase && !traced ? old : clampedHistory;
+    CloudOutput[id.xy] = lerp(current, history, weight);
     MetadataOutput[id.xy] = meta;
 }
 
@@ -469,7 +735,7 @@ void RepairCS(uint3 id : SV_DispatchThreadID)
 {
     if (any(id.xy >= (uint2)RenderSize.xy))
         return;
-    if (CloudReconstruction.Load(int3(id.xy, 0)) != 2)
+    if ((CloudReconstruction.Load(int3(id.xy, 0)) & 3u) != 2u)
         return;
     CloudRayResult result = traceCloudRay(id.xy);
     CloudOutput[id.xy] = result.color;

@@ -20,7 +20,7 @@
 namespace cirrus
 {
 using Microsoft::WRL::ComPtr;
-inline constexpr UINT shaderResourceCount = 29;
+inline constexpr UINT shaderResourceCount = 32;
 using ShaderResources = std::array<ID3D11ShaderResourceView *, shaderResourceCount>;
 enum class Quality
 {
@@ -86,7 +86,7 @@ struct Options
     bool automatic = false, vsync = true, debugLayer = false;
     bool weatherDemo = false, rain = true, lightning = true;
     bool fullCloudLighting = false;
-    bool checkerboard = true;
+    bool checkerboard = true, classicFast = false, nearCloudVoxels = true;
     // 0: quality preset, 1: full, 2: half width/height, 4: quarter width/height.
     int cloudDivisor = 0;
     std::string formationMode = "none";
@@ -108,7 +108,7 @@ struct Options
     std::filesystem::path capture, shaderDirectory, assetsDirectory;
     bool openWorld = false, vegetation = true;
     float timeOfDay = -1, spawnX = -6.1f, spawnZ = -37;
-    std::optional<DirectX::XMFLOAT2> walkLook;
+    std::optional<DirectX::XMFLOAT2> startLook;
     double daySeconds = 0;
     std::filesystem::path modelPath;
     float modelScale = 1;
@@ -135,6 +135,7 @@ struct FrameData
     DirectX::XMFLOAT4 worldRendering;
     DirectX::XMFLOAT4 formationControls, formationLayer;
     std::array<CloudFormation, maxCloudFormations> formations;
+    DirectX::XMFLOAT4 cloudOcclusionRegion, cameraForward, nearCloudParams;
 };
 
 static_assert(sizeof(FrameData) % 16 == 0, "D3D11 constant buffer alignment");
@@ -147,9 +148,15 @@ struct Texture
     ComPtr<ID3D11UnorderedAccessView> uav;
 };
 
+struct VolumeTexture
+{
+    ComPtr<ID3D11ShaderResourceView> srv;
+    ComPtr<ID3D11UnorderedAccessView> uav;
+};
+
 struct CloudShaderSet
 {
-    ComPtr<ID3D11ComputeShader> mapCS, shadowCS, marchCS, repairCS;
+    ComPtr<ID3D11ComputeShader> mapCS, nearCloudCS, shadowCS, marchCS, repairCS;
 };
 
 struct ShaderSet
@@ -158,7 +165,9 @@ struct ShaderSet
     ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS,
         grassPS;
     ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, transmittanceCS, skyCS, skyAmbientCS,
-        temporalCS, aerialCS, grassPlacementCS;
+        temporalCS, aerialCS, grassPlacementCS, nearCloudIntegrateCS;
+    ComPtr<ID3D11ComputeShader> fastClassicMarchCS, fastClassicTemporalCS, fastClassicRepairCS,
+        cloudOcclusionCS;
     std::array<CloudShaderSet, 2> cloudStyles;
     ComPtr<ID3D11InputLayout> geometryLayout, meshLayout;
 };
@@ -205,6 +214,11 @@ class Renderer
                         bool mipmaps = false);
     void makeTargets();
     void updateConstants();
+    void updateNearClouds();
+    VolumeTexture makeVolume(int width, int height, int depth, DXGI_FORMAT format);
+    void updateCloudOcclusion(bool shareLighting, const DirectX::XMFLOAT4 &previousSun);
+    void makeCloudRawTargets();
+    bool fastClassic() const;
     void drawGeometry(bool shadow, bool localPass = false);
     void moveCamera(float forward, float side, float vertical, double dt, bool fast);
     void drawRain();
@@ -240,21 +254,22 @@ class Renderer
     ComPtr<ID3D11Buffer> frameBuffer_, passBuffer_, noiseBuffer_, vertices_, indices_;
     ComPtr<ID3D11ShaderResourceView> baseNoise_, detailNoise_, towerControl_, cloudWarp_;
     double towerBakeMs_ = 0;
-    ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_;
+    ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_, terrainSampler_;
     ComPtr<ID3D11RasterizerState> raster_, meshRaster_, shadowRaster_, meshShadowRaster_;
     ComPtr<ID3D11DepthStencilState> depthOn_, reversedDepth_, depthOff_;
     ComPtr<ID3D11BlendState> rainBlend_;
     ShaderSet shaders_;
     Texture finalColor_, sceneColor_, albedo_, normals_, surface_, weatherMap_, cloudDisplacement_,
         cloudMap_, cloudHeightLut_, shadowMap_, transmittance_, sky_, skyAmbient_, cloudRaw_,
-        metaRaw_, reconstruction_;
+        metaRaw_, reconstruction_, previousReconstruction_;
+    VolumeTexture cloudOcclusion_, nearCloudLight_, nearCloud_, nearCloudMoment_;
     // 前回を読みながら今回を書けるよう、雲と代表距離の履歴を2組で交互に使う。
     std::array<Texture, 2> history_, historyMeta_;
     Texture aerialScatter_, aerialTransmittance_, fog_, rain_;
     Ui ui_;
     int width_ = 0, height_ = 0, cloudWidth_ = 0, cloudHeight_ = 0, aerialWidth_ = 0,
         aerialHeight_ = 0, shadowSize_ = 0;
-    int rawCloudWidth_ = 0, cameraCut_ = -1;
+    int rawCloudWidth_ = 0, rawCloudHeight_ = 0, cameraCut_ = -1;
     bool checkerActive_ = false, fullCloudRefresh_ = true;
     uint64_t checkerFrames_ = 0, fullCloudFrames_ = 0;
     float previousYaw_ = 0, previousPitch_ = 0;
@@ -277,6 +292,15 @@ class Renderer
     float shadowType_ = -1, shadowControls_ = -1;
     double shadowTime_ = -1;
     uint64_t shadowFrame_ = 0, shadowUpdates_ = 0;
+    struct CloudOcclusionSource
+    {
+        DirectX::XMFLOAT4 region{}, layer{}, sun{}, wind{};
+        DirectX::XMFLOAT2 cameraXZ{};
+        float cloudType = 0;
+    } cloudOcclusionSource_;
+    bool rebuildCloudOcclusion_ = false;
+    uint64_t cloudOcclusionUpdates_ = 0;
+    uint64_t nearCloudUpdates_ = 0;
     uint32_t lightningSerial_ = 0;
     DirectX::XMFLOAT3 lightningSource_{}, lightningTarget_{};
     WindOffset previousWind_{};

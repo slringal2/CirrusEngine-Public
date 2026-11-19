@@ -87,6 +87,8 @@ cirrus::Options arguments()
             o.fullCloudLighting = true;
         else if (a == L"--no-checkerboard")
             o.checkerboard = false;
+        else if (a == L"--classic-fast")
+            o.classicFast = true;
         else if (a == L"--cloud-style")
         {
             const auto style = next();
@@ -169,7 +171,7 @@ cirrus::Options arguments()
             if (!std::isfinite(yaw) || !std::isfinite(pitch) || std::abs(yaw) > 180
                 || std::abs(pitch) > 85)
                 throw std::runtime_error("Look angles must be yaw [-180,180] and pitch [-85,85]");
-            o.walkLook = DirectX::XMFLOAT2{yaw, pitch};
+            o.startLook = DirectX::XMFLOAT2{yaw, pitch};
         }
         else if (a == L"--model")
             o.modelPath = next();
@@ -232,6 +234,8 @@ cirrus::Options arguments()
             o.ui = false;
         else if (a == L"--no-clouds")
             o.clouds = false;
+        else if (a == L"--no-near-cloud-voxels")
+            o.nearCloudVoxels = false;
         else if (a == L"--no-cloud-shadows")
             o.shadows = false;
         else if (a == L"--auto-weather")
@@ -273,28 +277,31 @@ cirrus::Options arguments()
                              && o.cameraPath.empty() && o.formationMode == "none"
                              && o.formationFile.empty() && !o.weatherDemo
                              && o.benchmarkSeconds == 0;
-        o.camera = typicalLaunch || customSpawn || o.walkLook || !o.modelPath.empty()
+        o.camera = typicalLaunch || customSpawn || o.startLook || !o.modelPath.empty()
                            || o.cameraPath == "walk"
                        ? "walk"
                        : "valley";
     }
-    if ((customSpawn || o.walkLook || o.cameraPath == "walk") && o.camera != "walk")
-        throw std::runtime_error(
-            "World spawn, look angles and the walking path require --camera walk");
-    if (o.camera == "walk" && !o.cameraPath.empty() && o.cameraPath != "walk")
-        throw std::runtime_error("Exploration supports --camera-path walk");
-    o.openWorld = o.camera == "walk" || !o.modelPath.empty();
+    const bool walkingCamera = o.camera == "walk";
+    const bool explorationCamera = walkingCamera || o.camera == "fly";
+    if ((customSpawn || o.startLook) && !explorationCamera)
+        throw std::runtime_error("World spawn and look angles require --camera walk or fly");
+    if (o.cameraPath == "walk" && !walkingCamera)
+        throw std::runtime_error("The walking path requires --camera walk");
+    if (walkingCamera && !o.cameraPath.empty() && o.cameraPath != "walk")
+        throw std::runtime_error("Walking supports --camera-path walk");
+    o.openWorld = explorationCamera || !o.modelPath.empty();
     if ((o.openWorld || dayLengthSet) && o.timeOfDay < 0 && !manualSun)
-        o.timeOfDay = o.camera == "walk" && o.modelPath.empty() ? 15.7f : 16.4f;
+        o.timeOfDay = explorationCamera && o.modelPath.empty() ? 15.7f : 16.4f;
     if (o.timeOfDay >= 0 && !dayLengthSet && !o.headless && o.capture.empty()
         && o.recordDirectory.empty())
         o.daySeconds = 720;
-    if (o.camera != "walk" && o.camera != "valley" && o.camera != "clouds" && o.camera != "overview"
+    if (!explorationCamera && o.camera != "valley" && o.camera != "clouds" && o.camera != "overview"
         && o.camera != "inside" && o.camera != "shadows" && o.camera != "formations"
         && o.camera != "vortex" && o.camera != "tower-close" && o.camera != "tower-side"
         && o.camera != "tower-inside")
         throw std::runtime_error(
-            "Unknown camera. Use walk, valley, clouds, overview, inside, shadows, "
+            "Unknown camera. Use walk, fly, valley, clouds, overview, inside, shadows, "
             "formations, vortex, tower-close, tower-side or tower-inside");
     if (!o.recordDirectory.empty() && !o.capture.empty())
         throw std::runtime_error("Choose --capture or --record");
@@ -334,6 +341,7 @@ void saveBenchmark(const cirrus::Options &options, const std::string &adapter,
          << ", \"height\": " << options.height << ",\n";
     file << "  \"quality\": \"" << quality[static_cast<int>(options.quality)]
          << "\", \"vsync\": " << (options.vsync ? "true" : "false") << ",\n";
+    file << "  \"classic_fast_requested\": " << (options.classicFast ? "true" : "false") << ",\n";
     file << "  \"checkerboard\": " << (options.checkerboard ? "true" : "false")
          << ", \"cloud_buffer_divisor\": " << options.cloudDivisor << ", \"camera_path\": \""
          << options.cameraPath << "\",\n";

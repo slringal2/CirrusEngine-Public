@@ -1,5 +1,7 @@
 #include "common.hlsli"
 
+Texture3D<float> NearCloudMoment : register(t28);
+
 // renderer.cpp がパスごとに出力テクスチャを割り当てる。
 // AerialCS は u0 に空気遠近の散乱光、u1 に透過率、u2 に地表霧を書き込む。
 RWTexture2D<float4> Output0 : register(u0);
@@ -105,6 +107,34 @@ void SkyAmbientCS(uint3 id : SV_GroupThreadID, uint index : SV_GroupIndex)
         Output0[uint2(0, 0)] = float4(SkySum[0].rgb / SkySum[0].a, 1);
 }
 
+// 雲がない画素の遠方距離を混ぜないように、雲の代表距離を不透明度で重み付けする。
+float2 nearbyCloudDepth(float2 uv, float scene)
+{
+    float2 pixel = uv * RenderSize.xy - 0.5;
+    int2 base = (int2)floor(pixel);
+    float2 fraction = frac(pixel);
+    float opacity = 0, depth = 0, weightSum = 0;
+    [unroll]
+    for (int y = 0; y < 2; ++y)
+        [unroll]
+        for (int x = 0; x < 2; ++x)
+        {
+            int2 q = clamp(base + int2(x, y), 0, (int2)RenderSize.xy - 1);
+            float weight = (x ? fraction.x : 1 - fraction.x) * (y ? fraction.y : 1 - fraction.y);
+            float2 meta = CloudMetadata.Load(int3(q, 0));
+            float depthDifference = abs(meta.y - scene) / max(scene * 0.035, 80);
+            weight *= exp(-min(depthDifference, 40));
+            if (meta.x > scene + 100 && scene < Atmosphere.z * 0.99)
+                weight *= 0.001;
+            float contribution = weight * saturate(1 - CloudTexture.Load(int3(q, 0)).a);
+            opacity += contribution;
+            depth += contribution * min(meta.x, scene);
+            weightSum += weight;
+        }
+    float coverage = weightSum > 0.00001 ? saturate(opacity / weightSum) : 0;
+    return float2(coverage > 0.0001 ? depth / opacity : scene, coverage);
+}
+
 [numthreads(8, 8, 1)]
 void AerialCS(uint3 id : SV_DispatchThreadID)
 {
@@ -114,28 +144,56 @@ void AerialCS(uint3 id : SV_DispatchThreadID)
         return;
     float2 uv = (id.xy + 0.5) / float2(w, h);
     float3 ray = worldRay(uv);
-    // scene は地形や川面までの距離、meta.x は雲の散乱を代表する距離。
-    // cloudT が 1 に近いほど雲が薄く、このパスでは 0.995 を積分先の切り替えに使う。
     float scene = sceneDistance(uv);
-    float2 meta = CloudMetadata.SampleLevel(LinearClamp, uv, 0);
+    float cloudDepth = CloudMetadata.SampleLevel(LinearClamp, uv, 0).x;
     float cloudT = CloudTexture.SampleLevel(LinearClamp, uv, 0).a;
+    float atmosphereWeight = cloudT < 0.995 ? 1 : 0;
+    float distance = min(cloudT < 0.995 ? min(cloudDepth, scene) : scene, 100000);
+    float fogEnd = min(scene, 50000);
+    float fogDistance = cloudT < 0.8 ? min(fogEnd, cloudDepth) : fogEnd;
+    NearCloudSample nearSample = sampleNearCloud(uv, ray, scene);
+    float4 nearCloud = nearSample.color;
+    float nearOpacity = saturate(1 - nearCloud.a);
+    float smoothCloud = max(NearCloudParams.y, smoothstep(0, 0.04, nearOpacity));
+    [branch]
+    if (smoothCloud > 0)
+    {
+        float2 farCloud = nearbyCloudDepth(uv, scene);
+        float nearMoment = 0;
+        if (nearOpacity > 0)
+            nearMoment = NearCloudMoment.SampleLevel(LinearClamp, nearSample.uv, 0)
+                         * nearSample.scale / viewDepthCosine(ray);
+        float farOpacity = nearCloud.a * farCloud.y;
+        float opacity = nearOpacity + farOpacity;
+        float cloudDistance = opacity > 0.0001
+            ? (nearMoment + farOpacity * farCloud.x) / opacity : scene;
+        // 薄い雲の縁でも不透明度に応じて空気遠近と霧の積分距離を連続に変える。
+        float weight = smoothstep(0, 0.08, opacity);
+        float cloudEnd = min(cloudDistance, scene);
+        float smoothDistance = lerp(min(scene, 100000), min(cloudEnd, 100000), weight);
+        float smoothFog = lerp(fogEnd, min(fogEnd, cloudEnd), smoothstep(0.12, 0.35, opacity));
+        distance = lerp(distance, smoothDistance, smoothCloud);
+        fogDistance = lerp(fogDistance, smoothFog, smoothCloud);
+        atmosphereWeight = lerp(atmosphereWeight, weight, smoothCloud);
+    }
 
-    // 雲の代表距離か地形までを積分する空気遠近法。
-    // 視線上に広がる雲の寄与をこの代表距離にまとめる近似。大気の積分は最大 100 km。
-    float distance = cloudT < 0.995 ? min(meta.x, scene) : scene;
     bool geometry = scene < Atmosphere.z * 0.99;
     AtmosphereResult a;
     a.scattering = 0;
     a.transmittance = 1;
-    if (geometry || cloudT < 0.995)
-        a = integrateAtmosphere(CameraTime.xyz, ray, min(distance, 100000), 16);
+    if (geometry || atmosphereWeight > 0)
+        a = integrateAtmosphere(CameraTime.xyz, ray, distance, 16);
+    if (smoothCloud > 0 && !geometry)
+    {
+        a.scattering *= atmosphereWeight;
+        a.transmittance = lerp(1, a.transmittance, atmosphereWeight);
+    }
     // 描画合成時の空気遠近は「遠方の色 × 透過率 + 手前の空気が足した光」。
     Output0[id.xy] = float4(a.scattering, 1);
     Output1[id.xy] = float4(a.transmittance, 1);
 
     // 地表霧は別に24区間を積分する。雲影・地形影を受けるため光芒が現れる。
     // 最長 50 km。手前に地形があるか、雲が十分濃いときはそこで区間を切る。
-    float fogDistance = min(min(scene, cloudT < 0.8 ? meta.x : 50000), 50000);
     float T = 1;
     float3 scattering = 0;
     float phase = hg(dot(ray, SunDirection.xyz), 0.58);

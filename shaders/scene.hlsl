@@ -11,6 +11,7 @@ Texture2D<float4> RiverGravel : register(t40);
 Texture2D<float4> RiverGravelNormal : register(t41);
 Texture2D<float4> RidgeRock : register(t42);
 Texture2D<float4> RidgeRockNormal : register(t43);
+SamplerState TerrainWrap : register(s8);
 
 struct Vertex
 {
@@ -49,12 +50,19 @@ float3 ridgeWeights(float3 normal)
     return weights / dot(weights, 1.0.xxx);
 }
 
+// 細かい模様は1画素に入らなくなったら平均値へ寄せる。上空での斑点や格子を抑える。
+float filteredTerrainNoise(float2 p)
+{
+    float footprint = max(length(ddx(p)), length(ddy(p)));
+    return lerp(meadowNoise(p), 0.5, smoothstep(0.28, 1.10, footprint));
+}
+
 GBuffer GeometryPS(GeometryVarying v)
 {
     // G-bufferに線形アルベド・粗さと法線を保存し、照明は後の合成パスで計算する。
     float variation = WeatherMap.SampleLevel(LinearWrap, v.world.xz * 0.00018, 0).r;
-    float grain = DetailNoise.SampleLevel(LinearWrap, v.world * 0.002, 0).r;
-    float fine = DetailNoise.SampleLevel(LinearWrap, v.world * 0.027, 0).b;
+    float grain = DetailNoise.Sample(LinearWrap, v.world * 0.002).r;
+    float fine = DetailNoise.Sample(LinearWrap, v.world * 0.027).b;
     float wet = WeatherEffects.x;
     float3 albedo = v.material.rgb * lerp(0.8, 1.2, variation) * lerp(1, 0.62, wet);
     albedo *= lerp(0.68, 1.28, grain) * lerp(0.91, 1.07, fine);
@@ -64,26 +72,37 @@ GBuffer GeometryPS(GeometryVarying v)
     {
         float2 xz = v.world.xz;
         float z = xz.y;
+        float distance = length(v.world - CameraTime.xyz);
+        // 世界座標で複数の縮尺を混ぜ、同じ向きの模様が遠方まで並ぶのを避ける。
+        float2 turned = float2(xz.x * 0.81 - z * 0.5864, xz.x * 0.5864 + z * 0.81);
+        float region = filteredTerrainNoise(turned * 0.00115 + float2(37, 18));
+        float patches = filteredTerrainNoise(xz * 0.0048 + float2(16, 41));
+        float meadowRegion = smoothstep(0.19, 0.81, 0.68 * region + 0.32 * patches);
         float ruts = DetailNoise.Sample(LinearWrap, v.world * float3(0.19, 0.17, 0.028)).g;
         float trail = meadowTrail(xz);
-        float moisture = meadowMoisture(xz);
+        float moisture = lerp(meadowMoisture(xz), meadowRegion, smoothstep(320, 1350, distance));
         float erosion = smoothstep(0.12, 0.45, 1 - normal.y);
         float soilCover = saturate(max(trail, (1 - smoothstep(0, 0.32, moisture)) * 0.38
                                                + erosion * 0.31));
-        float3 grassTexture = GroundMeadow.Sample(LinearWrap, xz * 0.58).rgb;
+        float3 grassFine = GroundMeadow.Sample(TerrainWrap, xz * 0.58).rgb;
+        float3 grassWide = GroundMeadow.Sample(TerrainWrap, turned * 0.21 + float2(6.2, 1.9)).rgb;
+        float3 grassTexture = lerp(grassFine, grassWide, 0.36 + 0.22 * patches);
         float fineCover = dot(grassTexture, float3(0.25, 0.64, 0.11));
-        float3 meadow = meadowColor(moisture) * (0.66 + 0.92 * fineCover);
+        float3 grassTint = lerp(float3(1.15, 1.04, 0.84), float3(0.89, 1.04, 0.93), meadowRegion);
+        float3 meadow = meadowColor(moisture) * grassTint * (0.73 + 0.77 * fineCover);
         float windSpeed = length(WeatherEffects.yz);
         float2 wind = WeatherEffects.yz / max(windSpeed, 0.01);
         float fieldWave = meadowGust(xz, wind);
-        float distantGrass = smoothstep(65, 250, length(xz - CameraTime.xz));
-        meadow *= 1 + (fieldWave - 0.5) * min(windSpeed / 20, 1.3) * distantGrass * 0.12;
-        float3 earth = GroundSoil.Sample(LinearWrap, xz * 0.52).rgb * (0.70 + 0.32 * ruts);
+        float grassMotion = smoothstep(65, 250, distance) * (1 - smoothstep(700, 1700, distance));
+        meadow *= 1 + (fieldWave - 0.5) * min(windSpeed / 20, 1.3) * grassMotion * 0.12;
+        float3 soilFine = GroundSoil.Sample(TerrainWrap, xz * 0.52).rgb;
+        float3 soilWide = GroundSoil.Sample(TerrainWrap, turned * 0.17 + float2(4.1, 2.3)).rgb;
+        float3 earth = lerp(soilFine, soilWide, 0.30 + 0.19 * region) * (0.79 + 0.26 * ruts);
         float bank = riverBankDistance(v.world.x, z);
         float gravel = (1 - smoothstep(-0.6, 5.4, bank + (ruts - 0.5) * 4))
                        * (1 - smoothstep(2180, riverExtent, abs(z)));
         float nearWater = (1 - smoothstep(0.05, 0.75, v.world.y - riverLevel(z))) * gravel;
-        float3 pebbles = RiverGravel.Sample(LinearWrap, xz * 0.52).rgb
+        float3 pebbles = RiverGravel.Sample(TerrainWrap, xz * 0.52).rgb
                          * lerp(1.08, 0.59, nearWater);
         float3 ground = lerp(meadow, earth, saturate(soilCover));
         ground = lerp(ground, pebbles, gravel);
@@ -93,17 +112,17 @@ GBuffer GeometryPS(GeometryVarying v)
         exposed *= 1 - max(gravel, trail);
         float3 projection = v.world * 0.013 + 0.34;
         float3 weights = ridgeWeights(normal);
-        float3 ridge = RidgeRock.Sample(LinearWrap, projection.zy).rgb * weights.x
-                       + RidgeRock.Sample(LinearWrap, projection.xz).rgb * weights.y
-                       + RidgeRock.Sample(LinearWrap, projection.xy).rgb * weights.z;
+        float3 ridge = RidgeRock.Sample(TerrainWrap, projection.zy).rgb * weights.x
+                       + RidgeRock.Sample(TerrainWrap, projection.xz).rgb * weights.y
+                       + RidgeRock.Sample(TerrainWrap, projection.xy).rgb * weights.z;
         float fault = meadowNoise(xz * 0.0031 + float2(22, v.world.y * 0.0038));
         ridge *= 0.72 + 0.66 * fault;
         float stoneLuma = dot(ridge, float3(0.25, 0.64, 0.11));
         ridge = lerp(ridge, stoneLuma * float3(0.91, 1.00, 1.09), 0.72);
-        float distant = smoothstep(310, 1600, length(xz - CameraTime.xz));
-        float thicket = smoothstep(0.24, 0.72, meadowNoise(xz * 0.0064 + 16));
+        float distant = smoothstep(310, 1600, distance);
+        float thicket = smoothstep(0.40, 0.79, 0.60 * meadowRegion + 0.40 * patches);
         thicket *= distant * (1 - smoothstep(640, 1020, v.world.y));
-        ground *= lerp(1, float3(0.33, 0.51, 0.45), thicket * (1 - max(gravel, trail)));
+        ground *= lerp(1, float3(0.62, 0.74, 0.64), thicket * (1 - max(gravel, trail)));
         ground = lerp(ground, ridge, exposed);
         float snowline = 1120 + 290 * meadowNoise(xz * 0.005 + 27);
         float snow = smoothstep(snowline - 46, snowline + 102, v.world.y)
@@ -111,17 +130,20 @@ GBuffer GeometryPS(GeometryVarying v)
         ground = lerp(ground, float3(0.53, 0.59, 0.66) * (0.79 + 0.25 * fine), snow);
         albedo = ground * (0.77 + 0.45 * variation) * lerp(1, 0.62, wet);
 
-        float3 soilNormal = GroundSoilNormal.Sample(LinearWrap, xz * 0.52).xyz * 2 - 1;
-        float3 pebbleNormal = RiverGravelNormal.Sample(LinearWrap, xz * 0.52).xyz * 2 - 1;
+        float3 soilNormal = GroundSoilNormal.Sample(TerrainWrap, xz * 0.52).xyz * 2 - 1;
+        float3 pebbleNormal = RiverGravelNormal.Sample(TerrainWrap, xz * 0.52).xyz * 2 - 1;
         float2 bump = lerp(soilNormal.xy * (0.32 + 0.24 * soilCover), pebbleNormal.xy * 0.72,
                           gravel);
-        float2 faceX = RidgeRockNormal.Sample(LinearWrap, projection.zy).xy * 2 - 1;
-        float2 faceY = RidgeRockNormal.Sample(LinearWrap, projection.xz).xy * 2 - 1;
-        float2 faceZ = RidgeRockNormal.Sample(LinearWrap, projection.xy).xy * 2 - 1;
+        float2 faceX = RidgeRockNormal.Sample(TerrainWrap, projection.zy).xy * 2 - 1;
+        float2 faceY = RidgeRockNormal.Sample(TerrainWrap, projection.xz).xy * 2 - 1;
+        float2 faceZ = RidgeRockNormal.Sample(TerrainWrap, projection.xy).xy * 2 - 1;
         float3 ridgeBump = float3(0, -faceX.y, faceX.x) * weights.x
                            + float3(faceY.x, 0, -faceY.y) * weights.y
                            + float3(faceZ.x, -faceZ.y, 0) * weights.z;
-        normal = normalize(normal + lerp(float3(bump.x, 0, -bump.y), ridgeBump * 0.37, exposed));
+        float groundDetail = 1 - smoothstep(62, 480, distance);
+        float rockDetail = 1 - smoothstep(750, 3400, distance);
+        float3 groundBump = float3(bump.x, 0, -bump.y) * groundDetail;
+        normal = normalize(normal + lerp(groundBump, ridgeBump * (0.37 * rockDetail), exposed));
         roughness = lerp(roughness, 0.62, nearWater * (1 - wet));
     }
     return encodeMaterial(albedo, roughness, normal, 0, 0, 1);
@@ -151,7 +173,8 @@ float3 surfaceLighting(float2 uv, float depth)
     float metallic = saturate(packedNormal.w);
     float3 world = worldPosition(uv, depth), V = normalize(CameraTime.xyz - world),
            L = SunDirection.xyz;
-    float3 H = normalize(V + L);
+    float3 halfVector = V + L;
+    float3 H = halfVector * rsqrt(max(dot(halfVector, halfVector), 1e-8));
     float nl = saturate(dot(normal, L)), nv = max(dot(normal, V), 0.001);
     float nh = saturate(dot(normal, H)), vh = saturate(dot(V, H));
     float rough = max(material.a, 0.06), a2 = rough * rough * rough * rough;
@@ -197,7 +220,11 @@ float3 surfaceLighting(float2 uv, float depth)
         ? diffuse * float3(0.84, 1.0, 0.34) * (0.035 + 0.17 * forwardLight) * solar
           * cloudVisibility * saturate(L.y * 3) * lerp(0.28, 1, shadow)
         : 0;
-    return direct + indirect + flash + surface.rgb + leafTransmission;
+    // 雲影で失われた直射とは別に、空と周囲の地表から届く拡散光を足す。
+    float overcastFill = (1 - saturate(cloudVisibility)) * smoothstep(-0.035, 0.22, L.y);
+    float3 shadowFill = diffuse * float3(0.19, 0.19, 0.17) * overcastFill
+                        * lerp(0.36, 1, hemisphere) * lerp(0.46, 1, abs(surface.a));
+    return direct + indirect + shadowFill + flash + surface.rgb + leafTransmission;
 }
 
 #include "river_water.hlsli"
@@ -421,7 +448,7 @@ float4 textureDebugView(float2 uv, int view)
     if (view == 23)
     {
         int2 pixel = min((int2)(uv * RenderSize.xy), (int2)RenderSize.xy - 1);
-        uint state = CloudReconstruction.Load(int3(pixel, 0));
+        uint state = CloudReconstruction.Load(int3(pixel, 0)) & 3u;
         return float4(state == 3 ? float3(0.25, 0.25, 0.25)
                                 : (state == 0 ? float3(0.15, 0.85, 0.3)
                                 : (state == 1 ? float3(0.15, 0.4, 1) : float3(1, 0.15, 0.1))), 1);
@@ -466,7 +493,8 @@ float4 CompositePS(ScreenVarying v) : SV_Target
         sky += night * (float3(0.0010, 0.0028, 0.0062) * (0.55 + 0.45 * saturate(ray.y))
                         + float3(0.37, 0.43, 0.56) * (moon + halo) + star * 0.27);
     }
-    float4 cloud = upsampleClouds(uv, scene);
+    float4 farCloud = upsampleClouds(uv, scene);
+    float4 nearCloud = sampleNearCloud(uv, ray, scene).color;
     float3 scattering, transmission;
     float4 fog;
     upsampleAerial(uv, scene, scattering, transmission, fog);
@@ -479,12 +507,12 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     // 地形と川面の色は空気を通って減衰し、途中の空気が散乱させた光が足される。
     // 空の背景色は SkyCS 側で大気散乱を積分済み。
     float3 base = geometry || water ? surface * transmission + scattering : sky;
-    // 背景は雲の残存透過率を掛ける。雲自身の RGB は手前の空気の透過率を掛ける。
-    // 雲が覆う割合 (1 - cloud.a) にも代表距離までに手前の空気が散乱させた光を足す。
-    float3 color = base * cloud.a + cloud.rgb * transmission + scattering * (1 - cloud.a);
-    // 霧は手前に重ね、A で背後の光を減衰させた後に RGB の霧散乱光を加える。
+    float3 farColor = base * farCloud.a + farCloud.rgb * transmission
+                      + scattering * (1 - farCloud.a);
+    // 手前の散乱光を加算し、残った透過率を奥の雲と背景に掛ける。
+    float3 color = nearCloud.rgb + nearCloud.a * farColor;
     color = color * fog.a + fog.rgb;
-    color += lightningBolt(ray, scene, cloud.a);
+    color += lightningBolt(ray, scene, nearCloud.a * farCloud.a);
     float4 rain = RainTexture.SampleLevel(LinearClamp, uv, 0);
     // RainPS の A は不透明度で RGB は乗算済み。背後の光に掛ける透過率は 1 - rain.a。
     color = color * (1 - rain.a) + rain.rgb;

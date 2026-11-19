@@ -25,6 +25,11 @@ namespace
 constexpr std::array<int, 4> samples{160, 224, 384, 640};
 constexpr std::array<int, 4> lightSamples{6, 8, 12, 16};
 constexpr std::array<int, 4> shadowSizes{256, 512, 768, 1536};
+constexpr int cloudOcclusionXZ = 128, cloudOcclusionY = 24;
+constexpr float flightStartHeight = 32.0f;
+// 視錐台内のセルに照明を共有し、奥行き方向に散乱光と透過率を積み上げる。
+constexpr int nearCloudWidth = 80, nearCloudHeight = 44, nearCloudSlices = 32;
+constexpr float nearCloudDepth = 160.0f;
 constexpr std::array<const char *, 4> qualityNames{"Low", "Medium", "High", "Ultra"};
 constexpr std::array<const char *, 7> stageNames{
     "cloud_shadow", "geometry", "sky", "cloud_march", "temporal", "aerial_fog", "composite_ui"};
@@ -178,7 +183,8 @@ Renderer::Renderer(HWND window, const Options &options)
 {
     createDevice(window);
     shaders_ = compileShaders();
-    log("Compiled 25 rendering shader entry points.");
+    log(shaders_.cloudOcclusionCS ? "Compiled rendering shaders, including voxels and Classic Fast."
+                                  : "Compiled rendering shaders, including near cloud voxels.");
     if (options_.checkShaders)
         return;
     if (options_.formationFile.empty())
@@ -346,6 +352,7 @@ ShaderSet Renderer::compileShaders()
     cs(L"atmosphere.hlsl", "SkyAmbientCS", s.skyAmbientCS);
     cs(L"atmosphere.hlsl", "AerialCS", s.aerialCS);
     cs(L"clouds.hlsl", "TemporalCS", s.temporalCS);
+    cs(L"clouds.hlsl", "IntegrateNearCloudCS", s.nearCloudIntegrateCS);
     // 雲の配置・影・描画・画素修復を同じ密度モデルの組で切り替える。
     const D3D_SHADER_MACRO cumulus[] = {{"CIRRUS_CUMULUS_CLOUDS", "1"}, {nullptr, nullptr}};
     for (size_t i = 0; i < s.cloudStyles.size(); ++i)
@@ -353,9 +360,18 @@ ShaderSet Renderer::compileShaders()
         auto &style = s.cloudStyles[i];
         const auto *defines = i == static_cast<size_t>(CloudStyle::Cumulus) ? cumulus : nullptr;
         cs(L"noise.hlsl", "CloudMapCS", style.mapCS, defines);
+        cs(L"clouds.hlsl", "LightNearCloudCS", style.nearCloudCS, defines);
         cs(L"clouds.hlsl", "ShadowCS", style.shadowCS, defines);
         cs(L"clouds.hlsl", "CloudCS", style.marchCS, defines);
         cs(L"clouds.hlsl", "RepairCS", style.repairCS, defines);
+    }
+    if (options_.classicFast || options_.checkShaders)
+    {
+        const D3D_SHADER_MACRO fast[] = {{"CIRRUS_CLASSIC_FAST", "1"}, {nullptr, nullptr}};
+        cs(L"clouds.hlsl", "CloudCS", s.fastClassicMarchCS, fast);
+        cs(L"clouds.hlsl", "TemporalCS", s.fastClassicTemporalCS, fast);
+        cs(L"clouds.hlsl", "RepairCS", s.fastClassicRepairCS, fast);
+        cs(L"clouds.hlsl", "CloudOcclusionCS", s.cloudOcclusionCS, fast);
     }
     D3D11_INPUT_ELEMENT_DESC layout[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -386,6 +402,24 @@ ShaderSet Renderer::compileShaders()
                                        &s.meshLayout),
             "PBR mesh layout");
     return s;
+}
+
+VolumeTexture Renderer::makeVolume(int width, int height, int depth, DXGI_FORMAT format)
+{
+    D3D11_TEXTURE3D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.Depth = depth;
+    desc.MipLevels = 1;
+    desc.Format = format;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+    ComPtr<ID3D11Texture3D> volume;
+    require(device_->CreateTexture3D(&desc, nullptr, &volume), "Cloud volume texture");
+    VolumeTexture result;
+    require(device_->CreateShaderResourceView(volume.Get(), nullptr, &result.srv), "Cloud volume SRV");
+    require(device_->CreateUnorderedAccessView(volume.Get(), nullptr, &result.uav), "Cloud volume UAV");
+    return result;
 }
 
 Texture Renderer::makeTexture(int w, int h, DXGI_FORMAT format, bool target, bool unordered,
@@ -454,6 +488,9 @@ void Renderer::initializeResources()
     require(device_->CreateSamplerState(&sd, &linearClamp_), "Clamp sampler");
     sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     require(device_->CreateSamplerState(&sd, &linearWrap_), "Wrap sampler");
+    sd.Filter = D3D11_FILTER_ANISOTROPIC;
+    sd.MaxAnisotropy = 8;
+    require(device_->CreateSamplerState(&sd, &terrainSampler_), "Anisotropic terrain sampler");
     // 地形の深度シャドウ用。雲影は通常の線形サンプラーで指数モーメントを読む。
     sd.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
     sd.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
@@ -492,6 +529,24 @@ void Renderer::initializeResources()
     transmittance_ = makeTexture(256, 64, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     sky_ = makeTexture(320, 180, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     skyAmbient_ = makeTexture(1, 1, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+    const bool voxels = options_.nearCloudVoxels && options_.clouds;
+    const int voxelWidth = voxels ? nearCloudWidth : 1;
+    const int voxelHeight = voxels ? nearCloudHeight : 1;
+    const int voxelDepth = voxels ? nearCloudSlices : 1;
+    nearCloudLight_ = makeVolume(voxelWidth, voxelHeight, voxelDepth, DXGI_FORMAT_R16G16B16A16_FLOAT);
+    nearCloud_ = makeVolume(voxelWidth, voxelHeight, voxelDepth, DXGI_FORMAT_R16G16B16A16_FLOAT);
+    nearCloudMoment_ = makeVolume(voxelWidth, voxelHeight, voxelDepth, DXGI_FORMAT_R16_FLOAT);
+    const float clearCloud[] = {0, 0, 0, 1};
+    const float clearMoment[] = {0, 0, 0, 0};
+    context_->ClearUnorderedAccessViewFloat(nearCloud_.uav.Get(), clearCloud);
+    context_->ClearUnorderedAccessViewFloat(nearCloudMoment_.uav.Get(), clearMoment);
+    if (options_.classicFast)
+    {
+        cloudOcclusion_ = makeVolume(cloudOcclusionXZ, cloudOcclusionY, cloudOcclusionXZ,
+                                     DXGI_FORMAT_R32G32B32A32_FLOAT);
+        const float clear[] = {0, 0, 0, 16};
+        context_->ClearUnorderedAccessViewFloat(cloudOcclusion_.uav.Get(), clear);
+    }
     auto generate = [&](UINT size, UINT kind, ComPtr<ID3D11ShaderResourceView> &output)
     {
         D3D11_TEXTURE3D_DESC d{};
@@ -685,6 +740,23 @@ void Renderer::resize(int w, int h)
     makeTargets();
 }
 
+bool Renderer::fastClassic() const
+{
+    return options_.classicFast && options_.cloudStyle == CloudStyle::Classic;
+}
+
+void Renderer::makeCloudRawTargets()
+{
+    const int width = options_.checkerboard ? (cloudWidth_ + 1) / 2 : cloudWidth_;
+    const int height = options_.checkerboard && fastClassic() ? (cloudHeight_ + 1) / 2 : cloudHeight_;
+    auto color = makeTexture(width, height, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+    auto metadata = makeTexture(width, height, DXGI_FORMAT_R32G32_FLOAT, false, true);
+    cloudRaw_ = std::move(color);
+    metaRaw_ = std::move(metadata);
+    rawCloudWidth_ = width;
+    rawCloudHeight_ = height;
+}
+
 void Renderer::makeTargets()
 {
     context_->ClearState();
@@ -695,7 +767,6 @@ void Renderer::makeTargets()
         divisor = options_.cloudDivisor;
     cloudWidth_ = (width_ + divisor - 1) / divisor;
     cloudHeight_ = (height_ + divisor - 1) / divisor;
-    rawCloudWidth_ = options_.checkerboard ? (cloudWidth_ + 1) / 2 : cloudWidth_;
     aerialWidth_ = (width_ + 3) / 4;
     aerialHeight_ = (height_ + 3) / 4;
     shadowSize_ = shadowSizes[q];
@@ -707,10 +778,11 @@ void Renderer::makeTargets()
     surface_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
     // RG16Fに雲層全体の透過率と、太陽から見た遮蔽深度の指数値を保存する。
     shadowMap_ = makeTexture(shadowSize_, shadowSize_, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
-    cloudRaw_ =
-        makeTexture(rawCloudWidth_, cloudHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
-    metaRaw_ = makeTexture(rawCloudWidth_, cloudHeight_, DXGI_FORMAT_R32G32_FLOAT, false, true);
+    makeCloudRawTargets();
     reconstruction_ = makeTexture(cloudWidth_, cloudHeight_, DXGI_FORMAT_R32_UINT, false, true);
+    if (options_.classicFast)
+        previousReconstruction_ =
+            makeTexture(cloudWidth_, cloudHeight_, DXGI_FORMAT_R32_UINT, false, true);
     for (int i = 0; i < 2; i++)
     {
         history_[i] =
@@ -727,6 +799,7 @@ void Renderer::makeTargets()
         makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     fog_ = makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     rain_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
+    cloudOcclusionSource_.region.w = 0;
     shadowValid_ = false;
     historyValid_ = false;
     checkerActive_ = false;
@@ -764,7 +837,10 @@ ShaderResources Renderer::resources() const
             skyAmbient_.srv.Get(),
             nearDepthSRV_.Get(),
             surface_.srv.Get(),
-            nullptr};
+            nullptr,
+            nullptr,
+            nullptr,
+            nearCloud_.srv.Get()};
 }
 
 void Renderer::compute(ID3D11ComputeShader *shader, int x, int y, int z,
@@ -786,12 +862,93 @@ void Renderer::compute(ID3D11ComputeShader *shader, int x, int y, int z,
     context_->CSSetShaderResources(0, shaderResourceCount, empty.data());
 }
 
+void Renderer::updateNearClouds()
+{
+    const bool wasActive = constants_.nearCloudParams.x > 0;
+    const bool hadWarp = constants_.nearCloudParams.y > 0;
+    constants_.nearCloudParams = {};
+    if (!options_.nearCloudVoxels || !options_.clouds)
+        return;
+
+    const auto &eye = camera_.position;
+    constexpr double planetRadius = 6360000;
+    const double vertical = planetRadius + eye.y;
+    const float height = world_ ? eye.y : static_cast<float>(
+        std::sqrt(vertical * vertical + static_cast<double>(eye.x) * eye.x
+                  + static_cast<double>(eye.z) * eye.z) - planetRadius);
+
+    const auto &layer = constants_.cloudLayer;
+    const float top = layer.x + layer.y;
+    const float gap = std::max({layer.x - height, height - top, 0.0f});
+    const float ramp = std::clamp((1100.0f - gap) / 600.0f, 0.0f, 1.0f);
+    const float warpStrength = ramp * ramp * (3 - 2 * ramp);
+    constexpr float warpMargin = 430;
+    if (warpStrength > 0)
+        constants_.formationLayer.y = std::max(constants_.formationLayer.y, top + warpMargin);
+
+    // 視錐台の隅でも格子内に雲が来る可能性があるときは近距離を積分する。
+    const float aspect = static_cast<float>(width_) / height_;
+    const float cornerRayLength = nearCloudDepth * std::sqrt(1 + 0.361f * (1 + aspect * aspect));
+    const bool active = height + cornerRayLength >= constants_.formationLayer.x - warpMargin
+                        && height - cornerRayLength <= constants_.formationLayer.y;
+    constants_.nearCloudParams = {active ? nearCloudDepth : 0, warpStrength,
+                                  static_cast<float>(nearCloudSlices), 1100.0f};
+    if (active != wasActive)
+        historyValid_ = false;
+    if ((warpStrength > 0) != hadWarp)
+        shadowValid_ = false;
+}
+
+void Renderer::updateCloudOcclusion(bool shareLighting, const XMFLOAT4 &previousSun)
+{
+    constants_.cloudOcclusionRegion = {};
+    rebuildCloudOcclusion_ = false;
+    // 天候の遷移中と局所形状があるときは、その時点の密度を直接積分する。
+    if (!fastClassic() || !shareLighting || !historyValid_ || !options_.clouds
+        || constants_.nearCloudParams.y > 0 || constants_.formationControls.x > 0
+        || constants_.sunDirection.y <= 0.05f
+        || weather_.transitionProgress() < 1.0)
+        return;
+
+    const auto &sun = constants_.sunDirection;
+    const auto sunMotionSquared = [&sun](const XMFLOAT4 &from)
+    {
+        const float x = sun.x - from.x, y = sun.y - from.y, z = sun.z - from.z;
+        return x * x + y * y + z * z;
+    };
+    // 急な時刻変更では直接積分へ戻す。通常の時刻進行は角度が変わるまで共有する。
+    constexpr float maxChangePerFrame = 0.001f, maxChangeSinceBake = 0.004f;
+    if (sunMotionSquared(previousSun) > maxChangePerFrame * maxChangePerFrame)
+        return;
+
+    // 風の移動を引いたXZに格子を置く。カメラの近くで安定した範囲を複数のレイが共有する。
+    constexpr float span = 32000.0f, snap = 8000.0f;
+    const auto &wind = constants_.wind;
+    const auto &position = camera_.position;
+    const XMFLOAT4 region{std::round((position.x - wind.x) / snap) * snap,
+                          std::round((position.z - wind.y) / snap) * snap, span, 1};
+    constants_.cloudOcclusionRegion = region;
+    auto &source = cloudOcclusionSource_;
+    rebuildCloudOcclusion_ =
+        std::memcmp(&source.region, &region, sizeof(region)) != 0
+        || std::memcmp(&source.layer, &constants_.cloudLayer, sizeof(source.layer)) != 0
+        || sunMotionSquared(source.sun) > maxChangeSinceBake * maxChangeSinceBake
+        || source.cloudType != constants_.weather.x || std::abs(wind.x - source.wind.x) > 128
+        || std::abs(wind.y - source.wind.y) > 128 || std::abs(wind.z - source.wind.z) > 4
+        || (world_ && (std::abs(position.x - source.cameraXZ.x) > 256
+                       || std::abs(position.z - source.cameraXZ.y) > 256));
+    if (rebuildCloudOcclusion_)
+        source = {region, constants_.cloudLayer, constants_.sunDirection, wind,
+                  {position.x, position.z}, constants_.weather.x};
+}
+
 void Renderer::updateConstants()
 {
     const auto &w = weather_.state();
     auto drift = weather_.wind();
     const auto oldFormations = constants_.formations;
     const auto oldFormationControls = constants_.formationControls;
+    const auto previousSun = constants_.sunDirection;
     constants_.formations = formations_.items;
     float cloudBottom = w.cloudBase, cloudTop = w.cloudBase + w.cloudThickness;
     bool rotatingFormation = false;
@@ -830,6 +987,7 @@ void Renderer::updateConstants()
     float cp = std::cos(camera_.pitch);
     XMVECTOR direction = XMVectorSet(std::sin(camera_.yaw) * cp, std::sin(camera_.pitch),
                                      std::cos(camera_.yaw) * cp, 0);
+    XMStoreFloat4(&constants_.cameraForward, direction);
     XMMATRIX view =
         XMMatrixLookToLH(XMLoadFloat3(&camera_.position), direction, XMVectorSet(0, 1, 0, 0));
     // Float reversed-Z preserves ground-level depth precision over the streamed horizon.
@@ -864,6 +1022,7 @@ void Renderer::updateConstants()
     constants_.wind = {static_cast<float>(drift.x), static_cast<float>(drift.z),
                        static_cast<float>(weather_.time() * 0.6),
                        static_cast<float>(frameNumber_ % 1024)};
+    updateNearClouds();
     float mx = camera_.position.x - previousCamera_.x, my = camera_.position.y - previousCamera_.y,
           mz = camera_.position.z - previousCamera_.z;
     float motion = std::sqrt(mx * mx + my * my + mz * mz);
@@ -899,8 +1058,11 @@ void Renderer::updateConstants()
                                historyValid_ ? 1.0f : 0.0f};
     fullCloudRefresh_ = options_.checkerboard && !historyValid_;
     checkerActive_ = options_.checkerboard && historyValid_;
-    constants_.checkerboard = {checkerActive_ ? 1.0f : 0.0f, static_cast<float>(frameNumber_ & 1),
-                               static_cast<float>(rawCloudWidth_), 0};
+    const bool fourPhase = options_.checkerboard && fastClassic();
+    const uint64_t phaseMask = fourPhase ? 3 : 1;
+    constants_.checkerboard = {checkerActive_ ? (fourPhase ? 2.0f : 1.0f) : 0.0f,
+                               static_cast<float>(frameNumber_ & phaseMask),
+                               static_cast<float>(rawCloudWidth_), static_cast<float>(rawCloudHeight_)};
     // 雲影は48km四方。中心をテクセル単位に揃え、カメラ移動時のちらつきを抑える。
     constexpr float span = 48000;
     float texel = span / shadowSize_;
@@ -992,6 +1154,7 @@ void Renderer::updateConstants()
     }
     constants_.worldRendering = {world_ ? 1.0f : 0.0f, localShadows ? 1.0f : 0.0f,
                                  options_.timeOfDay >= 0 ? 1.0f : 0.0f, 0};
+    updateCloudOcclusion(shareLighting, previousSun);
     D3D11_MAPPED_SUBRESOURCE mapped{};
     require(context_->Map(frameBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
             "Map frame constants");
@@ -1003,6 +1166,8 @@ void Renderer::updateConstants()
     context_->CSSetConstantBuffers(0, 1, &cb);
     ID3D11SamplerState *samplers[] = {linearClamp_.Get(), linearWrap_.Get(), shadowSampler_.Get()};
     context_->PSSetSamplers(0, 3, samplers);
+    ID3D11SamplerState *terrainSampler = terrainSampler_.Get();
+    context_->PSSetSamplers(8, 1, &terrainSampler);
     context_->CSSetSamplers(0, 3, samplers);
     previousVP_ = constants_.viewProjection;
     previousWind_ = drift;
@@ -1145,6 +1310,12 @@ void Renderer::moveCamera(float forward, float side, float vertical, double dt, 
         forward /= length;
         side /= length;
     }
+    else if (world_)
+    {
+        // 飛行中の前進は視線方向。EとQはカメラの傾きに依存せず垂直に動く。
+        vertical += forward * std::sin(camera_.pitch);
+        forward *= std::cos(camera_.pitch);
+    }
     float speed =
         static_cast<float>(dt) * (walking_ ? (fast ? 8.4f : 4.2f) : (fast ? 2200.0f : 400.0f));
     float x = speed * (forward * std::sin(camera_.yaw) + side * std::cos(camera_.yaw));
@@ -1208,7 +1379,7 @@ void Renderer::frame(double dt, bool focused)
     {
         // Follow the same path and grounded motion as interactive walking.
         float z = camera_.position.z;
-        if (!options_.walkLook)
+        if (!options_.startLook)
             camera_.yaw = std::atan(0.088f * (std::cos(z * 0.022f) + std::cos(z * 0.008f)));
         moveCamera(1, 0, 0, dt, false);
     }
@@ -1246,6 +1417,10 @@ void Renderer::frame(double dt, bool focused)
     startTiming();
 
     const auto &cloudShaders = shaders_.cloudStyles[static_cast<size_t>(options_.cloudStyle)];
+    const bool fast = fastClassic();
+    auto *march = fast ? shaders_.fastClassicMarchCS.Get() : cloudShaders.marchCS.Get();
+    auto *temporal = fast ? shaders_.fastClassicTemporalCS.Get() : shaders_.temporalCS.Get();
+    auto *repair = fast ? shaders_.fastClassicRepairCS.Get() : cloudShaders.repairCS.Get();
 
     // 1. 大気の太陽透過率LUT → 雲の配置・高度LUT → 雲影。
     auto input = resources();
@@ -1299,8 +1474,32 @@ void Renderer::frame(double dt, bool focused)
     input[25] = nullptr;
     compute(shaders_.skyAmbientCS.Get(), 1, 1, 1, {skyAmbient_.uav.Get()}, input);
     stamp(3);
+    if (constants_.nearCloudParams.x > 0)
+    {
+        compute(cloudShaders.nearCloudCS.Get(), (nearCloudWidth + 3) / 4,
+                (nearCloudHeight + 3) / 4, (nearCloudSlices + 3) / 4,
+                {nearCloudLight_.uav.Get()}, resources());
+        input = resources();
+        input[28] = nearCloudLight_.srv.Get();
+        input[31] = nullptr;
+        compute(shaders_.nearCloudIntegrateCS.Get(), (nearCloudWidth + 7) / 8,
+                (nearCloudHeight + 7) / 8, 1, {nearCloud_.uav.Get(), nearCloudMoment_.uav.Get()},
+                input);
+        ++nearCloudUpdates_;
+    }
+    if (rebuildCloudOcclusion_)
+    {
+        compute(shaders_.cloudOcclusionCS.Get(), cloudOcclusionXZ / 4, cloudOcclusionY / 4,
+                cloudOcclusionXZ / 4, {cloudOcclusion_.uav.Get()}, resources());
+        ++cloudOcclusionUpdates_;
+    }
+    // 再投影先の経過フレーム数も、色と深度の履歴と同じタイミングで交換する。
+    if (options_.classicFast)
+        std::swap(reconstruction_, previousReconstruction_);
     input = resources();
     input[19] = nullptr;
+    if (fast)
+        input[29] = cloudOcclusion_.srv.Get();
     const UINT clearMask[4]{};
     const int write = 1 - historyIndex_;
     if (fullCloudRefresh_)
@@ -1308,13 +1507,13 @@ void Renderer::frame(double dt, bool focused)
         // 最初のフレームと視点切り替え時は履歴側へ全画素を直接描く。
         // これにより、通常フレームの生バッファは半分の容量でよい。
         context_->ClearUnorderedAccessViewUint(reconstruction_.uav.Get(), clearMask);
-        compute(cloudShaders.marchCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+        compute(march, (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
                 {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         ++fullCloudFrames_;
     }
     else
     {
-        compute(cloudShaders.marchCS.Get(), (rawCloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+        compute(march, (rawCloudWidth_ + 7) / 8, (rawCloudHeight_ + 7) / 8, 1,
                 {cloudRaw_.uav.Get(), metaRaw_.uav.Get()}, input);
         if (checkerActive_)
             ++checkerFrames_;
@@ -1330,8 +1529,10 @@ void Renderer::frame(double dt, bool focused)
         input[10] = history_[historyIndex_].srv.Get();
         input[11] = historyMeta_[historyIndex_].srv.Get();
         input[19] = nullptr;
+        if (fast)
+            input[30] = previousReconstruction_.srv.Get();
         compute(
-            shaders_.temporalCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+            temporal, (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
             {history_[write].uav.Get(), historyMeta_[write].uav.Get(), reconstruction_.uav.Get()},
             input);
         if (checkerActive_)
@@ -1339,7 +1540,10 @@ void Renderer::frame(double dt, bool focused)
             // 履歴が成立しなかった未計算画素だけ、同じ積分で埋め直す。
             // historyIndex_は修復完了まで切り替えず、出力とのSRV競合を防ぐ。
             input = resources();
-            compute(cloudShaders.repairCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+            // 位相による明るさの差を避けるため、通常描画と同じ照明の共有条件を使う。
+            if (fast)
+                input[29] = cloudOcclusion_.srv.Get();
+            compute(repair, (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
                     {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         }
     }
@@ -1351,6 +1555,7 @@ void Renderer::frame(double dt, bool focused)
     // 縦横 1/4 解像度で出力し、CompositePS が地形との深度差を見ながら補間する。
     input = resources();
     input[12] = input[13] = input[14] = nullptr;
+    input[28] = nearCloudMoment_.srv.Get();
     compute(shaders_.aerialCS.Get(), (aerialWidth_ + 7) / 8, (aerialHeight_ + 7) / 8, 1,
             {aerialScatter_.uav.Get(), aerialTransmittance_.uav.Get(), fog_.uav.Get()}, input);
     stamp(6);
@@ -1506,8 +1711,8 @@ void Renderer::drawUi()
             if (ui_.button(44, 275, 130, 30, timeLapse_ ? "STOP TIME [T]" : "RUN TIME [T]",
                            timeLapse_, 0.66f))
                 timeLapse_ = !timeLapse_;
-            if (world_
-                && ui_.button(179, 275, 119, 30, walking_ ? "WALK [G]" : "FLY [G]", walking_,
+            if (world_ && options_.cameraPath.empty()
+                && ui_.button(179, 275, 119, 30, walking_ ? "TAKE OFF [G]" : "LAND [G]", false,
                               0.66f))
                 key('G');
         }
@@ -1530,7 +1735,8 @@ void Renderer::drawUi()
         }
         if (ui_.button(132, 397, 64, 34, "AUTO", weather_.automatic(), 0.7f))
             weather_.setAutomatic(!weather_.automatic());
-        if (ui_.button(204, 397, 94, 34, "CB [F7]", options_.checkerboard, 0.7f))
+        const char *checkerLabel = fastClassic() ? "CB4 [F7]" : "CB [F7]";
+        if (ui_.button(204, 397, 94, 34, checkerLabel, options_.checkerboard, 0.7f))
         {
             options_.checkerboard = !options_.checkerboard;
             makeTargets();
@@ -1576,9 +1782,16 @@ void Renderer::drawUi()
     }
     ui_.rect(24, static_cast<float>(height_) - 61, static_cast<float>(width_) - 48, 37, 0xc7171d19);
     const char *help =
-        world_
-            ? "WASD Walk | Shift Run | RMB Look | G Fly/Walk | T Time | 1-5 Weather | F1 Hide"
-            : "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save";
+        "1-5 Weather | F6 Demo | F8 Formations | F9 Focus | P Pause | F3 Textures | F12 Save";
+    if (options_.cameraPath.empty())
+    {
+        if (walking_)
+            help = "WASD Walk | Shift Run | RMB Look | G Take Off | T Time | 1-5 Weather";
+        else if (world_)
+            help = "WASD Fly | E Up / Q Down | Shift Fast | RMB Look | G Land | T Time";
+        else
+            help = "WASD Fly | E Up / Q Down | Shift Fast | RMB Look | F8 Formations | F9 Focus";
+    }
     ui_.text(38, static_cast<float>(height_) - 56, help, 0xffbdccc3, 0.72f);
     if (!status_.empty())
         ui_.text(38, static_cast<float>(height_) - 39, status_, 0xffc4dfca, 0.73f);
@@ -1653,7 +1866,7 @@ void Renderer::drawTextureInspector()
         case DebugView::RawCloudRadiance:
         case DebugView::RawCloudTransmittance:
             textureWidth = fullCloudRefresh_ ? cloudWidth_ : rawCloudWidth_;
-            textureHeight = cloudHeight_;
+            textureHeight = fullCloudRefresh_ ? cloudHeight_ : rawCloudHeight_;
             break;
         case DebugView::FogScattering:
         case DebugView::FogTransmittance:
@@ -1741,15 +1954,18 @@ void Renderer::resetCamera()
 {
     camera_ = {};
     walking_ = options_.camera == "walk";
-    if (walking_)
+    if (walking_ || options_.camera == "fly")
     {
         float x = options_.spawnX, z = options_.spawnZ;
         camera_.position = {x, 0, z};
-        world_->placeWalker(camera_.position);
-        if (options_.walkLook)
+        if (walking_)
+            world_->placeWalker(camera_.position);
+        else
+            camera_.position.y = world_->ground(x, z) + flightStartHeight;
+        if (options_.startLook)
         {
-            camera_.yaw = XMConvertToRadians(options_.walkLook->x);
-            camera_.pitch = XMConvertToRadians(options_.walkLook->y);
+            camera_.yaw = XMConvertToRadians(options_.startLook->x);
+            camera_.pitch = XMConvertToRadians(options_.startLook->y);
         }
         else
         {
@@ -1817,7 +2033,10 @@ void Renderer::key(UINT k)
     {
         options_.cloudStyle =
             options_.cloudStyle == CloudStyle::Classic ? CloudStyle::Cumulus : CloudStyle::Classic;
+        if (options_.classicFast && options_.checkerboard)
+            makeCloudRawTargets();
         // 切り替えたフレームから、新しい密度で配置・影・全画素を計算する。
+        cloudOcclusionSource_.region.w = 0;
         cachedCloudMapWeather_ = {-1, -1, -1, -1};
         shadowValid_ = false;
         historyValid_ = false;
@@ -1852,6 +2071,9 @@ void Renderer::key(UINT k)
         walking_ = !walking_;
         if (walking_)
             world_->placeWalker(camera_.position);
+        else
+            camera_.position.y = world_->ground(camera_.position.x, camera_.position.z)
+                                 + flightStartHeight;
         historyValid_ = false;
     }
     if (k == VK_F6)
@@ -1895,6 +2117,7 @@ void Renderer::key(UINT k)
             formations_ = formationCandidate;
             historyValid_ = false;
             cachedAerosol_ = -1;
+            cloudOcclusionSource_.region.w = 0;
             cachedCloudMapWeather_ = {-1, -1, -1, -1};
             shadowValid_ = false;
             status_ = "Shaders reloaded.";
@@ -1928,6 +2151,25 @@ std::string Renderer::diagnostics()
         double minimum = std::numeric_limits<double>::max(),
                maximum = -std::numeric_limits<double>::max(), mean = 0;
         uint64_t pixels = 0, nonfinite = 0;
+
+        void add(double value)
+        {
+            if (!std::isfinite(value))
+            {
+                ++nonfinite;
+                return;
+            }
+            minimum = std::min(minimum, value);
+            maximum = std::max(maximum, value);
+            mean += value;
+            ++pixels;
+        }
+
+        void finish()
+        {
+            if (pixels)
+                mean /= pixels;
+        }
     };
 
     auto read = [&](ID3D11Texture2D *source, int channels, int selected, bool half)
@@ -1953,21 +2195,46 @@ std::string Renderer::diagnostics()
                 double value = half ? PackedVector::XMConvertHalfToFloat(
                                    reinterpret_cast<const uint16_t *>(row)[index])
                                     : reinterpret_cast<const float *>(row)[index];
-                if (!std::isfinite(value))
-                {
-                    ++stats.nonfinite;
-                    continue;
-                }
-                stats.minimum = std::min(stats.minimum, value);
-                stats.maximum = std::max(stats.maximum, value);
-                stats.mean += value;
-                ++stats.pixels;
+                stats.add(value);
             }
         context_->Unmap(staging.Get(), 0);
-        if (stats.pixels)
-            stats.mean /= stats.pixels;
+        stats.finish();
         return stats;
     };
+
+    const bool nearActive = constants_.nearCloudParams.x > 0;
+    Stats nearTransmittance;
+    if (nearActive)
+    {
+        // 最奥面の累積透過率を取り出し、近景ボクセルが実際に遮蔽したか確認する。
+        ComPtr<ID3D11Resource> resource;
+        nearCloud_.srv->GetResource(&resource);
+        ComPtr<ID3D11Texture3D> source;
+        require(resource.As(&source), "Near cloud diagnostics source");
+        D3D11_TEXTURE3D_DESC desc{};
+        source->GetDesc(&desc);
+        const D3D11_BOX lastSlice{0, 0, desc.Depth - 1, desc.Width, desc.Height, desc.Depth};
+        desc.Depth = 1;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        ComPtr<ID3D11Texture3D> staging;
+        require(device_->CreateTexture3D(&desc, nullptr, &staging), "Near cloud diagnostics staging");
+        context_->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source.Get(), 0, &lastSlice);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        require(context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped),
+                "Near cloud diagnostics map");
+        for (UINT y = 0; y < desc.Height; ++y)
+        {
+            const auto *row = reinterpret_cast<const uint16_t *>(
+                static_cast<const uint8_t *>(mapped.pData) + y * mapped.RowPitch);
+            for (UINT x = 0; x < desc.Width; ++x)
+                nearTransmittance.add(PackedVector::XMConvertHalfToFloat(row[x * 4 + 3]));
+        }
+        context_->Unmap(staging.Get(), 0);
+        nearTransmittance.finish();
+    }
     Stats clouds = read(history_[historyIndex_].texture.Get(), 4, 3, true),
           shadow = read(shadowMap_.texture.Get(), 2, 0, true),
           shadowDepth = read(shadowMap_.texture.Get(), 2, 1, true);
@@ -1979,8 +2246,9 @@ std::string Renderer::diagnostics()
           rainG = read(rain_.texture.Get(), 4, 1, true),
           rainB = read(rain_.texture.Get(), 4, 2, true),
           rainAlpha = read(rain_.texture.Get(), 4, 3, true);
-    uint64_t invalid = clouds.nonfinite + shadow.nonfinite + shadowDepth.nonfinite + r.nonfinite
-                       + g.nonfinite + b.nonfinite + sky.nonfinite + fog.nonfinite
+    uint64_t invalid = nearTransmittance.nonfinite + clouds.nonfinite + shadow.nonfinite
+                       + shadowDepth.nonfinite + r.nonfinite + g.nonfinite + b.nonfinite
+                       + sky.nonfinite + fog.nonfinite
                        + rainR.nonfinite + rainG.nonfinite + rainB.nonfinite + rainAlpha.nonfinite;
     if (invalid)
         throw std::runtime_error("Non-finite GPU values in cloud/sky/fog/rain buffers");
@@ -2003,12 +2271,14 @@ std::string Renderer::diagnostics()
             static_cast<const uint8_t *>(maskData.pData) + y * maskData.RowPitch);
         for (UINT x = 0; x < maskDesc.Width; ++x)
         {
-            if (row[x] >= reconstructionCounts.size())
+            const uint32_t encoded = row[x];
+            const uint32_t state = encoded & 3u;
+            if (encoded > 15u || (encoded > 3u && state != 1u))
             {
                 context_->Unmap(maskStaging.Get(), 0);
                 throw std::runtime_error("Invalid cloud reconstruction state");
             }
-            ++reconstructionCounts[row[x]];
+            ++reconstructionCounts[state];
         }
     }
     context_->Unmap(maskStaging.Get(), 0);
@@ -2023,6 +2293,7 @@ std::string Renderer::diagnostics()
         << qualityNames[static_cast<int>(options_.quality)] << "\",\n";
     out << "  \"cloud_style\": \""
         << (options_.cloudStyle == CloudStyle::Classic ? "classic" : "cumulus") << "\",\n";
+    out << "  \"classic_fast\": " << (fastClassic() ? "true" : "false") << ",\n";
     out << "  \"sun_elevation\": " << options_.elevation
         << ", \"sun_azimuth\": " << options_.azimuth << ",\n";
     out << "  \"solar_hour\": " << options_.timeOfDay << ",\n";
@@ -2063,9 +2334,25 @@ std::string Renderer::diagnostics()
         << lightningTarget_.y << ", " << lightningTarget_.z << "]},\n";
     out << "  \"rain_opacity\": {\"min\": " << rainAlpha.minimum
         << ", \"max\": " << rainAlpha.maximum << ", \"mean\": " << rainAlpha.mean << "},\n";
+    const bool nearVoxels = options_.nearCloudVoxels && options_.clouds;
+    out << "  \"near_cloud_voxels\": {\"active\": " << (nearActive ? "true" : "false")
+        << ", \"grid\": [" << (nearVoxels ? nearCloudWidth : 0)
+        << ", " << (nearVoxels ? nearCloudHeight : 0)
+        << ", " << (nearVoxels ? nearCloudSlices : 0)
+        << "], \"view_depth_m\": " << constants_.nearCloudParams.x
+        << ", \"updates\": " << nearCloudUpdates_ << ", \"transmittance\": ";
+    if (nearActive)
+        out << "{\"min\": " << nearTransmittance.minimum << ", \"max\": "
+            << nearTransmittance.maximum << ", \"mean\": " << nearTransmittance.mean << '}';
+    else
+        out << "null";
+    out << "},\n";
     out << "  \"cloud_shadows_enabled\": " << (options_.shadows ? "true" : "false") << ",\n";
     out << "  \"cloud_optimization\": {\"lighting_reuse\": "
         << (constants_.cloudPerformance.z > 0.5f ? "true" : "false")
+        << ", \"occlusion_cache_active\": "
+        << (constants_.cloudOcclusionRegion.w > 0.5f ? "true" : "false")
+        << ", \"occlusion_cache_updates\": " << cloudOcclusionUpdates_
         << ", \"shadow_updates\": " << shadowUpdates_
         << ", \"atmosphere_updates\": " << atmosphereUpdates_
         << ", \"shadow_age_seconds\": " << constants_.cloudPerformance.w << "},\n";
@@ -2074,8 +2361,9 @@ std::string Renderer::diagnostics()
         << ", \"active\": " << (checkerActive_ ? "true" : "false")
         << ", \"full_refresh\": " << (fullCloudRefresh_ ? "true" : "false")
         << ", \"logical_size\": [" << cloudWidth_ << ", " << cloudHeight_
-        << "], \"raw_allocation\": [" << rawCloudWidth_ << ", " << cloudHeight_
-        << "], \"parity\": " << static_cast<int>(constants_.checkerboard.y)
+        << "], \"raw_allocation\": [" << rawCloudWidth_ << ", " << rawCloudHeight_
+        << "], \"phases\": " << (options_.checkerboard ? (fastClassic() ? 4 : 2) : 1)
+        << ", \"parity\": " << static_cast<int>(constants_.checkerboard.y)
         << ", \"traced_pixels\": " << reconstructionCounts[0] + reconstructionCounts[2]
         << ", \"history_pixels\": " << reconstructionCounts[1]
         << ", \"repair_pixels\": " << reconstructionCounts[2]
