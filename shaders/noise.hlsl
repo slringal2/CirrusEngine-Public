@@ -97,7 +97,7 @@ void NoiseCS(uint3 id : SV_DispatchThreadID)
                    + gradientNoise(p * 16, 16) * 0.133333 + gradientNoise(p * 32, 32) * 0.066667;
     perlin = remap01(perlin, 0.28, 0.72);
     float worleyFBM = w0 * 0.625 + w1 * 0.25 + w2 * 0.125;
-    // R: Perlin-Worleyの膨張合成、GBA: 可視化用のWorley各帯域。
+    // RはPerlin–Worleyで作った雲の本体、GBAは雲頂や輪郭に使うWorleyの各帯域。
     float perlinWorley = lerp(worleyFBM, 1, perlin);
     NoiseOutput[id] = float4(remap01(perlinWorley, 0.42, 0.94), w0, w1, w2);
 }
@@ -181,23 +181,42 @@ void CloudMapCS(uint3 id : SV_DispatchThreadID)
     float2 weatherBias = CloudLayer.z - 0.018 + float2(0.018, 0) * lowSun;
     weatherBias.y += (Weather.x - 0.65) * 0.06 + regional.g * Weather.y * 0.04;
     float2 coverage = saturate((mask - 0.5) * 1.05 + weatherBias);
-    float2 heightBounds = float2(0, 1);
-    if (CUMULUS_CLOUDS)
-    {
-        float cumulus = cumulusAmount();
-        float core = regional.a;
-        float separation = smoothstep(0.03, 0.42, core);
-        float2 cumulusCoverage = saturate(coverage + core * 0.22) * separation;
-        coverage = lerp(coverage, cumulusCoverage, cumulus);
+    float convection = cumulusAmount();
+    float localType = saturate(Weather.x + (regional.b - 0.5) * 0.32);
+    float2 heightBounds = float2(0, CUMULUS_CLOUDS ? 1.0 : lerp(0.46, 0.98, localType));
+    if (!CUMULUS_CLOUDS)
+        coverage.r = saturate(CloudLayer.z + (regional.r - 0.5) * 1.05);
 
-        // 1 - r² の平方根から雲の厚みを求め、B/Aに雲底と雲頂を書き込む。
-        float2 structure = CloudDisplacement.SampleLevel(LinearWrap, uv * 3 + float2(0.19, 0.34), 0);
-        float centerHeight = lerp(0.28, 0.67, smoothstep(0.16, 0.84, structure.y));
-        float halfThickness = sqrt(core) * lerp(0.28, 0.56, structure.x);
-        float2 cumulusBounds = clamp(centerHeight + float2(-1, 1) * halfThickness, 0, 1);
-        heightBounds = lerp(heightBounds, cumulusBounds, cumulus);
+    if (convection > 0)
+    {
+        // 天候マップの A が上昇域の中心。半分の周期の小さな上昇域をずらして重ね、
+        // 一つの雲に低い肩と高い頂ができるようにする。すべて周期UVなので端でもつながる。
+        float2 structure = CloudDisplacement.SampleLevel(LinearWrap, uv * 2 + float2(0.19, 0.34), 0);
+        float2 shoulderUv = uv * 2 + (structure - 0.5) * 0.048 + float2(0.27, 0.63);
+        float shoulder = WeatherMap.SampleLevel(LinearWrap, shoulderUv, 0).a;
+        float moisture = smoothstep(0.18, 0.84, regional.g);
+        float core = saturate(lerp(regional.a, 1, shoulder * lerp(0.30, 0.78, moisture)));
+
+        // 同じ空域の雲底はほぼ水平。湿った上昇域ほど、雲底から上だけが厚くなる。
+        float floorHeight = 0.025 + 0.050 * (1 - moisture) + 0.018 * (structure.x - 0.5);
+        float growth = smoothstep(0.23, 0.79, 0.55 * structure.y + 0.45 * regional.b);
+        // 1本の鉛直列に一つの雲頂を与える。3Dノイズの水平断面から大小の肩を取り、
+        // 高い膨らみのすぐ下に空洞ができるのを抑える。横の周期は65.536 kmの整数分の一。
+        float2 crestUv = uv * 12 + (structure - 0.5) * 0.40;
+        float3 crestCells = BaseNoise.SampleLevel(
+            LinearWrap, float3(crestUv.x, 0.61, crestUv.y), 0).gba;
+        float relief = smoothstep(0.23, 0.73, dot(crestCells, float3(0.64, 0.27, 0.09)));
+        float crownHeight = lerp(0.36, 0.55, moisture) + sqrt(core) * lerp(0.28, 0.59, growth);
+        crownHeight += (relief - 0.43) * lerp(0.14, 0.30, core);
+        heightBounds = lerp(heightBounds, float2(floorHeight, min(crownHeight, 1)), convection);
+
+        // 若い積雲は群れの周辺にも残し、中心に向かって被覆率を上げる。
+        float2 organized = saturate(coverage + (core * 0.30 - 0.084));
+        if (CUMULUS_CLOUDS)
+            organized *= lerp(0.46, 1, smoothstep(0.015, 0.47, core));
+        coverage = lerp(coverage, organized, convection);
     }
-    CloudMapOutput[id.xy] = float4(coverage, heightBounds);
+    CloudMapOutput[id.xy] = float4(coverage * cloudCoverageFade(), heightBounds);
 
     if (id.x == 0 && id.y < 128)
     {

@@ -14,6 +14,7 @@ static const float PI = 3.14159265359;
 static const float PLANET_RADIUS = 6360000.0;
 static const float ATMOSPHERE_HEIGHT = 100000.0;
 static const float CLOUD_SHADOW_EXPONENT = 10.0;
+static const int TEXTURE_CLOUD_LAYER_COUNT = 3;
 static const float3 PLANET_CENTER = float3(0, -6360000.0, 0);
 // 基準の係数はすべて [m⁻¹]。実際のサンプルでは高度に応じた相対密度を掛ける。
 // R は空気分子、M はエアロゾル、O はオゾン。O は透過を減らす吸収にだけ使う。
@@ -25,7 +26,7 @@ static const float3 BETA_O = float3(0.650e-6, 1.881e-6, 0.085e-6);
 struct CloudFormation
 {
     float4 position; // x, 雲底高度, z, 半径 [m]
-    float4 shape;    // 高さ[m], 密度倍率, 種類(0:入道雲/1:渦), シード
+    float4 shape;    // 高さ[m], 密度倍率, 種類(0:入道雲、1:渦、2～6:特殊形状), シード
     float4 motion;   // 角速度[rad/s], 巻き込み強度, 高度による傾きX/Z
 };
 
@@ -58,11 +59,22 @@ cbuffer Frame : register(b0)
     float4 Checkerboard;      // x: 0=全画素 / 1=2相 / 2=4相、y: 位相、zw: 生バッファのサイズ
     float4 WorldRendering;    // x: exploration / reversed Z, y: near shadows, z: solar clock
     float4 FormationControls; // 領域数, 強度, 回転の積算位相[s], フレームの回転位相差[s]
-    float4 FormationLayer;    // 全領域を含む雲底・雲頂高度、雲影の投影面[m]
-    CloudFormation Formations[8];
+    float4 FormationLayer;    // 体積雲の雲底・雲頂、雲影の投影面、薄層込みの影の上端[m]
+    CloudFormation Formations[24];
     float4 CloudOcclusionRegion; // xy: 風を引いたXZ中心[m]、z: 幅[m]、w: 有効フラグ
     float4 CameraForward;  // xyz: カメラの前方単位ベクトル
     float4 NearCloudParams; // x: 視錐台の奥行き[m]、y: 近い雲の変形量、z: スライス数、w: 変形範囲[m]
+    float4 CloudSampling; // x: 詳細ノイズ解像度、y: 安定サンプリング、z: 遠い光サンプルの統合、w: 雲TAAの位相+1（0は無効）
+    float4x4 GrassLightViewProjection;
+    float4 GroundLighting; // x: SSAO、y: 接触影、z: 草影の有効フラグ。w: 焦点距離[pixel]
+    float4 SceneDepthProjection; // x/y: 透視投影の深度係数 A/B
+    float4 CloudShapeTuning; // x: 雲の水平サイズの逆数、y: 雲縁の侵食倍率
+    // 中央高度[m]、半厚[m]、ピーク消散係数[m^-1]、水平タイル周期の逆数[m^-1]。
+    float4 TextureCloudLayers[TEXTURE_CLOUD_LAYER_COUNT];
+    // x: shape-map size, y: use thickness/height channels, z: last index in the type ramp.
+    float4 TextureCloudMaps[TEXTURE_CLOUD_LAYER_COUNT];
+    // xy: inverse periods of the type and coverage maps. zw: texels per metre.
+    float4 TextureCloudRegions;
 };
 
 Texture3D<float4> BaseNoise : register(t0);
@@ -94,9 +106,15 @@ Texture2D<float4> SkyAmbient : register(t25);
 Texture2D<float> NearTerrainShadow : register(t26);
 Texture2D<float4> GSurface : register(t27);
 Texture3D<float4> NearCloudIntegrated : register(t31);
+Texture2D<float4> CloudTypeTexture0 : register(t45);
+Texture2D<float4> CloudTypeTexture1 : register(t46);
+Texture2D<float4> CloudTypeTexture2 : register(t47);
+Texture2D<float> HighCloudTypeMap : register(t48);
+Texture2D<float> HighCloudCoverageMap : register(t49);
 SamplerState LinearClamp : register(s0);
 SamplerState LinearWrap : register(s1);
 SamplerComparisonState ShadowCompare : register(s2);
+SamplerState AnisotropicWrap : register(s8);
 
 float hash12(float2 p)
 {
@@ -298,6 +316,12 @@ float4 cloudPlacement(float2 advectedXZ)
     return CloudMap.SampleLevel(LinearWrap, advectedXZ / 65536.0, 0);
 }
 
+// 雲量をゼロへ動かすと、地域的な雲量の上振れも連続して消える。
+float cloudCoverageFade()
+{
+    return smoothstep(0, 0.1, CloudLayer.z);
+}
+
 float3 cloudHeightProfile(float h)
 {
     return CloudHeightLut.SampleLevel(LinearClamp, float2(0.5, h), 0).rgb;
@@ -319,7 +343,7 @@ float erodeCloudShape(float baseDensity, float3 p, float softness)
 
 #include "formations.hlsli"
 
-struct BackgroundCloudSample
+struct CloudBodySample
 {
     float density;
     float3 shapePosition;
@@ -327,7 +351,28 @@ struct BackgroundCloudSample
     float shape;
     float profile;
     float threshold;
+    float localHeight;
 };
+
+// 上昇域の肩で、上下の房の間に雲水を残す。空域・薄い柱・雲底・雲頂への寄与は消える。
+float thermalCoreWeight(float localHeight, float depth, float coverage, float convection)
+{
+    float column = smoothstep(0.38, 0.81, depth) * smoothstep(0.10, 0.39, coverage);
+    float middle = smoothstep(0.03, 0.20, localHeight) * (1 - smoothstep(0.52, 0.88, localHeight));
+    return 0.52 * convection * column * middle;
+}
+
+float supportCloudInterior(float envelope, float coreWeight)
+{
+    return lerp(envelope, 1, coreWeight * smoothstep(0.15, 0.53, envelope));
+}
+
+// 配置マップが決めた上面から内向きに削り、粗い密度を空区間判定の上限に保つ。
+float crownInset(float localHeight, float cells, float convection)
+{
+    float hollows = 1 - smoothstep(0.22, 0.73, cells);
+    return 0.17 * convection * smoothstep(0.12, 0.67, localHeight) * hollows;
+}
 
 float cumulusDensity(float shape, float threshold, float erosion, float cumulus)
 {
@@ -337,115 +382,387 @@ float cumulusDensity(float shape, float threshold, float erosion, float cumulus)
     return density * lerp(1, smoothstep(0, 0.28, density), cumulus * 0.60);
 }
 
-BackgroundCloudSample cumulusCloudShape(float3 p, float h)
+// 密度の参照点を上空の風に逆らって戻す。これを配置マップより前に行うと、
+// 密度と雲頂が同じ方向へ張り出す。高さ h は雲層全体に対する割合。
+void bendConvectiveTop(inout float3 material, inout float h, float convection)
 {
-    BackgroundCloudSample result = (BackgroundCloudSample)0;
-    // 配置マップのB/Aに焼いた底と頂を使い、位置ごとに高さを正規化する。
-    float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
-    float4 placement = cloudPlacement(shapePosition.xz);
+    const float anchoredHeight = 0.13;
+    if (h <= anchoredHeight || convection <= 0)
+        return;
+
+    float2 wind = WeatherEffects.yz;
+    float speed = length(wind);
+    if (speed <= 0)
+        return;
+
+    float2 downwind = wind / speed;
+    float2 crosswind = float2(-downwind.y, downwind.x);
+    float strength = convection * saturate(speed / 15);
+    float2 region = CloudDisplacement.SampleLevel(
+        LinearWrap, material.xz * (2.0 / 65536.0) + float2(0.19, 0.43), 0);
+    float rise = h - anchoredHeight;
+    float exposure = smoothstep(0.23, 0.78, region.x);
+    float2 shear = downwind * lerp(0.52, 1.42, exposure)
+                   + crosswind * ((region.y - 0.5) * 0.26);
+    // 肩では上ほど強く傾け、雲頂の中ではずれの増加を抑えて丸みを残す。
+    float bend = rise * rise;
+    float capHeight = lerp(0.47, 0.61, region.y);
+    float capRatio = bend / (capHeight * capHeight);
+    bend *= rsqrt(1 + capRatio * capRatio);
+    material.xz -= shear * (strength * min(CloudLayer.y, 4600) * bend);
+
+    // 雲の肩を、風向に沿った鉛直面内で巻く。中心と半径を区画ごとに変える。
+    // 変形量は区画の端より手前でゼロになるため、隣の区画へ滑らかにつながる。
+    float spacing = 2048.0 / CloudShapeTuning.x;
+    float2 cell = material.xz / spacing + (region - 0.5) * 0.46;
+    float3 seed = hash33(float3(floor(cell), 31.72));
+    float2 offset = (frac(cell) - lerp(0.43, 0.57, seed.xy)) * spacing;
+    float radius = spacing * lerp(0.33, 0.415, seed.z);
+    float radialSq = dot(offset, offset) / (radius * radius);
+    if (radialSq >= 1)
+        return;
+
+    // 渦の高さはその場所の雲頂から決めるので、低い積雲にも高い積雲にも付く。
+    float4 column = cloudPlacement(material.xz - offset);
+    float depth = max(1, (column.a - column.b) * CloudLayer.y);
+    float pivot = lerp(column.b, column.a, lerp(0.55, 0.76, seed.x));
+    float verticalRadius = max(1, min(radius * 0.84, depth * lerp(0.29, 0.46, seed.y)));
+    float2 plane = float2(dot(offset, downwind) / radius,
+                          (h - pivot) * CloudLayer.y / verticalRadius);
+    float distanceSq = radialSq + plane.y * plane.y;
+    if (distanceSq >= 1)
+        return;
+
+    float falloff = 1 - smoothstep(0.03, 1, distanceSq);
+    float heightMask = smoothstep(anchoredHeight, 0.30, h) * (1 - smoothstep(0.86, 0.98, h));
+    float turn = strength * heightMask * falloff;
+    float sine, cosine;
+    sincos(lerp(0.80, 1.53, seed.z) * turn, sine, cosine);
+    float2 source = float2(cosine * plane.x - sine * plane.y,
+                           sine * plane.x + cosine * plane.y);
+    // 風下側では元の高さを広めに参照し、描画される縁を少し薄くする。
+    source.y *= 1 + 0.23 * turn * smoothstep(-0.15, 0.70, plane.x);
+    float dy = (source.y - plane.y) * verticalRadius;
+    material.xz += downwind * ((source.x - plane.x) * radius);
+    material.y += dy;
+    h += dy / CloudLayer.y;
+}
+
+CloudBodySample cumulusCloudShape(
+    float3 shapePosition, float h, float4 placement, float cumulus)
+{
+    CloudBodySample result = (CloudBodySample)0;
     float localHeight = (h - placement.b) / max(placement.a - placement.b, 0.01);
-    float cumulus = cumulusAmount();
     float upperWeight = smoothstep(0.25, 0.72, localHeight) * lerp(1, 0.28, cumulus);
     float coverage = lerp(placement.r, placement.g, upperWeight);
     float type = saturate(Weather.x + (placement.g - placement.r) * 0.70);
 
-    // 積雲は底と頂を絞って丸め、降水が強まると同じプロファイルから曇天へ補間する。
-    float bottom = smoothstep(0, lerp(0.055, 0.20, cumulus), localHeight);
+    // 雲底の短い立ち上がりと雲頂の丸みを別に設定し、降水時の分布へ連続して補間する。
+    float bottom = smoothstep(0, lerp(0.055, 0.075, cumulus), localHeight);
     float crownStart = lerp(lerp(0.20, 0.38, type), 0.66, cumulus);
     float crownEnd = lerp(lerp(0.46, 0.98, type), 1.0, cumulus);
     float profile = bottom * (1 - smoothstep(crownStart, crownEnd, localHeight));
-    if (profile <= 0 || coverage <= 0)
+    float threshold = 1 - coverage;
+    // 形状ノイズの最大値は1。被覆率と高度だけで空なら、3Dノイズを読まない。
+    if (profile <= threshold)
         return result;
 
-    shapePosition.xz += float2(h * h * 480.0, -h * 220.0) * lerp(1, 0.55, cumulus);
-    shapePosition.xz *= lerp(1, 1.06, cumulus);
+    shapePosition.xz *= lerp(1, 1.06, cumulus) * CloudShapeTuning.x;
     shapePosition.y *= lerp(lerp(1.5, 0.9, type), 0.83, cumulus);
     // Perlin–Worley の大きな塊に GBA の小さな膨らみを重ねる。
     float4 base = BaseNoise.SampleLevel(LinearWrap,
                                       shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0);
+    float crest = dot(base.ba, float2(0.60, 0.40));
+    profile = bottom * (1 - smoothstep(crownStart, crownEnd,
+                                       localHeight + crownInset(localHeight, crest, cumulus)));
     float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
     float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
     envelope = lerp(envelope, 0.09 + 0.91 * envelope, cumulus);
+    // Cumulus の内部はこの直前の補強で連続する。雲内の飛行時にも外縁が見える密度を使う。
     result.shape = envelope * profile;
     result.profile = profile;
-    result.threshold = 1 - coverage;
-    result.density = cumulusDensity(result.shape, result.threshold, 0, cumulus);
+    result.localHeight = localHeight;
+    result.threshold = threshold;
+    result.density = cumulusDensity(result.shape, threshold, 0, cumulus);
     result.shapePosition = shapePosition;
     result.warp = base.gba - 0.5;
     return result;
 }
 
-BackgroundCloudSample backgroundCloudShape(float3 p, float h)
+CloudBodySample cloudBodyShape(float3 shapePosition, float h, float4 placement, float convection)
 {
-    BackgroundCloudSample result = (BackgroundCloudSample)0;
-    if (h <= 0 || h >= 1)
-        return result;
-
+    CloudBodySample result = (CloudBodySample)0;
+    // 配置と密度を一緒に曲げたあと、内部ノイズに従来の小さな傾きを加える。
+    float noiseShear = CUMULUS_CLOUDS ? lerp(1, 0.55, convection) : 1;
+    shapePosition.xz += float2(h * h * 480.0, -h * 220.0) * noiseShear;
     if (CUMULUS_CLOUDS)
-        return cumulusCloudShape(p, h);
+        return cumulusCloudShape(shapePosition, h, placement, convection);
 
-    // 天候デモと同じ65.536 km周期の場で、雲量と鉛直方向の雲種を決める。
-    float3 shapePosition = p - float3(Wind.x, 0, Wind.y);
-    float3 regional = WeatherMap.SampleLevel(LinearWrap, shapePosition.xz / 65536.0, 0).rgb;
-    float coverage = saturate(CloudLayer.z + (regional.r - 0.5) * 1.05);
-    float type = saturate(Weather.x + (regional.b - 0.5) * 0.32);
-    float bottom = smoothstep(0.0, 0.055, h);
-    float top = 1 - smoothstep(lerp(0.20, 0.38, type), lerp(0.46, 0.98, type), h);
+    // 曇天の雲頂は雲種から 0.46～0.98 に写像される。晴天では地図上の局所的な厚みを使う。
+    float type = lerp(saturate((placement.a - 0.46) / 0.52), Weather.x, convection);
+    float crownStart = lerp(lerp(0.20, 0.38, type),
+                            lerp(placement.b, placement.a, 0.64), convection);
+    float bottom = smoothstep(placement.b, placement.b + 0.055, h);
+    float top = 1 - smoothstep(crownStart, placement.a, h);
     float profile = bottom * top;
-    float threshold = 1 - coverage;
+    float threshold = 1 - placement.r;
     // 大きな形の値は最大1。高度プロファイルだけで空と判定できる点は3Dノイズを読まない。
     if (profile <= threshold)
         return result;
 
-    shapePosition.xz += float2(h * h * 480.0, -h * 220.0);
+    shapePosition.xz *= CloudShapeTuning.x;
     shapePosition.y *= lerp(1.5, 0.9, type);
     // 低周波の変位で大きな雲塊を曲げ、中間スケールのWorleyで大小の膨らみを付ける。
     float3 warp = BaseNoise.SampleLevel(LinearWrap, shapePosition * 0.00018 + 0.37, 1).gba - 0.5;
     shapePosition += warp * 340.0;
     float base = BaseNoise.SampleLevel(LinearWrap,
                                       shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0).r;
+    // Worleyが最大値を取っても閾値に届かない点では、そのテクスチャを読む必要がない。
+    float depth = max(placement.a - placement.b, 0.01);
+    float localHeight = saturate((h - placement.b) / depth);
+    float coreWeight = thermalCoreWeight(localHeight, depth, placement.r, convection);
+    // 密度の補強は単調増加。細部が最大のときの値にも同じ関数を使えば、早期終了は安全。
+    float upperEnvelope = supportCloudInterior(saturate(base + 0.371), coreWeight);
+    if (upperEnvelope * profile <= threshold)
+        return result;
     float3 billows = DetailNoise.SampleLevel(LinearWrap, shapePosition * 0.00075, 0).rgb;
     float cells = dot(billows, float3(0.55, 0.30, 0.15));
-    float shape = saturate(base + (cells - 0.43) * 0.65) * profile;
+
+    float inset = depth * crownInset(localHeight, cells, convection);
+    profile = bottom * (1 - smoothstep(crownStart, placement.a, h + inset));
+    float envelope = saturate(base + (cells - 0.43) * 0.65);
+    float shape = supportCloudInterior(envelope, coreWeight) * profile;
+    result.localHeight = localHeight;
     result.density = saturate(remap01(shape, threshold, 1) * 2.1);
     result.shapePosition = shapePosition;
     result.warp = warp;
     return result;
 }
 
-float detailCumulusCloud(BackgroundCloudSample background)
+// 粗い本体・雲頂は詳細形状の密度上限。風下の混合量を保持し、空区間の判定と
+// 表面の詳細化に同じ希釈率と輸送密度を使う。
+struct BackgroundCloudSample
+{
+    CloudBodySample body;
+    CloudBodySample head;
+    float headWeight;
+    float density;
+    float dilution;
+    float carriedDensity;
+};
+
+struct CloudWindMargin
+{
+    float reach;       // 風速と雲の厚みから求めた移送距離の基準 [m]
+    float exposure;    // 外気と混ざる風下の肩 [0, 1]
+};
+
+void shapeDownwindCrown(inout BackgroundCloudSample result, inout float3 bodyPosition,
+                        inout float4 column, float h, float2 downwind, float strength,
+                        float convection, out CloudWindMargin margin)
+{
+    // Zhao & Austin (2005), Fig. 4 の浅い積雲の鉛直断面。風上側の柱を親にして
+    // 上部だけを運ぶ。局所的な雲の厚みで距離を制限し、雲底に続く本体を残す。
+    float columnDepth = max(0.01, column.a - column.b);
+    float reach = strength * min(0.34 * columnDepth * CloudLayer.y, 900.0 / CloudShapeTuning.x);
+    float3 headPosition = bodyPosition;
+    headPosition.xz -= downwind * reach;
+    float4 parent = cloudPlacement(headPosition.xz);
+    float parentDepth = max(0.01, parent.a - parent.b);
+    float level = (h - parent.b) / parentDepth;
+    float slope = parent.a - column.a + 0.65 * (parent.r - column.r);
+    float flank = strength * smoothstep(-0.025, 0.10, slope) * smoothstep(0.13, 0.25, h);
+
+    // 風下へ雲頂と被覆率が落ちる縁を選び、肩のすぐ下だけ少し風上へ引く。
+    float shoulder = lerp(0.50, 0.63, saturate((parent.a - 0.34) / 0.58));
+    float neck = smoothstep(shoulder - 0.34, shoulder - 0.15, level)
+                 * (1 - smoothstep(shoulder - 0.15, shoulder + 0.025, level));
+    result.headWeight = flank * smoothstep(shoulder - 0.14, shoulder + 0.10, level);
+    // 肩の上下で効果を滑らかに消し、厚い中心と雲底を支える柱を残す。
+    float band = smoothstep(shoulder - 0.30, shoulder - 0.045, level)
+                 * (1 - smoothstep(shoulder + 0.14, shoulder + 0.36, level));
+    margin.reach = reach;
+    margin.exposure = saturate(strength * 1.55) * smoothstep(-0.035, 0.095, slope)
+                      * smoothstep(0.13, 0.25, h) * band;
+    float bodyAdvance = reach * (0.54 * result.headWeight - 0.34 * flank * neck);
+    [branch]
+    if (bodyAdvance != 0)
+    {
+        // 密度を逆向きに読む。肩も頭についていくため根元につながった丸みが残る。
+        bodyPosition.xz -= downwind * bodyAdvance;
+        column = cloudPlacement(bodyPosition.xz);
+    }
+
+    [branch]
+    if (result.headWeight > 0)
+    {
+        // 頭はまとまった体積として移す。同じ距離だけ平行移動したノイズで輪郭を保ち、
+        // 高さ方向のみ中心へ寄せて読み、先端が細い筋にならないようにする。
+        float center = parent.b + parentDepth * (shoulder + 0.16);
+        float headH = lerp(h, center, 0.20 * flank * (1 - smoothstep(0.84, 0.98, h)));
+        headPosition.y += (headH - h) * CloudLayer.y;
+        result.head = cloudBodyShape(headPosition, headH, parent, convection);
+    }
+}
+
+BackgroundCloudSample unmixedCloudShape(float3 p, float h, out CloudWindMargin margin)
+{
+    margin = (CloudWindMargin)0;
+    BackgroundCloudSample result = (BackgroundCloudSample)0;
+    if (h > 0 && h < 1 && CloudLayer.z > 0 && CloudLayer.w > 0)
+    {
+        float3 material = p - float3(Wind.x, 0, Wind.y);
+        float convection = cumulusAmount();
+        bendConvectiveTop(material, h, convection);
+        float4 column = cloudPlacement(material.xz);
+        float2 wind = WeatherEffects.yz;
+        float speed = length(wind);
+        if (convection > 0 && h > 0.13 && speed > 0)
+            shapeDownwindCrown(result, material, column, h, wind / max(speed, 0.0001),
+                               convection * saturate(speed / 15), convection, margin);
+
+        result.body = cloudBodyShape(material, h, column, convection);
+        result.density = max(result.body.density, result.head.density * result.headWeight);
+    }
+    return result;
+}
+
+float cloudDetailLod(float footprint, float frequency)
+{
+    // テクスチャ上の投影幅に合わせる。footprint=0は従来どおりミップ0。
+    return log2(max(1, footprint * frequency * CloudSampling.x * 0.65));
+}
+
+float detailCumulusCloud(CloudBodySample background, float footprint, float baseFray)
 {
     float cumulus = cumulusAmount();
     float3 detailPosition = background.shapePosition - float3(0, Wind.z, 0);
     float3 detailUv = detailPosition * 0.00075 + background.warp * 0.07;
-    float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, 0);
+    float4 noise = DetailNoise.SampleLevel(LinearWrap, detailUv, cloudDetailLod(footprint, 0.00075));
     // RGBで膨らみを刻み、B/Aで縁を侵食する。粗い形から密度を削るため、空区間の外へは広がらない。
     float3 lobeWeights =
         lerp(float3(0.115, 0.054, 0.036), float3(0.205, 0.042, 0.026), cumulus);
-    float shape = background.shape - dot(1 - noise.rgb, lobeWeights) * background.profile;
-    float erosion = dot(1 - noise.ba, float2(0.21, 0.23));
+    float detail = CloudShapeTuning.y;
+    float shape = background.shape - dot(1 - noise.rgb, lobeWeights) * background.profile * detail;
+    // 雲底では細い隙間が残る向きに高周波のWorleyを反転する。
+    float2 edgeNoise = lerp(1 - noise.ba, noise.ab, baseFray);
+    float erosion = dot(edgeNoise, float2(0.21, 0.23)) * detail;
     return cumulusDensity(shape, background.threshold, erosion, cumulus);
 }
 
-float detailBackgroundCloud(BackgroundCloudSample background)
+float detailCloudBody(CloudBodySample background, float footprint)
 {
-    if (background.density <= 0)
-        return 0;
+    if (background.density <= 0 || CloudShapeTuning.y <= 0)
+        return background.density;
+    footprint *= max(1, CloudShapeTuning.x);
+    // 雲底に近いほど反転した別帯域を使う。移行中も縁に凹凸が残る。
+    float baseFray = cumulusAmount() * (1 - smoothstep(0.04, 0.33, background.localHeight));
     if (CUMULUS_CLOUDS)
-        return detailCumulusCloud(background);
+        return detailCumulusCloud(background, footprint, baseFray);
 
     // 表面の凹凸と薄い縁を別の周波数で削り、密度の高い中心を残す。
     float3 detailPosition = background.shapePosition - float3(0, Wind.z, 0);
-    float3 noise = DetailNoise.SampleLevel(LinearWrap,
-                                          detailPosition * 0.0022 + background.warp * 0.17, 0).rgb;
-    float erosion = dot(1 - noise, float3(0.625, 0.25, 0.125));
-    float fine = DetailNoise.SampleLevel(LinearWrap, detailPosition * 0.0067, 0).g;
+    float3 noise = DetailNoise.SampleLevel(LinearWrap, detailPosition * 0.0022 + background.warp * 0.17,
+                                          cloudDetailLod(footprint, 0.0022)).rgb;
+    float erosion = dot(lerp(1 - noise, noise.gbr, baseFray), float3(0.625, 0.25, 0.125));
+    // 画素内で細部が平均化されるときは、低周波側のGで代用して別サンプルを省く。
+    float fineBlend = smoothstep(22, 85, footprint);
+    float fine = noise.g;
+    [branch]
+    if (fineBlend < 1)
+    {
+        float fineNoise = DetailNoise.SampleLevel(LinearWrap, detailPosition * 0.0067,
+                                                  cloudDetailLod(footprint, 0.0067)).g;
+        fine = lerp(fineNoise, fine, fineBlend);
+    }
     float edgeErosion = (erosion * 0.38 + (1 - fine) * 0.10) * (1 - background.density * 0.55);
-    return remap01(background.density, edgeErosion, 1);
+    return remap01(background.density, edgeErosion * CloudShapeTuning.y, 1);
+}
+
+float detailBackgroundCloud(BackgroundCloudSample background, float footprint = 0)
+{
+    if (background.density <= 0 || CloudShapeTuning.y <= 0)
+        return background.density;
+
+    float density = detailCloudBody(background.body, footprint);
+    // 細部の侵食は密度を下げるだけ。本体を上回り得る頭だけ追加で細部を読む。
+    [branch]
+    if (background.head.density * background.headWeight > density)
+    {
+        float head = detailCloudBody(background.head, footprint);
+        density = max(density, head * background.headWeight);
+    }
+    return density * (1 - background.dilution) + background.carriedDensity;
+}
+
+// 風下の肩から曲線に沿って上流の雲体を参照し、運ばれた滴の消散を近似する。
+// 供給元は元の雲体だけなので、すでに運ばれた密度を再び足すことはない。
+BackgroundCloudSample backgroundCloudShape(float3 p, float h)
+{
+    CloudWindMargin margin;
+    BackgroundCloudSample cloud = unmixedCloudShape(p, h, margin);
+    float mixing = margin.exposure * (1 - smoothstep(0.20, 0.78, cloud.density));
+    [branch]
+    if (mixing > 0)
+    {
+        float2 wind = WeatherEffects.yz;
+        float2 downwind = wind / max(length(wind), 0.0001);
+        float2 crosswind = float2(-downwind.y, downwind.x);
+        float3 material = p - float3(Wind.x, 0, Wind.y);
+        // 低周波の既存ノイズを風と少し違う速さで運び、房ごとに曲率を変える。
+        float3 flowUV = material * float3(0.00020, 0.00035, 0.00020);
+        flowUV.xz -= 0.000035 * Wind.xy;
+        float2 eddy = BaseNoise.SampleLevel(LinearWrap, flowUV + float3(0.24, 0.47, 0.13), 1).ba;
+        float roll = smoothstep(0.20, 0.76, eddy.x);
+        // 軌道に沿う距離は一次、下降と横方向のずれは二次で増える。
+        float progress = 0.18 + 0.82 * mixing;
+        float travel = margin.reach * lerp(2.40, 3.65, roll) * progress;
+        float drop = travel * progress * lerp(0.26, 0.61, roll);
+        float side = (eddy.y - 0.5) * 0.5 * travel * progress;
+        float3 source = p;
+        source.xz -= downwind * travel + crosswind * side;
+        source.y += drop;
+        float sourceH = (altitude(source) - CloudLayer.x) / CloudLayer.y;
+
+        // 本当に雲水がある場所からだけ運ぶ。希薄な先端では輸送幅に合うミップを使う。
+        float water = 0;
+        if (sourceH > 0 && sourceH < 1)
+        {
+            float3 donorMaterial = source - float3(Wind.x, 0, Wind.y);
+            float convection = cumulusAmount();
+            bendConvectiveTop(donorMaterial, sourceH, convection);
+            CloudBodySample donor = cloudBodyShape(donorMaterial, sourceH,
+                                                   cloudPlacement(donorMaterial.xz), convection);
+            water = detailCloudBody(donor, max(1, 0.23 * travel));
+        }
+        // 湿った空気中では雲水が長く残る。混合の重みの合計は1以下。
+        cloud.dilution = 0.72 * mixing;
+        float retention = exp2(-progress * lerp(1.95, 1.35, saturate(Weather.z)));
+        cloud.carriedDensity = cloud.dilution * water * retention;
+        cloud.density = cloud.density * (1 - cloud.dilution) + cloud.carriedDensity;
+    }
+    return cloud;
 }
 
 BackgroundCloudSample sampleBackgroundCloud(float3 p, float h)
 {
+    // 日照で発達する肩だけに、移流する小さな3D変位を与える。輪郭、雲影、
+    // 近景と遠景が同じ場所を読むので、房の細かな凹凸も視点に固定されない。
+    float growth = cumulusAmount() * smoothstep(0.10, 0.37, h);
+    if (growth > 0 && h < 1 && CloudLayer.z > 0 && CloudLayer.w > 0)
+    {
+        float scale = CloudShapeTuning.x;
+        float3 material = p - float3(Wind.x, 0, Wind.y);
+        // 周期内4セルの変位場。標準サイズで格子間隔は約258 m、各成分の変位は最大±50 m。
+        float3 uvw = material * (0.00097 * scale) + float3(0.39, 0.17, 0.57);
+        float3 offset = CloudWarpVolume.SampleLevel(LinearWrap, uvw, 0).rgb - 0.5;
+        float taper = 1 - smoothstep(0.89, 1, h);
+        // Cumulus は近くの淡い房が多く、小さい変位で肩の細部が現れる。
+        float amplitude = CUMULUS_CLOUDS ? 65.0 : 100.0;
+        p += offset * (amplitude * growth * taper / scale);
+        h = (altitude(p) - CloudLayer.x) / CloudLayer.y;
+    }
+
     [branch]
     if (NearCloudParams.y > 0)
     {
@@ -467,20 +784,20 @@ BackgroundCloudSample sampleBackgroundCloud(float3 p, float h)
 }
 
 // 視線・太陽遮蔽・雲影に共通の背景雲海＋局所形状を返す。
-float2 cloudDensitySample(float3 p, bool detail)
+float2 cloudDensitySample(float3 p, bool detail, float footprint = 0)
 {
     if (Controls.w < 0.5)
         return 0;
     float height = altitude(p);
     float h = (height - CloudLayer.x) / CloudLayer.y;
     BackgroundCloudSample background = sampleBackgroundCloud(p, h);
-    float density = detail ? detailBackgroundCloud(background) : background.density;
+    float density = detail ? detailBackgroundCloud(background, footprint) : background.density;
     return compositeFormationDensity(p, height, h, detail, density * CloudLayer.w);
 }
 
-float cloudDensity(float3 p, bool detail)
+float cloudDensity(float3 p, bool detail, float footprint = 0)
 {
-    return cloudDensitySample(p, detail).x;
+    return cloudDensitySample(p, detail, footprint).x;
 }
 
 float cloudExtinction()
@@ -489,9 +806,11 @@ float cloudExtinction()
     return 0.006;
 }
 
+#include "cloud_layers.hlsli"
+
 float cloudShadowRayLength()
 {
-    return min((FormationLayer.y - FormationLayer.z) / max(SunDirection.y, 0.02), 85000);
+    return min((FormationLayer.w - FormationLayer.z) / max(SunDirection.y, 0.02), 85000);
 }
 
 float cloudShadow(float3 p)

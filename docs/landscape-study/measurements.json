@@ -1,0 +1,378 @@
+{
+  "paired_captures": {
+    "seedhead": {
+      "spawn_xz_m": [
+        6,
+        -66
+      ],
+      "look_deg": [
+        18,
+        -17
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Partly cloudy",
+      "solar_hour": 16.200001,
+      "sun_elevation": 30.76251,
+      "sun_azimuth": -94.630081,
+      "camera_position_m": [
+        6.0,
+        133.328491,
+        -66.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        2.166667,
+        1.0
+      ],
+      "native_png_sha256": {
+        "before": "54335273fa02b4398d0a768dbdf36d0c11c4cd1f7e26fd15b46590740d166a7a",
+        "after": "ddef1ff3194487caf2448009a4813f9f720eb1e8e26e446da2cf0a766c6007cd"
+      },
+      "roi_exclusive_xyxy": [
+        220,
+        585,
+        1450,
+        1020
+      ],
+      "roi_mean_absolute_rgb_255": 12.3678,
+      "whole_screen_mean_absolute_rgb_255": 10.0109,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          13405,
+          17771,
+          41190
+        ],
+        [
+          13405,
+          17771,
+          41190
+        ]
+      ]
+    },
+    "meadow": {
+      "spawn_xz_m": [
+        -6.1,
+        -37
+      ],
+      "look_deg": [
+        18,
+        -12
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Partly cloudy",
+      "solar_hour": 16.200001,
+      "sun_elevation": 30.76251,
+      "sun_azimuth": -94.630081,
+      "camera_position_m": [
+        -6.1,
+        133.671844,
+        -37.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        2.166667,
+        1.0
+      ],
+      "native_png_sha256": {
+        "before": "08db2563ee1a610ed1958976e59d64725fa6856ac690d80f7f73c06446efde71",
+        "after": "fac1fd0e421158d97b58391a052b1c11de9cb7962ff4610917724911e567c29d"
+      },
+      "roi_exclusive_xyxy": [
+        15,
+        600,
+        685,
+        1035
+      ],
+      "roi_mean_absolute_rgb_255": 8.6109,
+      "whole_screen_mean_absolute_rgb_255": 6.924,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          14395,
+          17647,
+          41584
+        ],
+        [
+          14395,
+          17647,
+          41584
+        ]
+      ]
+    },
+    "river": {
+      "spawn_xz_m": [
+        53,
+        25
+      ],
+      "look_deg": [
+        -25,
+        -14
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Partly cloudy",
+      "solar_hour": 16.4,
+      "sun_elevation": 28.469093,
+      "sun_azimuth": -92.618881,
+      "camera_position_m": [
+        53.0,
+        128.072723,
+        25.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        2.166667,
+        1.0
+      ],
+      "native_png_sha256": {
+        "before": "4fe4aabf0ee47223f5ed9bf58183af02cfdbb269afcd7f29a7ad22d598acb62b",
+        "after": "a57bf903c1ff25e8eaaeb1025b419fe900745460378117fd4279e8093aa3a634"
+      },
+      "roi_exclusive_xyxy": [
+        90,
+        530,
+        950,
+        850
+      ],
+      "roi_mean_absolute_rgb_255": 7.8646,
+      "whole_screen_mean_absolute_rgb_255": 7.3321,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          11852,
+          17325,
+          40767
+        ],
+        [
+          11852,
+          17325,
+          40767
+        ]
+      ]
+    },
+    "ridge": {
+      "spawn_xz_m": [
+        240,
+        3320
+      ],
+      "look_deg": [
+        6,
+        20
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Clear",
+      "solar_hour": -1.0,
+      "sun_elevation": 39.0,
+      "sun_azimuth": -52.0,
+      "camera_position_m": [
+        240.0,
+        220.375183,
+        3320.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        1.5,
+        0.666667
+      ],
+      "native_png_sha256": {
+        "before": "4754297b0cfe25f8057d301364346c88d70517dd56f54cda24faee8d93bfcf70",
+        "after": "9f0ac5e028ffc4980f81efdaa526cff4ca660e03146a26bd4a06f51ae008e756"
+      },
+      "roi_exclusive_xyxy": [
+        480,
+        380,
+        1530,
+        880
+      ],
+      "roi_mean_absolute_rgb_255": 7.281,
+      "whole_screen_mean_absolute_rgb_255": 6.6946,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "summit": {
+      "spawn_xz_m": [
+        1261,
+        6617
+      ],
+      "look_deg": [
+        -150,
+        -3
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Clear",
+      "solar_hour": -1.0,
+      "sun_elevation": 38.0,
+      "sun_azimuth": 5.0,
+      "camera_position_m": [
+        1261.0,
+        1453.31665,
+        6617.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        1.5,
+        0.666667
+      ],
+      "native_png_sha256": {
+        "before": "58aa981197ce9b53ac70e9557d67920fc9e8b737f719f19c2a683bd8c2072308",
+        "after": "9dd4d26d50a4f4fcd57af4388400691316b37d8550c824b43de0ed2eca33a2f5"
+      },
+      "roi_exclusive_xyxy": [
+        180,
+        250,
+        1700,
+        975
+      ],
+      "roi_mean_absolute_rgb_255": 22.8236,
+      "whole_screen_mean_absolute_rgb_255": 19.2439,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "valley": {
+      "spawn_xz_m": [
+        -6.1,
+        -37
+      ],
+      "look_deg": [
+        16,
+        3
+      ],
+      "adapter": "NVIDIA GeForce RTX 5080",
+      "width": 1920,
+      "height": 1080,
+      "frames": 10,
+      "quality": "High",
+      "weather": "Partly cloudy",
+      "solar_hour": 15.7,
+      "sun_elevation": 36.459923,
+      "sun_azimuth": -99.939545,
+      "camera_position_m": [
+        -6.1,
+        133.671844,
+        -37.0
+      ],
+      "simulation_seconds": 0.166667,
+      "wind_offset_m": [
+        2.166667,
+        1.0
+      ],
+      "native_png_sha256": {
+        "before": "87c00279376162317daa858d22bfd50e16ba1503f5c43f8761e41710ff121b3f",
+        "after": "fe1ae68c31f090f60dddb9fb9e2ea2b1b817c2921cac6bbd9dade621ee4c9e3f"
+      },
+      "roi_exclusive_xyxy": [
+        0,
+        450,
+        1920,
+        1080
+      ],
+      "roi_mean_absolute_rgb_255": 14.3271,
+      "whole_screen_mean_absolute_rgb_255": 8.5766,
+      "nonfinite_samples_before_after": [
+        0,
+        0
+      ],
+      "d3d11_errors_warnings_each": [
+        0,
+        0
+      ],
+      "grass_lods_before_after": [
+        [
+          14301,
+          18092,
+          42260
+        ],
+        [
+          14301,
+          18092,
+          42260
+        ]
+      ]
+    }
+  },
+  "river_mask": {
+    "debug_view": 31,
+    "before_pixels": 292509,
+    "after_pixels": 293465,
+    "overlap_pixels": 291110,
+    "image_pixels": 2073600,
+    "mean_abs_rgb_255_in_overlap": 12.943
+  }
+}

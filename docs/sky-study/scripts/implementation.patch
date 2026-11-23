@@ -1,0 +1,79 @@
+--- a/shaders/common.hlsli
++++ b/shaders/common.hlsli
+@@ -354,6 +354,19 @@
+     float localHeight;
+ };
+ 
++// 上昇域の肩で、上下の房の間に雲水を残す。空域・薄い柱・雲底・雲頂への寄与は消える。
++float thermalCoreWeight(float localHeight, float depth, float coverage, float convection)
++{
++    float column = smoothstep(0.38, 0.81, depth) * smoothstep(0.10, 0.39, coverage);
++    float middle = smoothstep(0.03, 0.20, localHeight) * (1 - smoothstep(0.52, 0.88, localHeight));
++    return 0.52 * convection * column * middle;
++}
++
++float supportCloudInterior(float envelope, float coreWeight)
++{
++    return lerp(envelope, 1, coreWeight * smoothstep(0.15, 0.53, envelope));
++}
++
+ // 配置マップが決めた上面から内向きに削り、粗い密度を空区間判定の上限に保つ。
+ float crownInset(float localHeight, float cells, float convection)
+ {
+@@ -465,6 +478,7 @@
+     float billows = dot(base.gba, float3(0.15, 0.50, 0.35));
+     float envelope = saturate(base.r + (billows - 0.44) * 0.42 + 0.065);
+     envelope = lerp(envelope, 0.09 + 0.91 * envelope, cumulus);
++    // Cumulus の内部はこの直前の補強で連続する。雲内の飛行時にも外縁が見える密度を使う。
+     result.shape = envelope * profile;
+     result.profile = profile;
+     result.localHeight = localHeight;
+@@ -504,15 +518,20 @@
+     float base = BaseNoise.SampleLevel(LinearWrap,
+                                       shapePosition * 0.000115 + float3(0.13, 0.27, 0.38), 0).r;
+     // Worleyが最大値を取っても閾値に届かない点では、そのテクスチャを読む必要がない。
+-    if ((base + 0.371) * profile <= threshold)
++    float depth = max(placement.a - placement.b, 0.01);
++    float localHeight = saturate((h - placement.b) / depth);
++    float coreWeight = thermalCoreWeight(localHeight, depth, placement.r, convection);
++    // 密度の補強は単調増加。細部が最大のときの値にも同じ関数を使えば、早期終了は安全。
++    float upperEnvelope = supportCloudInterior(saturate(base + 0.371), coreWeight);
++    if (upperEnvelope * profile <= threshold)
+         return result;
+     float3 billows = DetailNoise.SampleLevel(LinearWrap, shapePosition * 0.00075, 0).rgb;
+     float cells = dot(billows, float3(0.55, 0.30, 0.15));
+-    float depth = max(placement.a - placement.b, 0.01);
+-    float localHeight = saturate((h - placement.b) / depth);
++
+     float inset = depth * crownInset(localHeight, cells, convection);
+     profile = bottom * (1 - smoothstep(crownStart, placement.a, h + inset));
+-    float shape = saturate(base + (cells - 0.43) * 0.65) * profile;
++    float envelope = saturate(base + (cells - 0.43) * 0.65);
++    float shape = supportCloudInterior(envelope, coreWeight) * profile;
+     result.localHeight = localHeight;
+     result.density = saturate(remap01(shape, threshold, 1) * 2.1);
+     result.shapePosition = shapePosition;
+@@ -727,6 +746,23 @@
+ 
+ BackgroundCloudSample sampleBackgroundCloud(float3 p, float h)
+ {
++    // 日照で発達する肩だけに、移流する小さな3D変位を与える。輪郭、雲影、
++    // 近景と遠景が同じ場所を読むので、房の細かな凹凸も視点に固定されない。
++    float growth = cumulusAmount() * smoothstep(0.10, 0.37, h);
++    if (growth > 0 && h < 1 && CloudLayer.z > 0 && CloudLayer.w > 0)
++    {
++        float scale = CloudShapeTuning.x;
++        float3 material = p - float3(Wind.x, 0, Wind.y);
++        // 周期内4セルの変位場。標準サイズで格子間隔は約258 m、各成分の変位は最大±50 m。
++        float3 uvw = material * (0.00097 * scale) + float3(0.39, 0.17, 0.57);
++        float3 offset = CloudWarpVolume.SampleLevel(LinearWrap, uvw, 0).rgb - 0.5;
++        float taper = 1 - smoothstep(0.89, 1, h);
++        // Cumulus は近くの淡い房が多く、小さい変位で肩の細部が現れる。
++        float amplitude = CUMULUS_CLOUDS ? 65.0 : 100.0;
++        p += offset * (amplitude * growth * taper / scale);
++        h = (altitude(p) - CloudLayer.x) / CloudLayer.y;
++    }
++
+     [branch]
+     if (NearCloudParams.y > 0)
+     {

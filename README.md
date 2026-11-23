@@ -2,9 +2,13 @@
 
 C++20 / Direct3D 11で動く描画エンジンです。風で波打つ草原と川沿いを歩きながら、RDR2の公開技術資料を参考に実装した雲・雲影・光散乱・天候を確認できます。静的glTFのPBR描画にも対応します。
 
-![草原、川、実標高データから作った稜線。1080pの実機描画](docs/images/meadow-valley.png)
+![草原、川、実標高データから作った稜線。1080pの実機描画](docs/landscape-study/figures/valley-after.jpg)
 
-[川岸から見た草と水面の近景](docs/images/meadow-riverside.png)
+[川岸から見た草と水面の近景](docs/landscape-study/figures/river-after.jpg)
+
+[草・水・山の変更前後を比較](docs/landscape-study/index.html) · [C++からHLSLまでのプログラム解説](docs/landscape-study/README.md) · [実写と4Kの雲の比較](docs/sky-study/README.md)
+
+画像比較の `index.html` は、クローンしたフォルダからブラウザーで開くとスライダーを操作できます。
 
 ## 探索とモデルの表示
 
@@ -37,10 +41,11 @@ C++20 / Direct3D 11で動く描画エンジンです。風で波打つ草原と�
 - **自然な雲影**：雲密度を太陽側から積分し、透過率と遮蔽深度を指数シャドウマップに保存。高度に応じたミップを選び、地表の直接光と霧に使います。
 - **大気・散乱**：Rayleigh / Mie / オゾン吸収、太陽透過率 LUT、空の数値積分、空気遠近、影付きの高さフォグ、昼・夕方・夜。
 - **天候**：晴れ・晴れ曇り・曇天・雨・嵐。滑らかな遷移、48秒の天候デモ、雲マップで位置を決める雨霧、風に流される3D雨粒、枝分かれする落雷と雲・地形・霧への照り返し、雨上がりにも残る地面の濡れ。
-- **ディファードPBR**：ベースカラー・粗さ・金属度・法線・AO・発光・深度のG-buffer、GGX太陽光、近距離の草木・モデル影、HDR合成、ACES近似トーンマップ。
+- **ディファードPBR**　ベースカラー・粗さ・金属度・法線・AO・発光・深度のG-buffer、GGX太陽光、草専用のシャドウマップ、SSAO、スクリーンスペース接触影、HDR合成、ACES近似トーンマップ。
 - **操作・検証**：歩行・飛行カメラ、クリック可能な操作パネル、4段階の画質、デバッグ表示、風を考慮する雲の時間再投影、深度を考慮するアップサンプリング、HLSL再読み込み、PNGとGPU診断JSON。
 - **雲の軽量描画**：ハーフバッファ、半数を交互に計算するチェッカーボード、風・カメラを補正する再構成、履歴不成立画素の追加レイマーチ。
-- **雲海の中の大型雲**：位置・半径・高さを持つ入道雲と、目・螺旋の雲帯を持つ回転渦。最大8領域の配置ファイル、影・散乱・再投影への統合。
+- **高度の異なる雲**　薄雲・筋雲・うろこ雲を、それぞれの2D PNG・高度・濃さで定義し、通常の雲海に重ねます。
+- **特殊雲**　入道雲・回転渦・レンズ雲・かなとこ雲・ロール雲・波頭雲・乳房雲。配置ファイルで最大24領域を重ねられます。
 
 ## ビルドと起動
 
@@ -63,7 +68,7 @@ ctest --preset release
 
 Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、`Release | x64` または `Debug | x64` でビルドできます。CMakeの事前実行は不要です。出力は `out\vs\Release\CirrusEngine.exe`（Debug は `out\vs\Debug`）です。ソリューション全体のビルドには、C#ツール用の.NET 8 SDKとVisual Studioの「.NET デスクトップ開発」も必要です。
 
-`Shaders` ソリューションフォルダにHLSLがまとまっています。Visual StudioのビルドはC++のリンク後にシェーダーをコピーし、全25エントリーポイントをHLSLコンパイラーで検証します。シェーダーのエラーもビルド失敗になります。
+`Shaders` ソリューションフォルダにHLSLがまとまっています。Visual StudioのビルドはC++のリンク後にシェーダーをコピーし、各描画パスのエントリーポイントをHLSLコンパイラーで検証します。シェーダーのエラーもビルド失敗になります。
 
 `start.cmd` をダブルクリックすると、未ビルドの場合はビルドして起動します。配布物は `cmake --install build --config Release --prefix out/CirrusEngine` で生成できます。実行ファイルと `shaders`、`assets` フォルダを一緒に配置してください。C#ツールも同梱する場合は、[テクスチャ生成ツール](#テクスチャ生成ツール)の手順で構成します。
 
@@ -80,23 +85,69 @@ Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、
 | P / T | 天候・時計を一時停止 / 時計の進行を切り替え |
 | [ / ] | 太陽時を30分変更。手動太陽モードでは高度を変更 |
 | C / H | 画質を切り替え / 雲影を切り替え |
-| F1 / F2 | 操作パネルの表示切り替え / 次のデバッグ表示へ（全32表示） |
+| F1 / F2 | 操作パネルの表示切り替え / 次のデバッグ表示へ（全40表示） |
 | F3 | テクスチャ一覧パネルを開く・閉じる |
 | F4 | 雲の形と照明を Classic / Cumulus で切り替え |
 | F5 | HLSL 再読み込み。失敗時は直前のシェーダーを維持 |
 | F7 | 雲のチェッカーボード描画を切り替え |
-| F8 / F9 | 大型雲をOFF→入道雲→渦→混在に切り替え / プリセットを見渡す視点へ |
+| F8 / F9 | 特殊雲のプリセットを切り替え / 選択中の雲を見渡す視点へ |
+| F10 | 雲の調整パネルを開く・閉じる |
 | F12 / R / Esc | PNG と診断保存 / カメラ初期化 / 終了 |
 
 左パネルで太陽時と露出、右上で天候を選べます。`--camera valley` などの雲の撮影用視点では太陽の高度と方位を手動調整できます。ノイズ生成シェーダーの編集は再起動で生成済みテクスチャへ反映されます。
 
 ## 雲のスタイル
 
-**Classic** は天候デモの雲です。大小の雲塊を重ね、上方の雲の厚みから天空光の遮蔽を求めます。**Cumulus** は位置ごとの雲底・雲頂で丸い雲塊を作ります。太陽に近い方向の散乱と空の環境光で照らします。
+晴天と晴れ曇りでは、同じ高さに並んだ雲底から、低く広がる積雲と何段にも盛り上がる積雲が混じって見えます。天候マップで雲ごとの広がりと雲頂の高さを決め、3Dノイズで雲頂のふくらみと雲底のほつれを付けます。**Classic** は大小の雲塊を重ね、頭上の雲の厚みから天空光の遮蔽を求めます。**Cumulus** は少ないノイズ参照で雲塊を作り、短い太陽方向のレイと雲影マップから光の届き方を近似します。
 
 起動時は Classic が既定です。Cumulus で起動するには `start.cmd --cloud-style cumulus` を使います。実行中は **F4** または左下の **CLASSIC [F4] / CUMULUS [F4]** で切り替えます。そのフレームで雲影と描画履歴を更新します。
 
 `start.cmd --cloud-style classic --classic-fast` でClassicの軽量化を有効にします。雲の描画解像度を保ち、4相チェッカーボードで2×2画素のうち1画素ずつを更新します。太陽側と天空光の遮蔽は、密度と光の変化が小さい場所で複数の視線から共有します。左パネルは **CB4 [F7]** を表示します。 [描画と遮蔽の仕組み](docs/architecture.md#classicの4相描画と遮蔽共有)
+
+## 雲を調整する
+
+**F10** または左上の **CLOUDS [F10]** で、通常の雲海をその場で調整できます。雲量、密度、雲底高度、層の厚み、縦方向の形、雲塊の横の大きさ、縁の細かさを、ClassicとCumulusの両方で変更できます。雲量を0%にすると雲海が消えます。縁の細かさを0にすると、細かな侵食がない滑らかな輪郭になります。
+
+動かした項目は起動中の手動値になり、他の項目は天候に従います。**RESET TO WEATHER** ですべての項目を現在の天候へ戻します。大型雲は **F8** と **CLOUD FORMATIONS** で操作できます。F12で保存される診断JSONの `cloud_settings` に、その画面で使った値が出ます。
+
+### 薄雲・筋雲・うろこ雲
+
+**F10 → LAYERS** で各層の中央高度 **ALTITUDE**（450～16000 m）と濃さ **AMOUNT** を調整できます。**SOLO** でその雲種だけを表示し、**ALL** で全層へ戻せます。
+
+| 雲種 | ファイル | 初期高度 |
+| --- | --- | ---: |
+| 薄雲 | `veil.png` | 10500 m |
+| 筋雲 | `cirrus.png` | 8300 m |
+| うろこ雲 | `scales.png` | 5450 m |
+
+薄雲は薄いベール、筋雲は風に沿う細い繊維として作成しています。うろこ雲の `scales.png` は4096×4096で、観測写真から大きめの雲片、細かい波列、青空が抜ける隙間を取り込んだ密度マップです。 [WMOの巻積雲の定義](https://cloudatlas.wmo.int/en/definition-cirrocumulus-cc.html) · [素材の出典](assets/clouds/credits.md)
+
+### 2Dテクスチャで雲種を作る
+
+[`assets/clouds/types.cloudlayers`](assets/clouds/types.cloudlayers) に、同時に表示する雲を1～3種類定義できます。各行には **ID、表示名、PNG、高度、濃さ、半厚、鉛直光学厚、水平タイル幅、画像形式** の順で指定します。距離の単位はmです。PNGへの相対パスは定義ファイルの場所を基準にします。
+
+```text
+# ID "表示名" PNG 高度 濃さ 半厚 光学厚 タイル幅 画像形式
+my-scales "MY SCALES" "my-scales.png" 5450 1.0 65 1.4 10500 density
+```
+
+`density` はR×Aを密度として使うため、グレースケール画像をそのまま使えます。`profile` ではGで局所的な厚みを指定し、Bで中心高度を上下にずらせます。黒が薄く、白が厚くなります。青チャンネルの中間値が基準高度です。世界座標上で繰り返すため、継ぎ目のないPNGを使います。
+
+```powershell
+.\start.cmd --cloud-layer-file "C:\path\to\my.cloudlayers" --cloud-layer-only my-scales --camera fly --look 25 66
+.\start.cmd --cloud-layer-only scales --camera fly --spawn 6400 4730 --look 8 53 --quality ultra --cloud-buffer full --no-checkerboard
+```
+
+**LAYERS ON / OFF** で追加層をまとめて切り替えられます。起動時に層を外すには `--no-texture-cloud-layers` を指定します。**F3** の表示35～37で、各スロットのPNGから読み込んだ密度を確認できます。
+
+### 雲種と被覆率の地域マップ
+
+`types.cloudlayers` の `@type_map` と `@coverage_map` は、それぞれ **PNGのパスと世界座標上のタイル幅（m）** を取ります。PNGのRチャンネルを横方向X・縦方向Zとして読みます。2枚には別々のタイル幅を指定できます。
+
+- `layer-type.png` は黒から白へ定義ファイルの行順をたどります。標準の3種類では黒が薄雲、中間の灰色が筋雲、白がうろこ雲です。その間の値では隣接する種類を滑らかに混ぜます。
+- `layer-coverage.png` は雲をどれだけ残すかを指定します。白は形状PNGの密度をそのまま使い、灰色を暗くすると薄い縁から削れ、黒で消えます。
+
+**F3** の表示38・39で各マップを確認できます。**SOLO** は雲種を選んだ一種類に固定して、被覆率による集まり方を表示します。各マップ指定は任意で、雲種マップを省略した場合は独立した各層を重ね、被覆率マップを省略した場合は被覆率1を使います。 [Nubisの高層雲の設計・19枚目](https://media.gdcvault.com/GDC%2B2022/Speaker%2BSlides/TheReal-timeVolumetricSuperstormsOfHorizonForbiddenWest_Schneider_Andrew.pdf)
 
 ## 飛行中の近距離雲
 
@@ -104,14 +155,16 @@ Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、
 
 `start.cmd --camera fly` で飛行を始め、**E** で上昇できます。`--camera inside` は雲層付近の視点から起動します。`--no-near-cloud-voxels` は近距離ボクセルを無効にする比較用の指定です。 [近距離雲の設計](docs/architecture.md#近距離の雲ボクセル)
 
-## 雲海に入道雲・渦巻き雲を配置
+## 雲海に特殊雲を配置
 
 **`cloud-formations.cmd`** を開くと、通常の雲海に大きな入道雲と渦巻き雲を置いたシーンが起動します。**F8**、または右側の **CLOUD FORMATIONS** パネルで切り替え、**F9** でプリセット位置へ視点を移動できます。渦単独では上から見下ろす視点になります。通常起動では大型雲はOFFです。
 
 - **TOWERS**：対流セルの3D制御場を変形し、Perlin–Worleyで輪郭を削る入道雲。通常の雲頂を越える高さも描画します。
 - **VORTEX**：中心の目、目の周りの高い雲、半径によって回転速度が異なる雲群。雲量の巻き込みと丸い雲塊のノイズを分け、外縁を普通の雲海へなじませます。
 - **MIXED**：両方を同じ雲海に配置。入道雲の密度を加算し、渦の領域では雲海を局所的に置き換えます。
-- パネルの **STRENGTH / SIZE / SPIN** で強度・大きさ・回転速度を調整。SPINが負なら逆回転、0なら回転停止です。**P** は風と回転を一緒に停止します。
+- **LENTICULAR / ANVIL / ROLL / FLUCTUS / MAMMATUS** でレンズ雲、かなとこ雲、ロール雲、波頭雲、乳房雲を選べます。
+- **SHOWCASE** は7種類を使って12領域を同時に配置します。選択後に **F9** を押すと見渡せる位置へ移動します。
+- **STRENGTH / SIZE / VORTEX SPIN** は強度・大きさ・渦の回転速度です。回転速度を負にすると逆回転し、0で止まります。**P** で風と回転を停止できます。
 
 ![Cloud sea with a large tower / actual GPU render](docs/images/formations-research-mixed.png)
 
@@ -120,6 +173,9 @@ Visual Studio ではリポジトリ直下の **`CirrusEngine.sln`** を開き、
 Nubis 2017、Nubis Evolved 2022、Procedural Cloudscapes 2018の本文を参照して密度場を改修しました。[資料・参照ページ・実装対応表](docs/cloud-research.md)に採用範囲と未実装部分を記載しています。RDR2相当の画質には未達で、近距離の雲塊や成長表現には改善の余地があります。
 
 ```powershell
+# 特殊雲7種類・12領域
+.\out\vs\Release\CirrusEngine.exe --weather partly --formations showcase --camera formations
+
 # 雲海＋入道雲＋渦
 .\out\vs\Release\CirrusEngine.exe --weather overcast --formations mixed --camera formations
 
@@ -130,13 +186,16 @@ Nubis 2017、Nubis Evolved 2022、Procedural Cloudscapes 2018の本文を参照�
 .\out\vs\Release\CirrusEngine.exe --formation-file config/formations.clouds --weather overcast --camera formations
 ```
 
-[`config/formations.clouds`](config/formations.clouds) は1行1領域、最大8領域です。距離・高度はm、回転は度/秒です。`#`以降はコメントになります。
+[`config/formations.clouds`](config/formations.clouds) は1行1領域、最大24領域です。距離・高度はm、渦の回転速度は度/秒、追加形状の向きは度です。`#`以降はコメントになります。
 
 ```text
 # 種類 x z 半径 雲底高度 高さ 密度
 tower -5600 7000 6200 1800 8600 1.05
 # 渦は末尾に角速度[度/秒]と巻き込み強度を追加
 vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
+# 新しい形状は末尾の向き[度]を省略可能
+lenticular -5750 10500 2800 4700 1280 0.76 -20
+roll -2400 15500 4200 2450 1300 0.84 9
 ```
 
 ファイル指定で起動した場合、**F5** は配置とHLSLを一緒に再読み込みします。不正な行やシェーダーエラーがあれば直前の設定を保ちます。F8やパネルでプリセットへ切り替えた後は、プリセットが有効になります。任意の位置に置いた領域には飛行カメラで移動してください。
@@ -182,6 +241,7 @@ vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
 - 合成前の3D雨粒のHDR散乱光（表示番号22）。
 - 雲の再構成マスク（23）：緑=今回計算、青=履歴、赤=修復、灰=雲層と交差しない視線。
 - 入道雲の128³形状プロファイル（24）、滑らかな64³変形ベクトル（25）。どちらもXYZ断面を確認できます。
+- 薄雲・筋雲・うろこ雲の水平密度マスク（35～37）。
 
 3Dノイズを選ぶと、**X / Y / Z** ボタンで断面の向き、**SLICE POSITION** で位置を変更できます。マップの縦横比を保ち、幅1000px以上では一覧の右側に全体を表示します。小さいウィンドウでは一覧がページ分割されます。**F1** でUIを隠し、**F12** で表示中の画像をPNGに保存できます。
 
@@ -199,11 +259,11 @@ vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
 
 ## テクスチャ生成ツール
 
-**Cirrus Texture Studio** はC#のWindowsアプリです。雲の基本形状を作るPerlin–Worley、輪郭用の詳細Worley、天候マップ、雲の変位マップを周期境界付きで生成します。シード、3Dの解像度（32³・64³・128³）、密度と雲量の補正を指定できます。元のGPUシェーダーと同じ用途・チャンネル構成で、シードに応じて異なる雲の分布を作ります。
+**Cirrus Texture Studio** はC#のWindowsアプリです。雲の基本形状を作るPerlin–Worley、輪郭用の詳細Worley、天候マップ、雲の変位マップ、薄雲・筋雲・うろこ雲の雲層マスクを周期境界付きで生成します。シード、3Dの解像度（32³・64³・128³）、密度と雲量の補正を指定できます。元のGPUシェーダーと同じ用途・チャンネル構成で、シードに応じて異なる雲の分布を作ります。
 
 1. 配布フォルダの **`TextureStudio\CirrusTextureStudio.exe`** を開きます。Visual Studioからビルドした場合は `out\vs\Release\TextureStudio` にあります。実行には **.NET 8 Desktop Runtime（x64）** が必要です。
 2. **生成** を押し、X・Y・Zの断面や色チャンネルを選びます。**3×3 タイル** で繰り返しを確認でき、表示中の断面をPNGで保存できます。
-3. **DDS パックを書き出す** で4つのテクスチャと生成設定を保存し、**エンジンでプレビュー** で同じパックを使った飛行ビューを開きます。
+3. **DDS パックを書き出す** で5つのテクスチャと生成設定を保存し、**エンジンでプレビュー** で同じパックを使った飛行ビューを開きます。
 
 | DDS | 内容 |
 | --- | --- |
@@ -211,10 +271,11 @@ vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
 | `detail-noise.dds` | RGBA16Fの3Dテクスチャ。R/G/B/Aが4/8/16/32セルのWorley |
 | `weather-map.dds` | 512²のRGBA16F。R/G/B/Aが雲量・湿度・雲種・積雲の芯 |
 | `cloud-displacement.dds` | 512²のRG16F。雲塊の位置を曲げる2成分の変位 |
+| `cloud-layers.dds` | 512²のRGBA16F。Rが薄雲、Gが筋雲、Bがうろこ雲のマスク |
 
 パックはDX10拡張付きの単一ミップDDSです。読み込み後にDirect3Dでミップを生成します。 [MicrosoftのDDS形式ガイド](https://learn.microsoft.com/ja-jp/windows/win32/direct3ddds/dx-graphics-dds-pguide)
 
-コマンドラインから試す場合は、書き出したフォルダを指定します。`--cloud-textures` を省略した起動では、従来どおりGPUが標準テクスチャを生成します。
+コマンドラインから試す場合は、書き出したフォルダを指定します。`cloud-layers.dds` を含むパックはRGBを3層の密度へ分けて読み込みます。4ファイル構成のパックは標準のPNGを使います。`--cloud-layer-file` を指定すると、その定義のPNGが優先されます。
 
 ```powershell
 .\out\CirrusEngine\CirrusEngine.exe --camera fly --cloud-textures "C:\path\to\CirrusTextures-17-xxxxxxxx"
@@ -318,4 +379,4 @@ F7、または `CB [F7]` でON/OFFを切り替えられます。既定で有効�
 - Andrew Schneider / Guerrilla, [Nubis: Authoring Real-Time Volumetric Cloudscapes with the Decima Engine, SIGGRAPH 2017](https://www.guerrilla-games.com/read/nubis-authoring-real-time-volumetric-cloudscapes-with-the-decima-engine)
 - Sébastien Hillaire, [A Scalable and Production Ready Sky and Atmosphere Rendering Technique, EGSR 2020](https://sebh.github.io/publications/egsr2020.pdf)
 
-本リポジトリのシェーダーは独自実装です。Rockstar のコード・ゲームアセットは含みません。MIT License。
+本リポジトリのシェーダーは公開技術資料を参考にした独自実装です。ソフトウェアはMITライセンスです。素材の出典と利用条件は各クレジットに記載しています。 [MITライセンス](LICENSE) · [雲テクスチャ](assets/clouds/credits.md) · [地形と草木の素材](assets/world/credits.md) · [比較に使った雲の写真](docs/sky-study/photo-analysis/photo-analysis.md#撮影者と資料)

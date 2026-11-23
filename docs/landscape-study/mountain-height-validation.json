@@ -1,0 +1,116 @@
+{
+  "source_before": "42b44e7d6c13f48b16a7a326e6fda37d8fef155d6aa8a36c6bda01aa4c33ab89",
+  "source_after": "8c9cc9f98f9a50a8aaf04bb11ecf09525707bdbf508edc5262ad0cd4e2b6a4da",
+  "relief_sha256": "130444673a2427700a3593442332d6d6daee4b90564dd5c8c38d3888d92b6276",
+  "channel_sha256": "5dd4596a932f4004942f50322d1a7352a50a1b378fbf510ed7b7b50cbf03e2b9",
+  "build": "MSVC x64 /O2 /fp:precise /std:c++20",
+  "method": "The pre-change and post-change source function bodies are compiled side-by-side; both load the same 513x513 little-endian heightfield. Comparisons use native 32-bit float bit patterns.",
+  "groups": {
+    "all_grid_nodes": {
+      "points": 263169,
+      "ridge": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 214432
+      },
+      "terrain": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 263169
+      },
+      "ground": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 263169
+      }
+    },
+    "all_cell_centers": {
+      "points": 262144,
+      "ridge": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 216144
+      },
+      "terrain": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 262144
+      },
+      "ground": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 262144
+      }
+    },
+    "two_off_center_samples_per_cell": {
+      "points": 524288,
+      "ridge": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 432288
+      },
+      "terrain": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 524288
+      },
+      "ground": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 524288
+      }
+    },
+    "edges_and_fade_thresholds_adjacent_floats": {
+      "points": 12312,
+      "ridge": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 5098
+      },
+      "terrain": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 12312
+      },
+      "ground": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 12312
+      }
+    },
+    "channel_transects": {
+      "points": 109181,
+      "ridge": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 3630
+      },
+      "terrain": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 109181
+      },
+      "ground": {
+        "different_float_bits": 0,
+        "nonfinite": 0,
+        "max_abs_m": 0,
+        "positive_old": 109181
+      }
+    }
+  },
+  "total_points": 1171094
+}

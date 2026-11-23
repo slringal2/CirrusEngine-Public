@@ -1,0 +1,11 @@
+{
+  "intermediate_common_sha256": "6395a937ce67408a105a9c39ef44e52e2e4a898a6a176fc564cfb83b45bbfb07",
+  "release_common_sha256": "12ec5e91e185ebf8a42498d5d52c29d6f2fe2f6fa62ceab82c0d70bfd29acc17",
+  "identical_optimized_classic_dxbc_sha256": {
+    "CloudCS": "ee9f8bee0b36e081d54318f2ffd7b28b7ab1e0a960da484bb04b2a402aac8129",
+    "LightNearCloudCS": "d16daf1ec42132bd32ad161777ed3269cfeabfb474a64154dd0b297d124b7e01",
+    "RepairCS": "95abfcb7abb458ae8474ba714c540c4c985d188ac7da9e4cdf558c90bdf29de0",
+    "ShadowCS": "9ff43d123799ab47e3fff914d86849dfb3471d9a98763c5882544ff3b5a80ca5"
+  },
+  "compiler": "fxc 10.0.26100.0 /O3 /Ges /WX /Qstrip_reflect /Qstrip_debug, cs_5_0"
+}

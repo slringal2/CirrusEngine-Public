@@ -66,6 +66,84 @@ float vortexRotationFactor(float radius)
     return lerp(speeds[index], speeds[index + 1], t * t * (3 - 2 * t));
 }
 
+// 特殊雲は回転したローカル座標 (x, 高さ0～1, z) にシルエットを作る。
+float softCloudEllipsoid(float3 p, float3 center, float3 radius)
+{
+    float3 q = (p - center) / radius;
+    return 1 - smoothstep(0.44, 1, dot(q, q));
+}
+
+float specialFormationProfile(float3 p, int kind, float seed)
+{
+    if (kind == 2)
+    {
+        float lower = softCloudEllipsoid(p, float3(0, 0.35, 0), float3(1.18, 0.20, 0.68));
+        float upper = softCloudEllipsoid(p, float3(-0.12, 0.64, 0.03), float3(0.92, 0.18, 0.58));
+        return max(lower, 0.88 * upper);
+    }
+    if (kind == 3)
+    {
+        float core = softCloudEllipsoid(p, float3(-0.27, 0.49, 0), float3(0.53, 0.49, 0.56));
+        float shoulder = softCloudEllipsoid(p, float3(-0.15, 0.69, 0.05), float3(0.84, 0.26, 0.68));
+        float cap = softCloudEllipsoid(p, float3(0.24, 0.81, 0.02), float3(1.30, 0.165, 0.78));
+        return max(core, max(shoulder, cap));
+    }
+    if (kind == 4)
+    {
+        // 横長のカプセルを緩く曲げ、地平線に沿うロール雲の丸い断面を作る。
+        float3 q = p;
+        q.z -= 0.12 * sin(q.x * 2.6 + seed);
+        q.y -= 0.07 * cos(q.x * 3.5);
+        q.x -= clamp(q.x, -1.03, 1.03);
+        return softCloudEllipsoid(q, float3(0, 0.5, 0), float3(0.40, 0.44, 0.33));
+    }
+    if (kind == 5)
+    {
+        // 上へ行くほど前に倒れる波頭と、その下の空洞を同じ有限領域に閉じ込める。
+        float taper = 1 - smoothstep(0.72, 1.27, abs(p.x));
+        float wave = frac((p.x + 0.10 * p.z) * 2.25 + seed * 0.03) - 0.5;
+        float leaning = wave - 0.22 * smoothstep(0.18, 0.76, p.y);
+        float3 q = float3(leaning, p.y, p.z);
+        float crest = softCloudEllipsoid(q, float3(0.02, 0.47, 0), float3(0.38, 0.47, 0.38));
+        float lip = softCloudEllipsoid(q, float3(-0.19, 0.68, 0), float3(0.22, 0.20, 0.30));
+        float hollow = softCloudEllipsoid(q, float3(-0.21, 0.44, 0), float3(0.20, 0.18, 0.31));
+        float bottom = softCloudEllipsoid(float3(0, p.y, p.z), float3(0, 0.20, 0),
+                                          float3(1, 0.17, 0.47));
+        return taper * max(bottom * 0.83, max(crest, lip) * (1 - 0.86 * hollow));
+    }
+
+    // 乳房雲は平らな上面の下に、サイズと垂れ下がりが異なる胞を並べる。
+    float deck = softCloudEllipsoid(p, float3(0, 0.74, 0), float3(1.26, 0.24, 0.88));
+    float2 grid = p.xz * float2(3.6, 3.1);
+    grid.x += 0.5 * fmod(abs(floor(grid.y + 0.5)), 2);
+    float2 cell = floor(grid + 0.5);
+    float2 local = grid - cell;
+    float random = hash12(cell + seed);
+    float pouch = softCloudEllipsoid(float3(local.x, p.y, local.y),
+        float3(0, lerp(0.36, 0.46, random), 0), float3(0.47, lerp(0.23, 0.34, random), 0.48));
+    float taper = 1 - smoothstep(0.62, 1.15, length(p.xz / float2(1.18, 0.82)));
+    return max(deck, pouch * taper);
+}
+
+float2 sampleSpecialFormation(float3 p, float2 q, float h, CloudFormation f, bool detail)
+{
+    float2 local = rotateCloud(q, f.motion.z);
+    float3 seedOffset = frac(f.shape.w * float3(0.137, 0.271, 0.419));
+    float3 warp = CloudWarpVolume.SampleLevel(LinearWrap, p * 0.00031 + seedOffset, 0).rgb - 0.5;
+    float3 shape = float3(local.x, h, local.y) + warp * float3(0.18, 0.14, 0.18);
+    int kind = (int)f.shape.z;
+    float profile = specialFormationProfile(shape, kind, f.shape.w)
+                    * smoothstep(0, 0.105, h) * (1 - smoothstep(0.92, 1, h));
+    float density = profile;
+    if (detail && profile > 0.001)
+    {
+        float erosion = erodeCloudShape(profile, p + seedOffset * 1800, 0.88);
+        // 層状のレンズ雲は滑らかな縁を強く残す。
+        density = lerp(profile, erosion, kind == 2 ? 0.32 : 0.68);
+    }
+    return float2(density * f.shape.y * FormationControls.y, h);
+}
+
 float2 compositeFormationDensity(float3 p, float height, float backgroundHeight,
                                  bool detail, float background)
 {
@@ -84,24 +162,34 @@ float2 compositeFormationDensity(float3 p, float height, float backgroundHeight,
         if (f.shape.y <= 0)
             continue;
         float h = (height - f.position.y) / f.shape.x;
+        bool vortex = f.shape.z == 1;
+        if (vortex)
+        {
+            if (height < min(f.position.y, CloudLayer.x) - 120
+                || height > max(f.position.y + f.shape.x, CloudLayer.x + CloudLayer.y) + 120)
+                continue;
+        }
+        else if (h <= 0 || h >= 1)
+            continue;
+
         float2 q = (advected - f.position.xz) / f.position.w;
-        float r = length(q);
-        if (r > 1.7)
+        float radiusSquared = dot(q, q);
+        if (radiusSquared > 1.7 * 1.7)
             continue;
         float3 noisePosition = float3(advected.x, height, advected.y);
-        if (f.shape.z < 0.5)
+        if (!vortex)
         {
-            if (h <= 0 || h >= 1)
-                continue;
-            float2 cloud = sampleTowerCloud(noisePosition, q, h, f, detail);
+            float2 cloud;
+            if (f.shape.z == 0)
+                cloud = sampleTowerCloud(noisePosition, q, h, f, detail);
+            else
+                cloud = sampleSpecialFormation(noisePosition, q, h, f, detail);
             extra += cloud.x;
             extraHeightMoment += cloud.x * cloud.y;
         }
         else
         {
-            if (height < min(f.position.y, CloudLayer.x) - 120
-                || height > max(f.position.y + f.shape.x, CloudLayer.x + CloudLayer.y) + 120)
-                continue;
+            float r = sqrt(radiusSquared);
             float angle = f.motion.x * FormationControls.z * vortexRotationFactor(r);
             float2 rotating = rotateCloud(q, -angle);
             float skew = f.motion.y * 1.8 * (1 - smoothstep(0.10, 1.10, r));
@@ -144,7 +232,7 @@ float2 rotateFormationMotion(float2 p, float altitudeValue, float delta)
     for (int i = 0; i < (int)FormationControls.x; ++i)
     {
         CloudFormation f = Formations[i];
-        if (f.shape.z < 0.5 || f.shape.y <= 0)
+        if (f.shape.z != 1 || f.shape.y <= 0)
             continue;
         float2 local = p - f.position.xz;
         float r = length(local) / f.position.w;

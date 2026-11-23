@@ -20,7 +20,11 @@
 namespace cirrus
 {
 using Microsoft::WRL::ComPtr;
-inline constexpr UINT shaderResourceCount = 32;
+inline constexpr UINT cloudTypeTextureSlot = 45; // shaders/common.hlsli の t45～t47
+inline constexpr std::size_t textureCloudLayerCount = 3;
+inline constexpr UINT cloudRegionTypeSlot = cloudTypeTextureSlot + static_cast<UINT>(textureCloudLayerCount);
+inline constexpr UINT cloudRegionCoverageSlot = cloudRegionTypeSlot + 1;
+inline constexpr UINT shaderResourceCount = cloudRegionCoverageSlot + 1;
 using ShaderResources = std::array<ID3D11ShaderResourceView *, shaderResourceCount>;
 enum class Quality
 {
@@ -71,7 +75,39 @@ enum class DebugView
     Metallic,
     NearShadow,
     RiverSurface,
+    Ssao,
+    ScreenShadow,
+    GrassShadow,
+    CloudVeilMask,
+    CirrusStreakMask,
+    CloudScalesMask,
+    CloudRegionType,
+    CloudRegionCoverage,
     Count
+};
+
+struct TextureCloudLayerSettings
+{
+    float altitude, amount;
+};
+
+struct TextureCloudType
+{
+    std::string id, label;
+    std::filesystem::path image;
+    TextureCloudLayerSettings defaults{};
+    float halfThickness = 0, opticalDepth = 0, period = 0;
+    bool profile = false;
+    float texels = 1;
+    ComPtr<ID3D11ShaderResourceView> texture;
+};
+
+struct TextureCloudRegionMap
+{
+    std::filesystem::path image;
+    float period = 0;
+    DirectX::XMUINT2 size{};
+    ComPtr<ID3D11ShaderResourceView> texture;
 };
 
 struct Options
@@ -86,7 +122,9 @@ struct Options
     bool automatic = false, vsync = true, debugLayer = false;
     bool weatherDemo = false, rain = true, lightning = true;
     bool fullCloudLighting = false;
-    bool checkerboard = true, classicFast = false, nearCloudVoxels = true;
+    bool ssao = true, screenShadows = true, grassShadows = true;
+    bool cloudTaa = true, checkerboard = true, classicFast = false, nearCloudVoxels = true;
+    bool textureCloudLayers = true;
     // 0: quality preset, 1: full, 2: half width/height, 4: quarter width/height.
     int cloudDivisor = 0;
     std::string formationMode = "none";
@@ -106,6 +144,8 @@ struct Options
     std::string camera;
     std::string cameraPath;
     std::filesystem::path capture, shaderDirectory, assetsDirectory, cloudTextureDirectory;
+    std::filesystem::path cloudLayerFile;
+    std::string soloTextureCloud;
     bool openWorld = false, vegetation = true;
     float timeOfDay = -1, spawnX = -6.1f, spawnZ = -37;
     std::optional<DirectX::XMFLOAT2> startLook;
@@ -135,7 +175,12 @@ struct FrameData
     DirectX::XMFLOAT4 worldRendering;
     DirectX::XMFLOAT4 formationControls, formationLayer;
     std::array<CloudFormation, maxCloudFormations> formations;
-    DirectX::XMFLOAT4 cloudOcclusionRegion, cameraForward, nearCloudParams;
+    DirectX::XMFLOAT4 cloudOcclusionRegion, cameraForward, nearCloudParams, cloudSampling;
+    DirectX::XMFLOAT4X4 grassLightViewProjection;
+    DirectX::XMFLOAT4 groundLighting, sceneDepthProjection, cloudShapeTuning;
+    std::array<DirectX::XMFLOAT4, textureCloudLayerCount> textureCloudLayers;
+    std::array<DirectX::XMFLOAT4, textureCloudLayerCount> textureCloudMaps;
+    DirectX::XMFLOAT4 textureCloudRegions;
 };
 
 static_assert(sizeof(FrameData) % 16 == 0, "D3D11 constant buffer alignment");
@@ -161,11 +206,12 @@ struct CloudShaderSet
 
 struct ShaderSet
 {
-    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS, grassVS;
+    ComPtr<ID3D11VertexShader> geometryVS, shadowVS, fullscreenVS, rainVS, meshVS, grassVS,
+        grassShadowVS;
     ComPtr<ID3D11PixelShader> geometryPS, compositePS, rainPS, meshPS, meshShadowPS, resolveEdgesPS,
         grassPS;
     ComPtr<ID3D11ComputeShader> noiseCS, weatherCS, transmittanceCS, skyCS, skyAmbientCS,
-        temporalCS, aerialCS, grassPlacementCS, nearCloudIntegrateCS;
+        temporalCS, cloudAntialiasCS, aerialCS, grassPlacementCS, nearCloudIntegrateCS, screenLightingCS;
     ComPtr<ID3D11ComputeShader> fastClassicMarchCS, fastClassicTemporalCS, fastClassicRepairCS,
         cloudOcclusionCS;
     std::array<CloudShaderSet, 2> cloudStyles;
@@ -209,7 +255,7 @@ class Renderer
     void initializeResources();
     void makeTerrain();
     void makeShadowDepth(ComPtr<ID3D11DepthStencilView> &dsv,
-                         ComPtr<ID3D11ShaderResourceView> &srv);
+                         ComPtr<ID3D11ShaderResourceView> &srv, UINT size = 2048);
     Texture makeTexture(int w, int h, DXGI_FORMAT format, bool target, bool unordered,
                         bool mipmaps = false);
     void makeTargets();
@@ -219,13 +265,22 @@ class Renderer
     void updateCloudOcclusion(bool shareLighting, const DirectX::XMFLOAT4 &previousSun);
     void makeCloudRawTargets();
     bool fastClassic() const;
+    void setGeometryProjection(const DirectX::XMFLOAT4X4 &projection);
     void drawGeometry(bool shadow, bool localPass = false);
+    void drawGrassShadow();
     void moveCamera(float forward, float side, float vertical, double dt, bool fast);
     void drawRain();
     void compute(ID3D11ComputeShader *shader, int x, int y, int z,
                  const std::vector<ID3D11UnorderedAccessView *> &outputs, ShaderResources inputs);
     ShaderResources resources() const;
     void drawUi();
+    void drawMainControls();
+    void drawCloudSettings();
+    bool drawBaseCloudControls();
+    bool drawTextureCloudControls();
+    void loadTextureCloudTypes();
+    void drawFormationControls();
+    void focusFormations();
     void drawTextureInspector();
     void resetCamera();
     void setFormations(std::string_view mode);
@@ -236,6 +291,22 @@ class Renderer
     std::string diagnostics();
     Options options_;
     WeatherSystem weather_;
+    struct CloudOverrides
+    {
+        // 値を設定した項目だけ天候プリセットの値を上書きする。
+        std::optional<float> coverage, density, base, thickness, type, scale, edgeDetail;
+
+        bool active() const
+        {
+            return coverage || density || base || thickness || type || scale || edgeDetail;
+        }
+    } cloudOverrides_;
+    bool cloudSettingsOpen_ = false, textureCloudPage_ = false;
+    std::vector<TextureCloudType> textureCloudTypes_;
+    TextureCloudRegionMap cloudTypeMap_, cloudCoverageMap_;
+    std::array<TextureCloudLayerSettings, textureCloudLayerCount> textureCloudLayers_{};
+    int soloTextureCloud_ = -1;
+    bool importedCloudLayerMasks_ = false;
     FormationSet formations_;
     Camera camera_;
     std::unique_ptr<World> world_;
@@ -249,24 +320,26 @@ class Renderer
     ComPtr<ID3D11Texture2D> depth_;
     ComPtr<ID3D11DepthStencilView> depthView_;
     ComPtr<ID3D11ShaderResourceView> depthSRV_;
-    ComPtr<ID3D11DepthStencilView> terrainDepthView_, nearDepthView_;
-    ComPtr<ID3D11ShaderResourceView> terrainDepthSRV_, nearDepthSRV_;
+    ComPtr<ID3D11DepthStencilView> terrainDepthView_, nearDepthView_, grassShadowView_;
+    ComPtr<ID3D11ShaderResourceView> terrainDepthSRV_, nearDepthSRV_, grassShadowSRV_;
     ComPtr<ID3D11Buffer> frameBuffer_, passBuffer_, noiseBuffer_, vertices_, indices_;
     ComPtr<ID3D11ShaderResourceView> baseNoise_, detailNoise_, towerControl_, cloudWarp_;
     UINT baseNoiseSize_ = 128, detailNoiseSize_ = 128;
     double towerBakeMs_ = 0;
-    ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_, terrainSampler_;
+    ComPtr<ID3D11SamplerState> linearClamp_, linearWrap_, shadowSampler_, anisotropicWrap_;
     ComPtr<ID3D11RasterizerState> raster_, meshRaster_, shadowRaster_, meshShadowRaster_;
     ComPtr<ID3D11DepthStencilState> depthOn_, reversedDepth_, depthOff_;
     ComPtr<ID3D11BlendState> rainBlend_;
     ShaderSet shaders_;
     Texture finalColor_, sceneColor_, albedo_, normals_, surface_, weatherMap_, cloudDisplacement_,
         cloudMap_, cloudHeightLut_, shadowMap_, transmittance_, sky_, skyAmbient_, cloudRaw_,
-        metaRaw_, reconstruction_, previousReconstruction_;
+        metaRaw_, reconstruction_, previousReconstruction_, screenVisibility_;
     VolumeTexture cloudOcclusion_, nearCloudLight_, nearCloud_, nearCloudMoment_;
     // 前回を読みながら今回を書けるよう、雲と代表距離の履歴を2組で交互に使う。
     std::array<Texture, 2> history_, historyMeta_;
+    Texture antialiasedCloud_, antialiasedMeta_;
     Texture aerialScatter_, aerialTransmittance_, fog_, rain_;
+    Texture cloudAerialScatter_, cloudAerialTransmittance_;
     Ui ui_;
     int width_ = 0, height_ = 0, cloudWidth_ = 0, cloudHeight_ = 0, aerialWidth_ = 0,
         aerialHeight_ = 0, shadowSize_ = 0;
@@ -313,12 +386,12 @@ class Renderer
     struct Timing
     {
         ComPtr<ID3D11Query> disjoint;
-        std::array<ComPtr<ID3D11Query>, 8> stamps;
+        std::array<ComPtr<ID3D11Query>, 9> stamps;
         bool pending = false;
     };
 
     std::array<Timing, 6> timing_;
-    std::array<double, 7> gpuMs_{};
+    std::array<double, 8> gpuMs_{};
     uint64_t timingSamples_ = 0;
     bool timingActive_ = false;
     Timing *activeTiming_ = nullptr;

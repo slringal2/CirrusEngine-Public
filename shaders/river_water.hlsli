@@ -94,31 +94,74 @@ float4 reflectRiverBank(float3 position, float3 direction, float distance)
     return 0;
 }
 
-float3 riverNormal(float3 p, float distance)
+// A Z row follows the river. The second coordinate measures signed distance from its centre.
+// This chart stays continuous even far from the origin, including at the bends.
+struct RiverSurface
 {
-    float2 flow = normalize(float2((riverCenter(p.z + 2) - riverCenter(p.z - 2)) * 0.25, 1));
-    float2 across = float2(flow.y, -flow.x);
-    // Long surface waves drift downstream. Small ripples get steeper in wind and rain.
-    float current = lerp(0.36, 1.12, smoothstep(0.2, 11.0, -riverBankDistance(p.x, p.z)));
-    float2 advected = p.xz - flow * (CameraTime.w * current);
-    float u = dot(advected, flow), v = dot(advected, across);
-    float gust = saturate(length(WeatherEffects.yz) / 34);
+    float3 normal;
+    float bubbles;
+    float riffle;
+};
+
+RiverSurface riverSurface(float3 p, float waterColumn, float footprint)
+{
+    float bankOffset = p.x - riverCenter(p.z);
+    float channelSlope = (riverCenter(p.z + 2) - riverCenter(p.z - 2)) * 0.25;
+    float channelWidth = riverHalfWidth(p.z);
+    float fromShore = channelWidth - abs(bankOffset);
+    float channel = smoothstep(0.3, 9.0, fromShore);
+    float constriction = 1 - smoothstep(10.0, 19.5, channelWidth);
+
+    // The 3.2-second charts overlap. Each reset happens at zero weight, so the
+    // velocity difference between bank and centre never stretches a wave indefinitely.
+    const float period = 3.2;
+    const float meanSpeed = 0.84;
+    float speed = lerp(0.42, 1.07 + 0.28 * constriction, channel);
+    float phaseA = frac(CameraTime.w / period);
+    float phaseB = frac(phaseA + 0.5);
+    float blendA = 1 - abs(2 * phaseA - 1);
+    float u = p.z - meanSpeed * CameraTime.w;
+    float2 drift = (float2(phaseA, phaseB) - 0.5) * period * (speed - meanSpeed);
+    float3 flowUV = float3(u * 0.041, bankOffset * 0.098, 0.37);
+    float3 a = DetailNoise.SampleLevel(LinearWrap, flowUV - float3(drift.x * 0.041, 0, 0), 0).rgb;
+    float3 b = DetailNoise.SampleLevel(LinearWrap, flowUV - float3(drift.y * 0.041, 0, 0), 0).rgb;
+    float3 field = lerp(b, a, blendA);
+
     float rain = smoothstep(0.1, 0.95, Weather.y);
-    float warp = DetailNoise.SampleLevel(LinearWrap, float3(p.xz * 0.112, 0.43), 0).g;
-    float longWave = cos(u * 1.66 + v * 0.51 + warp * 3.5);
-    float crossWave = cos(u * 2.70 - v * 1.14 + warp * 4.7 + CameraTime.w * 0.65);
-    float ripple = cos(u * 9.5 + v * 4.6 + warp * 9 - CameraTime.w * 2.0);
-    float rippleFade = 1 - smoothstep(18, 75, distance);
-    float2 slope = flow * (0.019 * longWave + 0.013 * crossWave)
-                   + across * (0.010 * longWave - 0.013 * crossWave);
-    slope += normalize(flow * 0.73 + across * 0.38) * ripple * rippleFade * (0.009 + 0.040 * rain);
-    return normalize(float3(slope.x, 1, riverGrade + slope.y) * float3(0.70 + gust, 1, 0.70 + gust));
+    float wind = saturate(length(WeatherEffects.yz) / 34);
+    float shallow = smoothstep(0.045, 0.30, waterColumn) * (1 - smoothstep(0.75, 2.1, waterColumn));
+    float riffle = shallow * channel * (0.4 + 0.6 * constriction) * smoothstep(0.24, 0.77, field.r);
+
+    // Gradients in the river chart. Wave packets interrupt the crests and break
+    // up reflected banks. The pixel's footprint extinguishes unresolved wavelengths.
+    float longPhase = u * 1.7 + bankOffset * 0.40 + field.r * 4.8;
+    float crossPhase = u * 3.8 - bankOffset * 2.15 + field.g * 4.0;
+    float longSlope = cos(longPhase) * (0.021 + 0.027 * field.g) * (1 - smoothstep(0.35, 1.5, footprint));
+    float crossSlope = cos(crossPhase) * (0.006 + 0.066 * riffle) * (1 - smoothstep(0.14, 0.70, footprint));
+    float2 gradient = longSlope * float2(1, 0.24) + crossSlope * float2(1, -0.57);
+
+    float ripplePhase = u * 11.1 + bankOffset * 5.2 + field.b * 6.0 - CameraTime.w * 1.2;
+    float ripple = cos(ripplePhase) * (0.008 + 0.016 * wind + 0.027 * rain + 0.034 * riffle);
+    gradient += ripple * float2(1, 0.47) * (1 - smoothstep(0.05, 0.25, footprint));
+    gradient *= 0.62 + 0.55 * wind + 0.28 * field.r;
+    RiverSurface surface;
+    surface.normal = normalize(float3(-gradient.y, 1, riverGrade - gradient.x + channelSlope * gradient.y));
+    surface.riffle = riffle;
+    surface.bubbles = smoothstep(0.57, 0.83, field.b) * smoothstep(0.40, 0.73, field.g)
+                      * riffle * (1 - smoothstep(0.06, 0.31, footprint));
+    return surface;
 }
 
 float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, float3 bottom)
 {
     float3 p = CameraTime.xyz + ray * distance;
-    float3 normal = riverNormal(p, distance);
+    float path = min(max(opaqueDistance - distance, 0), 18);
+    float belowSurface = max(0, -(ray.y + riverGrade * ray.z));
+    // Use the uncapped ray length here. A long grazing ray can still reach a shallow bed.
+    float column = max(0, opaqueDistance - distance) * belowSurface;
+    float footprint = 2 * distance / (max(Resolution.y, 1) * max(0.02, belowSurface));
+    RiverSurface surface = riverSurface(p, column, footprint);
+    float3 normal = surface.normal;
     float nv = max(dot(normal, -ray), 0.012);
     float fresnel = 0.0204 + 0.9796 * pow(1 - saturate(nv), 5);
     float3 reflectionDirection = reflect(ray, normal);
@@ -131,27 +174,37 @@ float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, f
         reflected = lerp(reflected, bank.rgb, weight);
     }
 
-    // 視線に沿った川面から川底までの距離 [m] を、水中を通る長さとして使う。
-    float depth = min(opaqueDistance - distance, 18);
-    float2 bentUV = uv + normal.xz * float2(0.19, -0.24) * saturate(depth * 0.21);
+    // Follow Snell's ray to an approximate bed depth, then test the projected hit
+    // against opaque geometry. If the bed leaves the viewport, attenuation still works.
     [branch]
-    if (depth < 6 && screenEdge(bentUV) > 0)
+    if (column > 0.025 && column < 4.5 && distance < 155)
     {
-        float bentDepth = geometryDepth(bentUV);
-        float3 hit = worldPosition(bentUV, max(bentDepth, 0.000001));
-        float submergence = riverLevel(hit.z) - hit.y;
-        if (hasGeometry(bentDepth) && submergence > 0.025
-            && abs(hit.z) < riverExtent && riverBankDistance(hit.x, hit.z) < 3.4
-            && abs(length(hit - CameraTime.xyz) - opaqueDistance) < 3.5)
+        float3 waterRay = refract(ray, normal, 1.0 / 1.333);
+        float travel = column / max(0.1, -(waterRay.y + riverGrade * waterRay.z));
+        float3 predicted = p + waterRay * travel;
+        float4 bentClip = mul(float4(predicted, 1), ViewProjection);
+        float2 bentUV = projectedUV(bentClip);
+        if (bentClip.w > 0.15 && screenEdge(bentUV) > 0)
         {
-            float blend = smoothstep(0.0, 0.9, depth) * 0.86;
-            bottom = lerp(bottom, surfaceLighting(bentUV, bentDepth), blend);
+            float bentDepth = geometryDepth(bentUV);
+            float3 hit = worldPosition(bentUV, max(bentDepth, 0.000001));
+            float submergence = riverLevel(hit.z) - hit.y;
+            float error = length(hit - predicted);
+            float confidence = (1 - smoothstep(0.7, 2.4, error)) * smoothstep(0, 0.04, screenEdge(bentUV));
+            confidence *= 1 - smoothstep(95, 155, distance);
+            confidence *= 1 - smoothstep(3.5, 4.5, column);
+            if (hasGeometry(bentDepth) && submergence > 0.025 && confidence > 0
+                && abs(hit.z) < riverExtent && riverBankDistance(hit.x, hit.z) < 3.4)
+            {
+                bottom = lerp(bottom, surfaceLighting(bentUV, bentDepth), confidence);
+                path = lerp(path, min(length(hit - p), 18), confidence);
+            }
         }
     }
     float sun = cloudShadow(p) * terrainShadow(p);
     float daylight = 0.035 + 0.965 * smoothstep(-0.08, 0.43, SunDirection.y);
     // absorption は RGB の残存透過率。赤の吸収が最も強く、距離とともに青緑が残る。
-    float3 absorption = exp(-float3(0.56, 0.24, 0.19) * depth);
+    float3 absorption = exp(-float3(0.56, 0.24, 0.19) * path);
     float3 scatter = float3(0.023, 0.076, 0.066) * daylight * (0.70 + 0.30 * sun);
     scatter += float3(0.035, 0.083, 0.092) * lightningIrradiance(p);
     // 川底から届く光が弱まる分だけ水中の散乱色を混ぜる。大気の減衰は CompositePS で掛ける。
@@ -160,6 +213,7 @@ float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, f
     float3 halfVector = normalize(SunDirection.xyz - ray);
     float nh = saturate(dot(normal, halfVector));
     float roughness = lerp(0.069, 0.17, saturate(length(WeatherEffects.yz) / 36 + Weather.y * 0.3));
+    roughness = min(0.26, roughness + 0.042 * surface.riffle + 0.036 * smoothstep(0.06, 0.58, footprint));
     float alphaSquared = pow(roughness, 4);
     float denom = nh * nh * (alphaSquared - 1) + 1;
     float lobe = alphaSquared / max(PI * denom * denom, 1e-7);
@@ -167,14 +221,9 @@ float3 shadeRiver(float2 uv, float3 ray, float distance, float opaqueDistance, f
     float3 glint = sunlight * min(3.0, 0.0204 * lobe / (4 * nv))
                    * saturate(SunDirection.y * 10) * sun;
 
-    // Broken streaks of bubbles appear in fast, shallow water while fresh water stays clear.
-    float bankDepth = depth * max(0.02, -ray.y);
-    float grain = DetailNoise.SampleLevel(LinearWrap,
-                                         float3(p.x * 0.76, 0.18, (p.z - CameraTime.w) * 0.42), 0).b;
-    float foam = smoothstep(0.72, 0.91, grain) * smoothstep(0.02, 0.11, bankDepth)
-                 * (1 - smoothstep(0.17, 0.61, bankDepth)) * (1 - smoothstep(70, 160, distance));
     float3 radiance = lerp(refracted, reflected, fresnel) + glint;
-    return lerp(radiance, float3(0.31, 0.37, 0.36) * daylight, foam * 0.35);
+    float3 bubbleLight = float3(0.45, 0.49, 0.46) * daylight * (0.55 + 0.45 * sun);
+    return lerp(radiance, bubbleLight, surface.bubbles * 0.60);
 }
 
 #endif

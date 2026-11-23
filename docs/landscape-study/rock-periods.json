@@ -1,0 +1,68 @@
+{
+  "units": "display luma 0..255",
+  "versions": [
+    "rock-iterations/short-period.png",
+    "rock-iterations/no-distant-photo.png",
+    "after/summit.png"
+  ],
+  "method": "Select the strongest Hann-windowed 4..13 px Fourier component in the rejected candidate of each fixed crop. Integrate power within 1.5 frequency bins of that component and its conjugate. Apply unchanged bins to the replacement and report RMS. This measures selected pattern frequencies only.",
+  "patches": [
+    {
+      "xywh": [
+        751,
+        491,
+        64,
+        64
+      ],
+      "interval_px": 5.724,
+      "target_period_rms": [
+        3.3856,
+        0.1595,
+        1.6079
+      ],
+      "rest_of_4_to_13px_band_rms": [
+        4.8919,
+        3.5588,
+        6.407
+      ]
+    },
+    {
+      "xywh": [
+        962,
+        516,
+        64,
+        64
+      ],
+      "interval_px": 7.761,
+      "target_period_rms": [
+        3.2009,
+        0.044,
+        0.8715
+      ],
+      "rest_of_4_to_13px_band_rms": [
+        4.1186,
+        2.6095,
+        4.7618
+      ]
+    },
+    {
+      "xywh": [
+        888,
+        650,
+        64,
+        64
+      ],
+      "interval_px": 7.938,
+      "target_period_rms": [
+        3.3684,
+        0.412,
+        1.0644
+      ],
+      "rest_of_4_to_13px_band_rms": [
+        3.7053,
+        0.7235,
+        3.9862
+      ]
+    }
+  ]
+}

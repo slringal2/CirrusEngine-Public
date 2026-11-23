@@ -1,5 +1,7 @@
 # 雲の資料調査と密度場の設計
 
+通常の積雲の雲頂、雲群の間隔、多重散乱と写真との比較は別稿にまとめました。 [普通の積雲の文献調査と照明比較](ordinary-cumulus-literature.md)
+
 ## RockstarのSIGGRAPH 2019講演
 
 Fabian Bauer（Rockstar Games）の講演資料79枚と関連する発表者ノートを確認し、密度場・レイマーチ・照明を更新しました。下表の番号はスライド番号です。[SIGGRAPH公式コースページ](https://advances.realtimerendering.com/s2019/) · [講演のPowerPoint](https://advances.realtimerendering.com/s2019/slides_public_release.pptx)。
@@ -26,7 +28,7 @@ Fabian Bauer（Rockstar Games）の講演資料79枚と関連する発表者ノ�
 |---|---|---|
 | Andrew Schneider / Nathan Vos, **Nubis: Authoring Real-Time Volumetric Cloudscapes with the Decima Engine**, SIGGRAPH 2017 — [著者公開PDF](https://d3d3g8mu99pzk9.cloudfront.net/AndrewSchneider/Nubis-Authoring-Realtime-Volumetric-Cloudscapes-with-the-Decima-Engine-Final.pdf) | PDF pp.26–40: coverage、雲種、高度プロファイル、Perlin–Worley、remapによる侵食。pp.46–50: 上部のcoverage変化とanvil。 | `sampleFormationCloud`。被覆率をアルファ倍率にせず、密度のしきい値へ使う。細部も単なる乗算ではなくremapで侵食。上部のcoverageは高度・雲種で変化。 |
 | Andrew Schneider, **Nubis, Evolved**, SIGGRAPH 2022 — [公式紹介](https://www.guerrilla-games.com/read/nubis-evolved) / [著者公開PDF](https://d3d3g8mu99pzk9.cloudfront.net/AndrewSchneider/NubisEvolved/NubisEvolved-NoVideos.pdf) | PDF pp.97–105: 高度・境界・密度の制御。pp.139–150: SuperstormのNDF、6つの半径帯の回転速度とskew。p.155: 回転を戻す再投影。 | 雲量・雲頂の制御場と3Dの雲塊ノイズを分離。`vortexRotationFactor`で半径方向に連続な速度差を付ける。`rotateFormationMotion`で同じ速度場を履歴位置の補正へ使用。 |
-| Axel Webanck et al., **Procedural Cloudscapes**, Computer Graphics Forum 37(2), Eurographics 2018, DOI [10.1111/cgf.13373](https://doi.org/10.1111/cgf.13373) — [著者公開PDF](https://perso.liris.cnrs.fr/egalin/Articles/2018-cloudscapes.pdf) | §4, PDF pp.3–6: 雲の存在を決める制御関数と形状・細部の分離、compact cubic kernel、寄与の合成。p.11: cyclone/hurricaneへの適用限界。 | 11月5日版の`cloudCellControl`を経て、現在は`cloud_volume.hpp`で高さ・太さの異なる3Dセルを合成し、プロファイルへ焼く。セル自体を不透明な楕円体として描かない。論文のOptimal Transport、経路探索、雲種全体のモデルは実装していない。 |
+| Antoine Webanck et al., **Procedural Cloudscapes**, Computer Graphics Forum 37(2), Eurographics 2018, DOI [10.1111/cgf.13373](https://doi.org/10.1111/cgf.13373) — [著者公開PDF](https://perso.liris.cnrs.fr/egalin/Articles/2018-cloudscapes.pdf) | §4, PDF pp.3–6: 雲の存在を決める制御関数と形状・細部の分離、compact cubic kernel、寄与の合成。p.11: cyclone/hurricaneへの適用限界。 | 11月5日版の`cloudCellControl`を経て、現在は`cloud_volume.hpp`で高さ・太さの異なる3Dセルを合成し、プロファイルへ焼く。セル自体を不透明な楕円体として描かない。論文のOptimal Transport、経路探索、雲種全体のモデルは実装していない。 |
 
 ページ番号は公開PDFの先頭を1とする番号です。元PDFをリポジトリへ再配布せず、出典へリンクしています。
 

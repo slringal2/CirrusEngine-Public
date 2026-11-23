@@ -12,6 +12,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{C946F89A-47C0-4DDE-BE81-81AEF46895E0}"
 	ProjectSection(SolutionItems) = preProject
 		shaders\atmosphere.hlsl = shaders\atmosphere.hlsl
+		shaders\cloud_layers.hlsli = shaders\cloud_layers.hlsli
 		shaders\clouds.hlsl = shaders\clouds.hlsl
 		shaders\common.hlsli = shaders\common.hlsli
 		shaders\geometry.hlsli = shaders\geometry.hlsli
@@ -25,6 +26,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shaders", "Shaders", "{C946
 		shaders\river_water.hlsli = shaders\river_water.hlsli
 		shaders\lightning.hlsli = shaders\lightning.hlsli
 		shaders\scene.hlsl = shaders\scene.hlsl
+		shaders\screen_lighting.hlsli = shaders\screen_lighting.hlsli
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docs", "Docs", "{B56F0BCE-5B9E-4B22-BAE1-8F6F1DB68FA4}"

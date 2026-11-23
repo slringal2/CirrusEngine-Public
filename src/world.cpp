@@ -297,9 +297,11 @@ bool visible(XMFLOAT3 min, XMFLOAT3 max, FXMMATRIX matrix)
             }
     return false;
 }
-}
 
-float World::valleyRidges(float x, float z) const
+// Sample both relief and its derived landform on the same footprint. Outside the DEM the
+// procedural terrain has neutral relief. The fade also avoids a material seam at the border.
+template <typename Sample>
+float sampleRidgeField(const std::vector<Sample> &field, float x, float z)
 {
     float u = (x - ridgeMin.x) / (ridgeMax.x - ridgeMin.x);
     float v = (z - ridgeMin.y) / (ridgeMax.y - ridgeMin.y);
@@ -310,13 +312,40 @@ float World::valleyRidges(float x, float z) const
     int ix = std::min(static_cast<int>(sx), ridgeSize - 2);
     int iz = std::min(static_cast<int>(sz), ridgeSize - 2);
     size_t i = iz * ridgeSize + ix;
-    float front = std::lerp(static_cast<float>(ridgeHeights_[i]),
-                            static_cast<float>(ridgeHeights_[i + 1]), sx - ix);
-    float back = std::lerp(static_cast<float>(ridgeHeights_[i + ridgeSize]),
-                           static_cast<float>(ridgeHeights_[i + ridgeSize + 1]), sx - ix);
+    float front = std::lerp(static_cast<float>(field[i]), static_cast<float>(field[i + 1]), sx - ix);
+    float back = std::lerp(static_cast<float>(field[i + ridgeSize]),
+                           static_cast<float>(field[i + ridgeSize + 1]), sx - ix);
     float weight = smooth(0, 0.12f, u) * (1 - smooth(0.87f, 1, u)) * smooth(0, 0.14f, v)
                    * (1 - smooth(0.86f, 1, v));
-    return std::lerp(front, back, sz - iz) * weight / 24;
+    return std::lerp(front, back, sz - iz) * weight;
+}
+
+// Compare each height with the surrounding terrain in two concentric neighbourhoods.
+// A positive difference marks a hollow. The short radius follows gullies, the long one basins.
+std::vector<float> buildRidgeLandforms(const std::vector<uint16_t> &heights)
+{
+    std::vector<float> forms(heights.size());
+    for (int row = 0; row < ridgeSize; ++row)
+        for (int col = 0; col < ridgeSize; ++col)
+        {
+            const int index = row * ridgeSize + col;
+            auto relativeHeight = [&](int radius, float scaleMetres)
+            {
+                const int left = std::max(col - radius, 0), right = std::min(col + radius, ridgeSize - 1);
+                const int back = std::max(row - radius, 0), front = std::min(row + radius, ridgeSize - 1);
+                const float average = 0.25f * (heights[row * ridgeSize + left] + heights[row * ridgeSize + right]
+                                               + heights[back * ridgeSize + col] + heights[front * ridgeSize + col]);
+                return std::clamp((average - heights[index]) / (24.0f * scaleMetres), -1.0f, 1.0f);
+            };
+            forms[index] = 0.62f * relativeHeight(4, 30) + 0.38f * relativeHeight(12, 88);
+        }
+    return forms;
+}
+}
+
+float World::valleyRidges(float x, float z) const
+{
+    return sampleRidgeField(ridgeHeights_, x, z) / 24;
 }
 
 float World::terrainHeight(float x, float z) const
@@ -376,6 +405,7 @@ World::World(ID3D11Device *device, ID3D11DeviceContext *context,
     if (!ridge.read(reinterpret_cast<char *>(relief.data()),
                     static_cast<std::streamsize>(relief.size())))
         throw std::runtime_error("Could not read Teton relief heightfield");
+    ridgeLandforms_ = buildRidgeLandforms(ridgeHeights_);
 
     std::vector<uint32_t> indices;
     for (int z = 0; z < cells; ++z)
@@ -456,12 +486,10 @@ World::Tile World::buildTile(int lod, int x, int z)
             XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(
                                        terrainHeight(px - d, pz) - terrainHeight(px + d, pz), d * 2,
                                        terrainHeight(px, pz - d) - terrainHeight(px, pz + d), 0)));
-            float rock = std::max(smooth(0.13f, 0.49f, 1 - normal.y), smooth(660, 1180, y));
-            float grass = noise(px / 90, pz / 90, 18);
-            XMFLOAT4 color{std::lerp(0.114f - 0.056f * grass, 0.23f, rock),
-                           std::lerp(0.150f - 0.031f * grass, 0.205f, rock),
-                           std::lerp(0.046f - 0.017f * grass, 0.17f, rock), 0.91f};
-            vertices.push_back({{px, y, pz}, normal, color});
+            // GeometryPS builds open-world albedo from textures. COLOR.x carries signed
+            // terrain shape into that branch; COLOR.w is the base dry roughness.
+            float landform = sampleRidgeField(ridgeLandforms_, px, pz);
+            vertices.push_back({{px, y, pz}, normal, {landform, 0, 0, 0.91f}});
             ymin = std::min(ymin, y);
             ymax = std::max(ymax, y);
         }

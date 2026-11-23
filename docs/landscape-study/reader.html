@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>草・水・山と雲のプログラム解説｜CirrusEngine 技術読本</title><style>:root{color-scheme:light;--ink:#152632;--muted:#4a626a;--line:#c1d0cd;--accent:#195a5c}
+*{box-sizing:border-box}
+html{scroll-padding-block-start:1rem}
+body{margin:0;background:#f4f6f3;color:var(--ink);font:16px/1.85 Inter,"Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;overflow-wrap:anywhere}
+header,main{width:min(1080px,calc(100% - 36px));margin:0 auto}
+header{padding:2.4rem 0 1rem;border-bottom:2px solid var(--accent)}
+header p{margin:.3rem 0}
+h1,h2,h3{line-height:1.45}
+header h1{font:600 clamp(1.8rem,4vw,2.75rem)/1.3 "Yu Mincho","Hiragino Mincho ProN",serif;margin:0}
+a{color:#125559;text-underline-offset:.2em}
+a:focus-visible{outline:3px solid #b55a17;outline-offset:3px}
+nav{padding:1rem 0 1.4rem}
+nav>ol{padding-left:1.6rem;columns:2;column-gap:3rem}
+nav>ol>li{break-inside:avoid;margin-bottom:.6rem;font-weight:600}
+nav ol ol{padding-left:1.2rem;font-weight:400;font-size:.92em;list-style:disc}
+article{background:white;padding:clamp(18px,4vw,52px);border-top:2px solid var(--accent);margin:1rem 0 2rem}
+article h1{font:600 clamp(1.45rem,3.2vw,2.1rem)/1.45 "Yu Mincho","Hiragino Mincho ProN",serif;margin:.15rem 0 1.1rem}
+article h2{font-size:1.38rem;border-bottom:1px solid var(--line);padding-bottom:.25rem;margin:1.85rem 0 .7rem}
+article h3{font-size:1.12rem;margin:1.5rem 0 .5rem}
+article img{display:block;max-width:100%;height:auto;margin:.75rem auto}
+.table-wrap{overflow-x:auto;margin:1rem 0}
+table{border-collapse:collapse;width:100%;font-size:.93rem;text-align:left}
+th,td{border:1px solid var(--line);padding:.4rem .6rem;vertical-align:top}
+th{background:#e4eeea}
+tbody tr:nth-child(even){background:#f5f8f6}
+pre,code{font-family:Consolas,"Courier New",monospace}
+code{background:#eef2ef;padding:.05em .18em}
+pre{padding:.8rem 1rem;border-left:3px solid var(--accent);background:#eef2ef;line-height:1.5;overflow-x:auto}
+pre code{padding:0}
+blockquote{margin:1rem 0;padding:.1rem 1rem;border-left:3px solid var(--line);color:var(--muted)}
+.footnotes{font-size:.88rem;color:var(--muted)}
+.return{margin:2rem 0 0;font-size:.9rem}
+@media(max-width:680px){nav>ol{columns:1}header,main{width:calc(100% - 24px)}article{padding:14px}}
+@page{size:A4;margin:17mm 15mm 19mm}
+@media print{
+body{background:white;color:black;font-size:10.5pt;line-height:1.65}
+header,main{width:100%;margin:0}
+header{padding:0 0 3mm}
+header a,.return{display:none}
+nav>ol{columns:2}
+a{color:inherit}
+article{margin:0;padding:0;border:0;break-before:page}
+h1,h2,h3,figcaption{break-after:avoid}
+img{max-height:160mm;object-fit:contain;break-inside:avoid}
+.table-wrap,pre{overflow:visible}
+thead{display:table-header-group}
+tr{break-inside:avoid}
+pre,pre code{white-space:pre-wrap;overflow-wrap:anywhere}
+p{orphans:3;widows:3}
+}</style></head>
+<body><header><h1>草・水・山と雲のプログラム解説</h1><p>CirrusEngine 技術読本</p><a href="index.html">画像比較に戻る</a></header>
+<main><nav id="contents" aria-label="目次"><h2>目次</h2><ol><li><a href='#chapter-1'>草・水・山と雲のプログラム解説</a>
+<ol>
+<li><a href='#chapter-1--%E6%92%AE%E5%BD%B1%E4%BD%8D%E7%BD%AE%E3%81%A7%E8%A9%A6%E3%81%99'>撮影位置で試す</a></li>
+<li><a href='#chapter-1--%E7%94%BB%E9%9D%A2%E3%81%A7%E7%A2%BA%E8%AA%8D%E3%81%99%E3%82%8B'>画面で確認する</a></li>
+<li><a href='#chapter-1--%E6%8E%A1%E7%94%A8%E7%89%88%E3%81%A7%E3%81%AE%E7%A2%BA%E8%AA%8D%E7%B5%90%E6%9E%9C'>採用版での確認結果</a></li>
+</ol>
+</li>
+<li><a href='#chapter-2'>地面の1画素を、C++から画面まで追う</a>
+<ol>
+<li><a href='#chapter-2--cpu%E3%81%8B%E3%82%89gpu%E3%81%AB%E6%B8%A1%E3%82%8B%E5%80%A4%E3%82%92%E4%B8%80%E3%81%A4%E8%A6%8B%E3%82%8B'>CPUからGPUに渡る値を一つ見る</a></li>
+<li><a href='#chapter-2--%E8%8D%89%E3%81%A8%E5%B1%B1%E3%81%8C%E5%85%B1%E6%9C%89%E3%81%99%E3%82%8Bg-buffer'>草と山が共有するG-buffer</a></li>
+<li><a href='#chapter-2--%E5%B7%9D%E3%81%A8%E9%9B%B2%E3%82%92%E5%90%88%E6%88%90%E3%81%99%E3%82%8B%E9%A0%86%E5%BA%8F'>川と雲を合成する順序</a></li>
+<li><a href='#chapter-2--visual-studio%E3%81%A7%E3%81%9F%E3%81%A9%E3%82%8B'>Visual Studioでたどる</a></li>
+</ol>
+</li>
+<li><a href='#chapter-3'>雲の先端の形が、1本の視線の色になるまで</a>
+<ol>
+<li><a href='#chapter-3--1%E9%A2%A8%E3%81%A7%E6%9B%B2%E3%81%8C%E3%82%8B%E4%BD%8D%E7%BD%AE%E3%82%92%E6%B1%BA%E3%82%81%E3%82%8B'>1．風で曲がる位置を決める</a></li>
+<li><a href='#chapter-3--2%E5%8E%9A%E3%81%84%E6%88%BF%E3%81%A8%E3%81%BB%E3%81%A9%E3%81%91%E3%81%9F%E5%85%88%E3%82%92%E4%BD%9C%E3%82%8B'>2．厚い房とほどけた先を作る</a></li>
+<li><a href='#chapter-3--3%E9%9B%B2%E3%81%AE%E4%B8%AD%E3%81%A7%E5%85%89%E3%82%92%E7%A9%8D%E7%AE%97%E3%81%99%E3%82%8B'>3．雲の中で光を積算する</a></li>
+<li><a href='#chapter-3--4%E3%81%A1%E3%82%89%E3%81%A4%E3%81%8D%E3%82%92%E7%9B%B4%E3%81%99%E5%A0%B4%E6%89%80%E3%82%92%E9%81%B8%E3%81%B6'>4．ちらつきを直す場所を選ぶ</a></li>
+</ol>
+</li>
+<li><a href='#chapter-4'>草原のプログラムを株から画素まで追う</a>
+<ol>
+<li><a href='#chapter-4--c%E3%81%8C%E5%9C%B0%E5%BD%A2%E3%82%92%E6%B8%A1%E3%81%99'>C++が地形を渡す</a></li>
+<li><a href='#chapter-4--%E5%90%8C%E3%81%98%E9%A0%82%E7%82%B9%E5%88%97%E3%81%8B%E3%82%89%E8%91%89%E3%81%A8%E7%A9%82%E3%81%8C%E3%81%A7%E3%81%8D%E3%82%8B'>同じ頂点列から、葉と穂ができる</a></li>
+<li><a href='#chapter-4--%E4%B8%80%E6%9C%AC%E3%81%AE%E8%91%89%E3%81%A8%E5%9C%B0%E9%9D%A2%E3%81%AE%E9%A2%A8%E3%82%92%E3%81%9D%E3%82%8D%E3%81%88%E3%82%8B'>一本の葉と地面の風をそろえる</a></li>
+<li><a href='#chapter-4--%E9%81%A0%E3%81%95%E3%81%A7%E7%9C%81%E3%81%8F%E3%82%82%E3%81%AE%E5%BD%B1%E3%81%AB%E6%AE%8B%E3%81%99%E3%82%82%E3%81%AE'>遠さで省くもの、影に残すもの</a></li>
+</ol>
+</li>
+<li><a href='#chapter-5'>川岸から見る流れと、浅い水の下の砂利</a>
+<ol>
+<li><a href='#chapter-5--c-%E3%81%A7%E6%8E%98%E3%81%A3%E3%81%9F%E5%B7%9D%E3%81%8C%E7%94%BB%E9%9D%A2%E3%81%AB%E5%B1%8A%E3%81%8F%E3%81%BE%E3%81%A7'>C++ で掘った川が画面に届くまで</a></li>
+<li><a href='#chapter-5--%E6%9B%B2%E3%81%8C%E3%81%A3%E3%81%9F%E5%B7%9D%E3%81%A7%E6%B3%A2%E3%82%92%E9%81%8B%E3%81%B6'>曲がった川で波を運ぶ</a></li>
+<li><a href='#chapter-5--%E7%A0%82%E5%88%A9%E3%81%8C%E6%B0%B4%E3%82%92%E9%80%9A%E3%81%97%E3%81%A6%E8%A6%8B%E3%81%88%E3%82%8B%E7%90%86%E7%94%B1'>砂利が水を通して見える理由</a></li>
+<li><a href='#chapter-5--%E5%B2%B8%E3%81%8B%E3%82%89%E7%A2%BA%E3%81%8B%E3%82%81%E3%82%8B'>岸から確かめる</a></li>
+<li><a href='#chapter-5--%E6%B5%81%E3%82%8C%E3%81%8C%E6%8A%98%E3%82%8A%E8%BF%94%E3%81%99%E7%9E%AC%E9%96%93%E3%82%92%E6%95%B0%E5%80%A4%E3%81%A7%E7%A2%BA%E8%AA%8D%E3%81%99%E3%82%8B'>流れが折り返す瞬間を数値で確認する</a></li>
+</ol>
+</li>
+<li><a href='#chapter-6'>山のプログラムを読む</a>
+<ol>
+<li><a href='#chapter-6--1-c%E3%81%A7%E5%AE%9F%E6%B8%AC%E5%9C%B0%E5%BD%A2%E3%82%92%E8%AA%AD%E3%81%BF%E5%B0%BE%E6%A0%B9%E3%81%A8%E8%B0%B7%E3%82%92%E5%88%A4%E5%AE%9A%E3%81%99%E3%82%8B'>1. C++で実測地形を読み、尾根と谷を判定する</a></li>
+<li><a href='#chapter-6--2-%E5%9C%B0%E5%BD%A2%E3%82%BF%E3%82%A4%E3%83%AB%E3%81%8B%E3%82%89%E3%83%94%E3%82%AF%E3%82%BB%E3%83%AB%E3%82%B7%E3%82%A7%E3%83%BC%E3%83%80%E3%83%BC%E3%81%B8%E5%80%A4%E3%82%92%E6%B8%A1%E3%81%99'>2. 地形タイルからピクセルシェーダーへ値を渡す</a></li>
+<li><a href='#chapter-6--3-%E5%B2%A9%E5%B4%96%E3%81%AE%E4%B8%8B%E3%81%AE%E7%9F%B3%E3%81%8F%E3%81%9A%E6%AE%8B%E9%9B%AA%E3%82%92%E6%8F%8F%E3%81%8D%E5%88%86%E3%81%91%E3%82%8B'>3. 岩、崖の下の石くず、残雪を描き分ける</a></li>
+<li><a href='#chapter-6--4-%E6%AD%A9%E3%81%84%E3%81%A6%E3%81%84%E3%82%8B%E9%AB%98%E3%81%95%E3%81%A8%E3%81%AE%E9%96%A2%E4%BF%82'>4. 歩いている高さとの関係</a></li>
+<li><a href='#chapter-6--5-%E5%B1%B1%E8%85%B9%E3%81%A8%E6%AE%8B%E9%9B%AA%E3%82%92%E5%88%A5%E3%81%AE%E8%A6%96%E7%82%B9%E3%81%A7%E7%A2%BA%E3%81%8B%E3%82%81%E3%82%8B'>5. 山腹と残雪を別の視点で確かめる</a></li>
+</ol>
+</li>
+</ol></nav>
+<article id='chapter-1' aria-label='草・水・山と雲のプログラム解説'>
+<h1 id="chapter-1--草水山と雲のプログラム解説">草・水・山と雲のプログラム解説</h1>
+<p><a href="index.html">同一視点の変更前後を切り替える</a> · <a href="reader.html">全章を続けて読む</a></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>読みたいこと</th>
+<th>本文</th>
+<th>入口になる関数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++が描画の各段をどう動かすか</td>
+<td><a href="#chapter-2">地面の1画素を追う</a></td>
+<td><code>wWinMain</code> → <code>Renderer::frame</code> → <code>CompositePS</code></td>
+</tr>
+<tr>
+<td>風が積雲の先端をどう曲げるか</td>
+<td><a href="#chapter-3">密度・照明・再投影</a></td>
+<td><code>bendConvectiveTop</code>、<code>traceCloudRay</code>、<code>reprojectCloudAA</code></td>
+</tr>
+<tr>
+<td>草の株から葉と穂をどう描くか</td>
+<td><a href="#chapter-4">草の配置と頂点</a></td>
+<td><code>GrassField::select</code>、<code>GrassPlacementCS</code>、<code>GrassVS</code></td>
+</tr>
+<tr>
+<td>川床の上に流れる水をどう重ねるか</td>
+<td><a href="#chapter-5">水の流れと屈折</a></td>
+<td><code>riverSurfaceDistance</code>、<code>riverSurface</code>、<code>shadeRiver</code></td>
+</tr>
+<tr>
+<td>残雪が尾根と窪地をどう見分けるか</td>
+<td><a href="#chapter-6">標高から山の材質へ</a></td>
+<td><code>buildRidgeLandforms</code>、<code>World::buildTile</code>、<code>GeometryPS</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>岩写真を縮めると格子が目立ち、遠くの写真を消すと岩の細部も失われた。山の章では、同じ岩壁の原寸切り出しで2つの試作と採用版を見比べられる。 <a href="figures/rock-iterations.jpg">岩壁の4案</a> · <a href="rock-periods.json">3箇所で測った繰り返しの強さ</a></p>
+<h2 id="chapter-1--撮影位置で試す">撮影位置で試す</h2>
+<p>Visual Studio の <code>CirrusEngine.sln</code> を <code>Release | x64</code> でビルドする。ソリューション直下で次を実行すると、その地点を歩いたり飛んだりできる。時刻付きの例は時計を止め、雲や水面の動きは通常どおり進む。 <a href="../../CirrusEngine.sln">ソリューション</a></p>
+<pre><code class="language-powershell">.\out\vs\Release\CirrusEngine.exe --camera walk --spawn 6 -66 --look 18 -17 --weather partly --time 16.2 --day-seconds 0
+.\out\vs\Release\CirrusEngine.exe --camera walk --spawn 53 25 --look -25 -14 --weather partly --time 16.4 --day-seconds 0
+.\out\vs\Release\CirrusEngine.exe --camera fly --spawn 240 3320 --look 6 20 --no-vegetation --weather clear --sun-elevation 39 --sun-azimuth -52
+</code></pre>
+<h2 id="chapter-1--画面で確認する">画面で確認する</h2>
+<p><img src="figures/comparison.jpg" alt="草・川・山の改修前後を同じ範囲で切り出した図" /></p>
+<p>草は手前の茎と穂、水は川岸から見下ろした波と川底、山は岩壁を分ける溝と残雪に注目する。画像比較ページは各視点の幅1920画素の画像を重ねて表示する。比較境界はキーボードの矢印でも動かせる。 <a href="index.html">同じ視点を比較する</a></p>
+<p>乾いた草原の撮影位置では、GPUが選んだ根元は近景13,405株、中景17,771株、遠景41,190株。葉と穂の違いは同じ根元から頂点を作る段階に現れる。山腹のカメラの高度は220.38 m、稜線を望むカメラは1,453.32 m。高さによって岩の写り方がどう変わるかも見比べられる。 <a href="sources.json">使ったソースの比較用ハッシュ</a></p>
+<p>比較の両側で <code>--width 1920 --height 1080 --quality high --frames 10 --fixed-dt 0.0166666666666667 --no-ui --headless --debug-layer</code> を使用した。草・川・谷は <code>partly</code>、山腹と稜線の専用視点は <code>clear</code>。撮影条件・画像差・D3D11の診断結果は機械可読の記録にも保存している。採用版は通常の Release 実行ファイルに <code>--shader-dir</code> で確定した一式を渡して撮影した。参照したシェーダーと通常起動先のシェーダーは全ファイルをハッシュで照合した。平均RGB差は見た目がどれだけ動いたかを示す表示階調で、リアルさや描画速度を評価する得点には使えない。 <a href="measurements.json">検証記録</a> · <a href="../sky-study/README.md">元の雲の観察と4K比較</a></p>
+<p>原寸PNG・ログ・カメラの診断JSONを保存した環境では、以下で同じ数値と図版を再生成できる。Python の NumPy と Pillow、およびWindowsのメイリオを使用する。 <a href="checks/measure-landscape.py">集計と図版作成のコード</a></p>
+<pre><code class="language-powershell">python docs/landscape-study/checks/measure-landscape.py captures/landscape-study/20261122 captures/landscape-study/recomputed
+</code></pre>
+<h2 id="chapter-1--採用版での確認結果">採用版での確認結果</h2>
+<p>Visual Studio の Release x64 と通常起動用のCMakeビルドが完了した。RTX 5080で撮った6視点と水面マスクは変更前後ともD3D11のエラー・警告が0件、レポート上の非有限値が0件だった。川岸の同じ291,110画素で水面同士を比較できる。全画面のうち、葉が水面を隠す境界は比較から外した。ブラウザーで6視点の切り替えとスライダー操作を確認した。</p>
+<p>CTest は既存4件が通過。天候、特殊雲の設定、雲の制御ボリューム、HLSLコンパイルを確認した。HLSLの検証は描画と並行した試行で120秒の上限に達し、撮影終了後の最終実行では117.33秒で通過した。</p>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+<article id='chapter-2' aria-label='地面の1画素を、C++から画面まで追う'>
+<h1 id="chapter-2--地面の1画素をcから画面まで追う">地面の1画素を、C++から画面まで追う</h1>
+<p>川岸を歩いたとき、目の前の草と遠くの山は同じ太陽で照らされる。その下の川は、すでに描いた地形の深度を使って、水に覆われる場所だけを塗り替える。この順序は <code>Renderer::frame</code> に集まっている。以下の関数名は Visual Studio の「ソリューション全体を検索」でも探せる。 <a href="../../src/renderer.cpp">フレームの実装</a> · <a href="../../src/main.cpp">Windowsの入口</a></p>
+<p><img src="figures/frame-path.png" alt="探索画面のC++とHLSLが1フレームで受け渡すデータ" /></p>
+<h2 id="chapter-2--cpuからgpuに渡る値を一つ見る">CPUからGPUに渡る値を一つ見る</h2>
+<p><code>wWinMain</code> がフレームの経過秒数を決め、<code>engine-&gt;frame(dt, ...)</code> を呼ぶ。探索時は <code>World::update</code> がカメラの周囲のタイルと植生を用意し、<code>Renderer::updateConstants</code> が現在と前回のカメラ、太陽、風、材質の描画設定を <code>FrameData</code> に詰める。次の抜粋では GPU が読む領域へ構造体をコピーし、同じバッファを頂点・ピクセル・コンピュートの各段のスロット0へ結び付ける。 <a href="../../src/renderer.hpp">CPUのFrameData</a> · <a href="../../shaders/common.hlsli">GPUのcbuffer Frame</a></p>
+<pre><code class="language-cpp">std::memcpy(mapped.pData, &amp;constants_, sizeof(constants_));
+context_-&gt;Unmap(frameBuffer_.Get(), 0);
+ID3D11Buffer *cb = frameBuffer_.Get();
+context_-&gt;VSSetConstantBuffers(0, 1, &amp;cb);
+context_-&gt;PSSetConstantBuffers(0, 1, &amp;cb);
+context_-&gt;CSSetConstantBuffers(0, 1, &amp;cb);
+</code></pre>
+<p>直前の <code>Map(..., D3D11_MAP_WRITE_DISCARD, ...)</code> で今回の書き込み先が得られる。HLSL側の <code>cbuffer Frame : register(b0)</code> がこのバッファを読む。草が曲がる向きと雲の移動を調べるときは、<code>WeatherEffects.yz</code> が風速、<code>Wind.xy</code> が積算した移動量であることに注意する。単位が m/s と m なので、同じ方向でも使い道が異なる。 <a href="../../src/renderer.cpp">定数の書き込みと束縛</a> · <a href="https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-buffers-intro">Microsoftによる定数バッファの説明</a></p>
+<h2 id="chapter-2--草と山が共有するg-buffer">草と山が共有するG-buffer</h2>
+<p>草は <code>GrassPS</code>、山肌は <code>GeometryPS</code> が材質を作る。どちらも <code>encodeMaterial</code> を通る。ここでは影付きの完成色を焼かず、照明時に必要な値を3枚へ分ける。例えば草の表裏の法線を変えると2枚目が変化し、後の照明で葉の明暗が変わる。 <a href="../../shaders/grass.hlsl">草のシェーダー</a> · <a href="../../shaders/scene.hlsl">地形と照明</a> · <a href="../../shaders/geometry.hlsli">G-bufferの定義</a></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>出力</th>
+<th>RGB</th>
+<th>A</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SV_Target0</code></td>
+<td>線形アルベド</td>
+<td>粗さ</td>
+</tr>
+<tr>
+<td><code>SV_Target1</code></td>
+<td>ワールド法線を0～1へ変換</td>
+<td>金属度</td>
+</tr>
+<tr>
+<td><code>SV_Target2</code></td>
+<td>自己発光</td>
+<td>材質の遮蔽率</td>
+</tr>
+</tbody>
+</table></div>
+<p>地形の実寸の位置は深度と逆ビュー射影行列から復元する。<code>surfaceLighting</code> が材質と太陽、雲影、周囲光を組み合わせる。同じ法線画像でも、午後から夕方へ時間を進めれば山の岩壁や草の陰の落ち方が変わる。 <a href="../../shaders/scene.hlsl">地形から最終照明まで</a></p>
+<h2 id="chapter-2--川と雲を合成する順序">川と雲を合成する順序</h2>
+<ol>
+<li><code>drawGeometry(false)</code> が不透明な地形・草木の材質と深度を確定する。地形と草の影はこの前段で別の視点から描く。</li>
+<li><code>CompositePS</code> がカメラから不透明面までの距離を <code>opaque</code> として得る。<code>riverSurfaceDistance(ray, opaque)</code> の結果がそれより手前なら、<code>shadeRiver</code> に川床側の照明色と両方の距離を渡す。</li>
+<li>川が手前なら水面まで、地形なら地形までの距離で空気遠近と霧を評価する。雲の自己散乱光と透過した背景を合成し、その後に雨と表示用のトーンマップを適用する。探索の通常表示では最後に画面の縁もフィルタする。 <a href="../../shaders/scene.hlsl">合成のHLSL</a> · <a href="../../shaders/river_water.hlsli">川を描く関数</a></li>
+</ol>
+<h2 id="chapter-2--visual-studioでたどる">Visual Studioでたどる</h2>
+<p><code>CirrusEngine.sln</code> の <code>Release | x64</code> をビルドする。起動引数に <code>--camera walk --spawn 53 25 --look -25 -14 --time 16.4 --day-seconds 0</code> を入れると川の比較位置に立てる。<code>Renderer::updateConstants</code> にブレークポイントを置くとCPU側の <code>constants_.sunDirection</code> などが確認できる。GPUの出力は F3 の一覧の <code>GBUFFER NORMAL</code>、<code>GBUFFER ROUGHNESS</code>、<code>RIVER SURFACE</code> を順に選ぶと、法線・粗さ・水面判定を最終色と照合できる。 <a href="../../CirrusEngine.sln">ソリューション</a> · <a href="../../src/renderer.cpp">デバッグビューの実装</a></p>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+<article id='chapter-3' aria-label='雲の先端の形が、1本の視線の色になるまで'>
+<h1 id="chapter-3--雲の先端の形が1本の視線の色になるまで">雲の先端の形が、1本の視線の色になるまで</h1>
+<p>横から見た雲の先を直すときは、まず密度を参照する3次元の場所を追い、その後で、その場所から何色の光がカメラへ届くかを追う。この順に読むと、輪郭・陰・ちらつきのどれを直しているのか見分けやすい。 <a href="../../shaders/common.hlsli">雲の共通関数</a> · <a href="../sky-study/README.md">実写と描画の比較</a></p>
+<h2 id="chapter-3--1風で曲がる位置を決める">1．風で曲がる位置を決める</h2>
+<p><code>unmixedCloudShape</code> はワールド座標 <code>p</code> から積算移動量 <code>Wind.xy</code> を引いて、風と一緒に動く雲の座標を求める。<code>bendConvectiveTop</code> では、強い対流と風があるとき、雲層下部を支点にして、高くなるほど風上へずらした位置の密度を読む。たとえば、変更後の位置 x=110 m から風上の x=100 m の雲を読むと、元の房は画面で10 m風下に現れる。実装では二次元の風向と高度ごとの重みでずれを決め、肩を局所的に回転する。 <a href="../../shaders/common.hlsli">座標の逆変換と風下の雲頂</a></p>
+<h2 id="chapter-3--2厚い房とほどけた先を作る">2．厚い房とほどけた先を作る</h2>
+<p>Classicの <code>thermalCoreWeight</code> は、局所的な柱の厚み・被覆率・雲底からの高さ・対流の強さを掛ける。次は実際の補強式で、<code>envelope</code> は細部を削る前の大きな形、<code>coreWeight</code> はこの位置の補強量である。 <a href="../../shaders/common.hlsli">密度の実装</a></p>
+<pre><code class="language-hlsl">return lerp(envelope, 1, coreWeight * smoothstep(0.15, 0.53, envelope));
+</code></pre>
+<p>例えば <code>envelope = 0.40</code>、<code>coreWeight = 0.30</code> なら結果は約0.53になる。空の点（0.00）は0.00のままなので、上空全部が白くなるのを防げる。早期終了に使う <code>upperEnvelope</code> にもこの関数を適用する。細かくサンプリングすれば見える房が、粗い判定で捨てられるのを防ぐためである。</p>
+<p><code>backgroundCloudShape</code> は薄くなる風下側の肩を選び、外気との混合で下がる密度と、上流の雲体から運ばれる少量の密度を合わせる。Cumulus は独自の内部補強を持つため、Classicの補強式は適用しない。輪郭の外側と内側を透過率画像で読むと、光の当たり方を変えずにどこが薄くなったかを確認できる。 <a href="../sky-study/shape-change.md">密度と透過率の図解</a></p>
+<h2 id="chapter-3--3雲の中で光を積算する">3．雲の中で光を積算する</h2>
+<p><code>CloudCS</code> から <code>traceCloudRay</code> に入ると、視線上の距離 <code>t</code> ごとに密度を評価する。照明が必要な点では、<code>lightOpticalDepth</code> または条件を満たした遮蔽キャッシュから太陽側の光学的厚さを取り、<code>shadeCloud</code> に渡す。以下は <code>accumulateCloudSample</code> の色に関わる部分。 <a href="../../shaders/clouds.hlsl">視線と光の積分</a></p>
+<pre><code class="language-hlsl">float weight = accumulated.transmittance * (1 - attenuation);
+accumulated.radiance += weight * lighting;
+// この後ろにある物体から、カメラへ届く光の割合を更新する。
+accumulated.transmittance *= attenuation;
+</code></pre>
+<p>区間の透過率は <code>attenuation = exp(-extinction * ds)</code>。手前までの透過率が0.8、次の区間が0.5なら、その区間からの光の重みは0.4、後続区間へ残る透過率も0.4。手前の雲を厚くすると、同じ場所の背後にある山も暗くなる。近景は <code>LightNearCloudCS</code> と <code>IntegrateNearCloudCS</code> で視錐台格子を照明・積分する。最後に <code>near.rgb + near.a * far.rgb</code> の順で重ねる。 <a href="../../shaders/scene.hlsl">近景と遠景の合成</a></p>
+<h2 id="chapter-3--4ちらつきを直す場所を選ぶ">4．ちらつきを直す場所を選ぶ</h2>
+<p><code>TemporalCS</code> はチェッカーボードで直接計算しなかった画素を再構成する。<code>CloudAntialiasCS</code> は雲色と透過率をさらに安定化する。後者の <code>reprojectCloudAA</code> は代表距離から3D位置を作り、前の風とカメラを考慮して過去の画面座標に戻す。過去に地形が手前だった画素や雲の距離が合わない画素を除き、残りの履歴を現在の近傍の色域に収める。山や草の輪郭だけがぶれる場合は、地表の最終フィルタ <code>ResolveEdgesPS</code> も別に確認できる。 <a href="../../shaders/clouds.hlsl">雲の再構成</a> · <a href="../../shaders/cloud_antialias.hlsl">雲の専用TAA</a> · <a href="../../shaders/scene.hlsl">最終画面の縁フィルタ</a></p>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+<article id='chapter-4' aria-label='草原のプログラムを株から画素まで追う'>
+<h1 id="chapter-4--草原のプログラムを株から画素まで追う">草原のプログラムを株から画素まで追う</h1>
+<p>歩くカメラの足もとで、背の低い緑の葉と、そこから突き出す黄褐色の穂が一緒に揺れる。今回手を入れたのは、GPUが一枚の葉を立ち上げる形と色、そして草原を横切る風の波だ。川に近い所では普通の葉が高く育ち、乾いた所では葉先が色づき、穂が増える。</p>
+<h2 id="chapter-4--cが地形を渡す">C++が地形を渡す</h2>
+<ol>
+<li><code>Renderer::frame</code> がカメラ位置を <code>World::update</code> に渡す。カメラが64 mのセルをまたぐか地形タイルが更新されると、<code>World::updateGrassHeight</code> が歩行地形の表面を4 m間隔、193×193点でサンプリングする。地面からカメラまでの高さが120 m未満のときに草の近景描画が有効になる。<a href="../../src/world.cpp">world.cpp</a> · <a href="../../src/world.hpp">world.hpp</a></li>
+<li><code>GrassField::setTerrain</code> が高さを1画素1個の32ビット浮動小数テクスチャに転送する。<code>GrassField::select</code> はカメラを中心に3段の配置格子を作り、各段の原点・間隔・距離を定数バッファ <code>b4</code> に渡す。前回と同じ視点行列・シェーダーなら、生えている株のリストを再使用する。高さの更新時には再選択が必要になる。<a href="../../src/grass.cpp">grass.cpp</a></li>
+<li><code>GrassPlacementCS</code> は8×8スレッドで候補地を走査する。セル座標のハッシュで根の位置を少しずらし、地形の三角形と同じ対角線で高さと勾配を復元する。水際の水没地点、急斜面、踏み跡では間引く。残った株だけを <code>SelectedGrass.Append(site)</code> で記録する。<a href="../../shaders/grass.hlsl">grass.hlsl</a></li>
+</ol>
+<p>各株のデータは計32バイト。根の世界座標3成分の後に、株の種となる整数、地面のX・Z勾配、湿り具合、水際からの近さが続く。湿り具合は世界座標の大小二つの模様を滑らかに混ぜた値で、水際からの近さは川の形から別に求める。乾燥・湿潤の区画はカメラを戻すと元の位置に現れる。<a href="../../shaders/meadow.hlsli">配置に使う共通関数</a></p>
+<h2 id="chapter-4--同じ頂点列から葉と穂ができる">同じ頂点列から、葉と穂ができる</h2>
+<p><code>GrassVS</code> は <code>SV_InstanceID</code> で株を、<code>SV_VertexID</code> で株の中の何枚目、何段目、左右どちらの縁かを選ぶ。近景の葉には高さ方向に5段ある。根を0、先端を1とする高さ <code>t</code> に応じて各段の幅を変え、左右の頂点を結ぶ。CPUは既に選んだ株数を <code>CopyStructureCount</code> で描画引数に移し、<code>DrawIndexedInstancedIndirect</code> を呼ぶ。CPUが毎フレーム葉の頂点を一枚ずつ書き換える処理は要らない。<a href="../../shaders/grass.hlsl">GPU側の頂点生成</a> · <a href="../../src/grass.cpp">C++側のインデックスと間接描画</a></p>
+<p><img src="figures/grass-profile.png" alt="近景5段で比較した変更前の穂と、変更後の葉・穂の正規化した輪郭" /></p>
+<p>従来の穂は普通の葉を土台にし、高さを決める同じ乱数が小さいと穂になった。このため、穂を選ぶと元の葉の背丈まで小さい側に偏った。今回の <code>GrassVS</code> では、株内の最初の2本を穂の候補とし、選択と背丈に異なるビット列から得た値を使う。各候補が穂になる確率は湿った区画で8%、最も乾いた区画で38%。これとは別に、普通の葉の背丈と幅、葉先が枯れ色になる程度に湿り具合を反映する。ここでの「湿り」は地形上の植生分布で、雨で葉が濡れる度合いは <code>WeatherEffects.x</code> が別に担当する。</p>
+<p>形を変更するときの入口は <code>leafProfile</code> と <code>culmProfile</code>。普通の葉は下から中ほどに幅がある。穂の形は細い稈に、上部のふくらみを加えて作る。次は実装にある2つの式である。</p>
+<pre><code class="language-hlsl">float ear = smoothstep(0.49, 0.71, t) * (1 - smoothstep(0.76, 1.0, t));
+float culmProfile = 0.23 * (1 - t) + 0.98 * ear;
+</code></pre>
+<p><code>t=0</code> の横幅倍率は0.23、<code>t=0.75</code> では約1.04、先端では0。近景の5段は0、0.25、0.5、0.75、1を通るので、上側のふくらみが三角形の輪郭に現れる。葉は高さに応じて幅方向の軸も少し回す。根に芯が残り、先端へ向かうほど葉の面がひねられて、左右の縁が違う方向から光を受ける。</p>
+<h2 id="chapter-4--一本の葉と地面の風をそろえる">一本の葉と地面の風をそろえる</h2>
+<p>天候側は風速を時間積分して、世界のX・Z方向に風がどれだけ進んだかを保持する。<code>Renderer::updateConstants</code> は積算移動量を <code>Wind.xy</code> に、現在の風速を <code>WeatherEffects.yz</code> に入れる。草と地面のどちらも <code>meadowGust</code> を呼ぶ。ここでは <code>p - 0.58 * Wind.xy</code> の位置の波を評価するため、静かな瞬間にカメラだけを動かしても風の模様は地面に残る。<a href="../../src/weather.cpp">weather.cpp</a> · <a href="../../src/renderer.cpp">定数を書き込む箇所</a> · <a href="../../shaders/meadow.hlsli">風の関数</a></p>
+<p>広い波が二つの細かい波の位相をずらし、現在の風向に合わせて二つを混ぜる。風向の変更でも世界全体の波の座標軸は回転しない。草側は風による変位に <code>t*t</code> を掛ける。根では変位0、中ほどでは先端の4分の1になる。離れた場所では地面の <code>GeometryPS</code> が同じ風の値で下草の明暗を弱く動かす。風が谷を進む方向を近景の葉と遠景の地表でそろえる役割がある。<a href="../../shaders/grass.hlsl">草の頂点</a> · <a href="../../shaders/scene.hlsl">地形の画素</a></p>
+<h2 id="chapter-4--遠さで省くもの影に残すもの">遠さで省くもの、影に残すもの</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>株の段</th>
+<th style="text-align: right;">候補格子の間隔</th>
+<th style="text-align: right;">1株の葉×頂点の段</th>
+<th style="text-align: right;">1株の三角形</th>
+<th>切り替わりの範囲</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>近景</td>
+<td style="text-align: right;">0.25 m</td>
+<td style="text-align: right;">12枚×5段</td>
+<td style="text-align: right;">84</td>
+<td>22～35 mで中景へ</td>
+</tr>
+<tr>
+<td>中景</td>
+<td style="text-align: right;">0.50 m</td>
+<td style="text-align: right;">6枚×4段</td>
+<td style="text-align: right;">30</td>
+<td>86～123 mで遠景へ</td>
+</tr>
+<tr>
+<td>遠景</td>
+<td style="text-align: right;">0.98 m</td>
+<td style="text-align: right;">4枚×3段</td>
+<td style="text-align: right;">12</td>
+<td>246～310 mで消える</td>
+</tr>
+</tbody>
+</table></div>
+<p>近景と中景には穂が立つ。遠景は太めの葉で面積を確保し、草の格子の先には下草の地表色が続く。段の切り替えではセルごとの固定乱数と距離の重みを比較して株を減らす。今回も各段の候補数、三角形数、株データの大きさは同じ設定を使う。変形や風を評価する頂点演算は増えており、三角形数だけからGPU時間を換算することはできない。<a href="../../src/grass.cpp">LODの実数値</a></p>
+<p>距離の切り替えでは、各段がそれぞれの格子から別の株を選ぶ。歩いて距離境界を越えると、一株ずつ出入りすることがある。穂を決める乱数は時刻に依存しない。一方、幅2.5 cmの穂を深度30 mで真正面から見ると、垂直画角62°・720pで約0.50画素しかない。この大きさでは風や視点の移動で画素を横切り、明るさが変わりやすい。雲専用のTAAは地形や草のG-bufferの描画後、雲バッファに対して働く。</p>
+<p><code>GrassShadowVS</code> は <code>GrassVS</code> と同じ位置計算を呼ぶ。草影が有効な場合、色を描く前に足もと44 m四方の1536×1536深度マップへ近景の株を投影する。曲がった葉と影が同じ風に追随する。色描画では <code>GrassPS</code> がアルベド・粗さ・法線・遮蔽を書き、近景だけ葉脈テクスチャも参照する。<code>encodeMaterial</code> の最後の引数 <code>-ao</code> は、後段の <code>surfaceLighting</code> で葉の透過光を有効にする符号でもある。最終的に地形上へ落ちる草影、草そのものが見せる根元の暗さ、逆光の葉先はそれぞれ別の計算から届く。<a href="../../src/renderer.cpp">影の描画順</a> · <a href="../../shaders/geometry.hlsli">G-bufferの格納先</a> · <a href="../../shaders/scene.hlsl">透過光と影の合成</a></p>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+<article id='chapter-5' aria-label='川岸から見る流れと、浅い水の下の砂利'>
+<h1 id="chapter-5--川岸から見る流れと浅い水の下の砂利">川岸から見る流れと、浅い水の下の砂利</h1>
+<p>川岸で下を見ると、砂利が水を通して見える。視線を対岸へ向けると、草木や空の映り込みが水面を占める。今回手を入れたのは、映った景色を揺らす波の向き、浅い流れで波が細かくなる位置、川底をのぞいたときに見える砂利の位置である。</p>
+<h2 id="chapter-5--c-で掘った川が画面に届くまで">C++ で掘った川が画面に届くまで</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>読む順</th>
+<th>関数</th>
+<th>入力と出力</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>World::terrainHeight</code> → <code>World::buildTile</code></td>
+<td>地表の各 (x, z) で川筋までの距離を求め、浅瀬や砂州を含む河床の高さを決める。これが不透明な地形メッシュになる。</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>GeometryPS</code></td>
+<td>地形メッシュに砂利の色と法線を当てる。あとで同じ画面位置から川底の深度と材質を読める。</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>Renderer::updateConstants</code> → <code>Renderer::frame</code></td>
+<td><code>CameraTime.xyz</code> に視点、<code>.w</code> にシミュレーション秒、<code>WeatherEffects.yz</code> に風の速度を渡す。全画面三角形に <code>CompositePS</code> を適用する。</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>CompositePS</code> → <code>riverSurfaceDistance</code></td>
+<td>画素ごとの視線と勾配付き水面の交点を取る。水が不透明な地形より手前にある画素で <code>shadeRiver</code> を呼ぶ。</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>shadeRiver</code> → <code>riverSurface</code></td>
+<td>早瀬の波と泡、水を通して見える川底、岸と空の映り込みを求める。合成に戻り、カメラまでの空気・霧・雲を通す。</td>
+</tr>
+</tbody>
+</table></div>
+<p>地形と水面が共有する高さは <code>riverLevel(z) = 123.4 − 0.0022 × z</code> m。1 km下流へ行くと2.2 m下がる。交点までの距離は <code>(riverLevel(camera.z) − camera.y) / (ray.y + 0.0022 × ray.z)</code>。C++とHLSLの両方から同じ河道定義をインクルードしている。<a href="../../shaders/river_profile.hlsli">河道の定義</a> · <a href="../../src/world.cpp">地形タイルの生成</a> · <a href="../../src/renderer.cpp">C++のフレーム処理</a> · <a href="../../shaders/common.hlsli">水面との交差</a> · <a href="../../shaders/scene.hlsl">地形描画と最終合成</a></p>
+<h2 id="chapter-5--曲がった川で波を運ぶ">曲がった川で波を運ぶ</h2>
+<p><code>riverSurface</code> は下流方向の座標を <code>z</code>、横方向を <code>x − riverCenter(z)</code> とする。同じ横座標をたどって下流へ進むと、蛇行しながら同じ岸に沿って移動する。岸から離れるほど流れが速くなり、狭い区間でも速くなる。水面上を移動するノイズの計算は次の部分にある。<a href="../../shaders/river_water.hlsli">水面シェーダー</a></p>
+<pre><code class="language-hlsl">float phaseA = frac(CameraTime.w / period);
+float phaseB = frac(phaseA + 0.5);
+float blendA = 1 - abs(2 * phaseA - 1);
+float u = p.z - meanSpeed * CameraTime.w;
+float2 drift = (float2(phaseA, phaseB) - 0.5) * period * (speed - meanSpeed);
+</code></pre>
+<p><code>u</code> は平均0.84 m/sで模様を運ぶ。局所速度と平均速度の差だけを <code>drift</code> で加える。これを無期限に積算すると、岸から川の中央に向かって模様が時間とともに引き延ばされる。そこで3.2秒周期の座標をふたつ、半周期ずらして同じ3Dノイズを読む。Aが初期位置に戻る瞬間にはAの重みがゼロ、Bが戻る瞬間にはBの重みがゼロになる。この二相の考え方はValveの水流の発表でも解説されている。ここでは川幅と岸からの距離で局所速度を決めている。<a href="https://cdn.akamai.steamstatic.com/apps/valve/2010/siggraph2010_vlachos_waterflow.pdf">Valve・Water Flow in Portal 2</a></p>
+<p>川幅が狭く、水深がおおむね0.3～0.75 mで、岸から離れている地点では <code>riffle</code> が強くなる。ここに短い斜めの波を混ぜ、泡は流れていくノイズの山にだけ現れる。深い流れには長い波が残る。川の横座標は蛇行に従っているので、法線をワールド座標へ戻す際には河道中心線の勾配も使う。細波が遠方で画素より小さくなるときは、視線の浅さ、画面の高さ、水面までの距離から画素が覆う水面の幅を見積もり、周波数ごとに法線の振幅を弱める。</p>
+<h2 id="chapter-5--砂利が水を通して見える理由">砂利が水を通して見える理由</h2>
+<p><code>shadeRiver</code> には元の画素で見えた地形までの距離と、水面までの距離がメートルで届く。ふたつの差は斜めの視線に沿う長さで、岸の浅さを測るには長すぎることがある。そこで水深の推定値 <code>column</code> と水中の光路長 <code>path</code> を別に持つ。水深は距離差に <code>max(0, −ray.y − riverGrade × ray.z)</code> を掛けて求める。勾配に平行な川底なら、この換算はその地点の鉛直水深と一致する。</p>
+<p>水面から4.5 m未満の推定水深、カメラから155 m未満では、<code>refract(ray, normal, 1 / 1.333)</code> で水中の方向を作る。水中レイを推定した底まで進め、到達点をカメラに投影する。その画素で実際の深度からワールド位置を復元し、予測点と近く、水中の河道内にある場合に川底の色と光路長を更新する。たとえば平坦な水面に法線から70°で入るレイは、水中で約45°へ曲がる。水深1.5 mなら、水中を進む距離は約2.1 mである。<a href="https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx-graphics-hlsl-refract">HLSL の refract</a></p>
+<p>水を通る距離が増すほど赤い光が先に減る。コードの <code>absorption</code> は光路長を使ったRGBの透過率で、<code>T = exp(−float3(0.56, 0.24, 0.19) × path)</code>。水中から届く色は <code>bottom × T + scatter × (1 − T)</code> になる。そこへフレネル係数 <code>0.0204 + 0.9796 × (1 − N·V)^5</code> に応じて反射を混ぜる。見下ろすと川底がよく見え、視線が水面に平行になると空と対岸が強く映る。<a href="../../shaders/river_water.hlsli">屈折・吸収・反射の実装</a></p>
+<h2 id="chapter-5--岸から確かめる">岸から確かめる</h2>
+<p>リポジトリ直下で次のコマンドを実行すると、対岸と川底を同じ画面内で見られる。</p>
+<pre><code class="language-powershell">.\out\vs\Release\CirrusEngine.exe --camera walk --spawn 53 25 --look -25 -14 --time 16.4
+</code></pre>
+<p>水の範囲だけを調べる場合は同じコマンドに <code>--debug-view 31</code> を加える。白い範囲は深度テストで水面が地形より手前になった画素。草や石が手前にあれば、その形で水面が切れる。<a href="../../shaders/scene.hlsl">デバッグ表示の選択</a></p>
+<p>水面の交点は一定勾配の平面で、波はその照明法線を変形する。対岸の反射と屈折には画面内に描かれた物体の深度を使う。投影位置が画面の外、草木の上、予測した河床から離れた位置に来た場合は、元の画素の川底へ滑らかに戻す。水門による水位の変化、岩の裏にできる渦の移動、集光による川底の光模様を動的に解くには、流体や光を追う別の入力が必要になる。</p>
+<h2 id="chapter-5--流れが折り返す瞬間を数値で確認する">流れが折り返す瞬間を数値で確認する</h2>
+<p>二相の片方の座標が周期の先頭へ戻る瞬間は、その相の混合重みが0になる。波用の連続な試験信号を使い、161地点、4種類の局所流速、41回の半周期境界でCPU上の式を検算した。境界の左右をそれぞれ0.001秒、0.0001秒、0.00001秒ずらして比較すると、最大の色差は0.01323、0.001323、0.000132と小さくなった。これは移流と混合の値の連続性を調べた結果で、画面上の反射のちらつきやフレームレートは含まない。 <a href="../../shaders/river_water.hlsli">シェーダーの二相移流</a></p>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+<article id='chapter-6' aria-label='山のプログラムを読む'>
+<h1 id="chapter-6--山のプログラムを読む">山のプログラムを読む</h1>
+<p>画面のどこに雪が残るかは、山の高さだけでは決まらない。この山では、標高が同じ地点でも、突き出た尾根には岩が出て、その隣の窪地には雪が残る。地形頂点の高さと、その頂点で使う材質の情報を同じ標高データから作る。</p>
+<p><img src="figures/mountain-landforms.png" alt="左は実際に読み込む標高を陰影表示した図。右は材質に渡す近傍との高低差で、茶色が尾根、青が凹地" /></p>
+<h2 id="chapter-6--1-cで実測地形を読み尾根と谷を判定する">1. C++で実測地形を読み、尾根と谷を判定する</h2>
+<p><code>World::World</code> が <code>assets/world/teton-relief.r16</code> を符号なし16ビットの配列に読み、<code>buildRidgeLandforms</code> を一度呼ぶ。元データは米国ワイオミング州ティトン山地のUSGS標高データ。ゲーム内で回転・縮小した比高を、9.3 km四方、513×513点、1 mあたり24カウントで保存している。格子の間隔は約18.16 m。 <a href="../../src/world.cpp#L325">読み込みと地形の判定</a> · <a href="../../assets/world/credits.md">元データと加工手順</a></p>
+<p>各格子点で、東西南北4点の平均と中央の標高との差を取る。急でも一枚の平面になっている斜面は、周囲の平均が中央に戻るので値がほぼゼロになる。尾根は中央が高いので負、谷は低いので正になる。</p>
+<pre><code class="language-text">d4  = 半径4格子の周囲平均 − 中央の標高      約73 mの地形を読む
+d12 = 半径12格子の周囲平均 − 中央の標高     約218 mの地形を読む
+F = 0.62 × clamp(d4 / 30 m, −1, 1) + 0.38 × clamp(d12 / 88 m, −1, 1)
+</code></pre>
+<p>小さい半径は細い沢筋を、大きい半径は幅のある窪地を拾う。地図中央付近の主峰（XZ = 451, 5214 m）を実データで調べると比高は1,192.875 m、<code>F = −1</code>。図中の青と茶は、この値を材質へ渡す前に色で可視化したもの。ゲームの地面の最終標高には、さらに周辺の丘陵などが加わる。</p>
+<h2 id="chapter-6--2-地形タイルからピクセルシェーダーへ値を渡す">2. 地形タイルからピクセルシェーダーへ値を渡す</h2>
+<p><code>World::buildTile</code> が各頂点で <code>terrainHeight</code> から高さを、周囲の高さの差から法線を求める。材質には <code>sampleRidgeField(ridgeLandforms_, px, pz)</code> で取り出した <code>F</code> を入れる。標高と分類は同じ4点で双線形補間し、実測範囲の外縁では滑らかにゼロへ落とす。タイルが遠くなると頂点間隔が広がるので、最も遠い描画では小さな沢筋ほど見えにくくなる。 <a href="../../src/world.cpp#L469">頂点生成</a> · <a href="../../src/world.cpp#L304">標高と分類の標本化</a></p>
+<pre><code class="language-cpp">float landform = sampleRidgeField(ridgeLandforms_, px, pz);
+vertices.push_back({{px, y, pz}, normal, {landform, 0, 0, 0.91f}});
+</code></pre>
+<p><code>Renderer::drawGeometry</code> が地形用シェーダーを設定し、<code>World::bindTerrainMaterials</code> が草地・土・砂利・岩の7枚を <code>t37</code> から <code>t43</code> に結びつける。入力レイアウトの <code>COLOR</code> は浮動小数点4成分で、負の値も通る。探索地形の <code>GeometryVS</code> がこの値を渡すと、GPUは三角形の内部で補間する。<code>GeometryPS</code> は <code>v.material.x</code> を地形分類、<code>v.material.a</code> を乾燥時の基本粗さとして読む。 <a href="../../src/renderer.cpp#L1557">描画する側</a> · <a href="../../shaders/scene.hlsl#L161">受け取る側</a></p>
+<h2 id="chapter-6--3-岩崖の下の石くず残雪を描き分ける">3. 岩、崖の下の石くず、残雪を描き分ける</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>入力</th>
+<th>シェーダーの変数</th>
+<th>見え方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>山の凹凸</td>
+<td><code>hollow = max(F, 0)</code>, <code>crest = max(−F, 0)</code></td>
+<td>尾根を露岩に寄せ、緩やかな窪地には石くずを集める</td>
+</tr>
+<tr>
+<td>幾何法線のY</td>
+<td><code>cliff</code>, <code>snowShelf</code></td>
+<td>崖では岩が見え、雪を載せられる傾斜では岩肌が雪に覆われる</td>
+</tr>
+<tr>
+<td>幾何法線のZ</td>
+<td><code>snowLine</code></td>
+<td>固定した向きの斜面で積雪開始高度を下げる</td>
+</tr>
+<tr>
+<td>世界座標</td>
+<td><code>rockPlane</code>, <code>fracture</code></td>
+<td>岩壁に数十～百m規模の明暗を加える。細かい粒は岩の写真から読む</td>
+</tr>
+<tr>
+<td>雪の被覆</td>
+<td><code>snow</code></td>
+<td>色を雪色へ寄せ、露岩の法線の凹凸を最大85%抑える</td>
+</tr>
+</tbody>
+</table></div>
+<p>雪が出始める高さの中心は1,330 m。尾根では最大175 m高く、窪地では最大245 m低くし、方位と既存の地表模様で境界を崩す。そこから下55 m・上85 mの幅で切り替え、さらに斜度を掛ける。たとえば、同じ標高でも尾根の岩と沢に残る雪が隣り合う。雪が積もる過程や融雪の時間発展を計算する部分はなく、固定した雪の分布に時刻ごとの日射と影が動く。 <a href="../../shaders/scene.hlsl#L242">材質と雪の式</a></p>
+<p>岩の色と法線は地面の向きに応じて、XY・XZ・ZYの3平面から投影する。高所の凹地にたまる石くずには、読み込み済みの砂利と岩の明度を使う。湿った地面、露岩、崖の下の石くず、残雪では粗さも変える。<code>encodeMaterial</code> が色、粗さ、法線をG-bufferに書き、<code>surfaceLighting</code> が太陽・雲影・環境光を評価する。色の段階に固定した暗い影を描き込む処理は使っていない。 <a href="../../shaders/geometry.hlsli">G-bufferへの格納</a> · <a href="../../shaders/scene.hlsl#L281">照明の読み戻し</a></p>
+<h3 id="chapter-6--三角形ごとのサンプルで岩写真の反復を崩す">三角形ごとのサンプルで岩写真の反復を崩す</h3>
+<p>最初の山腹レンダーでは、岩写真1枚を約77 m間隔で貼ったため、同じ角のある岩が何段も並んだ。約11.5 mに縮めて座標を曲げた案では、遠くの岩壁に細かい斜めの格子が出た。さらに遠景の写真をすべて手続き模様に置き換えた案では、岩の粒が薄れ、閉じた曲線が目立った。採用案は岩写真の一辺を25 m相当にして、写真のどの位置を読むかを場所ごとに変える。 <a href="figures/rock-iterations.jpg">同じ位置から見た岩壁の試作比較</a></p>
+<p><code>mountainRock</code> は高地の世界座標を約28°回し、三方向に15・18・14 mの振幅で滑らかに曲げる。岩面の向きに合わせ、XY・XZ・ZYの各面に写真を投影する。各投影面の三角格子で、格子の頂点を種にして写真上のずらし量を決める。三角形の内部では3枚のパッチを補間する。対角線の <code>f.x + f.y = 1</code> では両側の三角形とも重みが <code>(0, f.x, f.y)</code> になる。境界の2頂点とずらし量を共有するので、平滑化して正規化した後も同じ2枚が同じ重みでつながる。 <a href="../../shaders/scene.hlsl#L87">三角格子と乱数の種</a> · <a href="../../shaders/scene.hlsl#L114">三方向でのサンプル</a></p>
+<pre><code class="language-text">頂点ごとの重み = 三角形内の重心座標を smoothstep で滑らかにした値
+画素の色       = Σ (重み × 各頂点でずらした写真の色) / Σ 重み
+</code></pre>
+<p>写真と法線には同じずらし量と同じ重みを使う。各パッチの <code>SampleGrad</code> に渡す画面方向の勾配は、ずらし量を加える前の連続した投影座標から計算する。距離に応じてミップを選び、境界で乱数が変わってもミップ幅が跳ねにくい。法線の勾配は変形のヤコビアンの転置で元の空間へ戻す。低地で使う写真の参照は従来の色3回・法線3回。高地は3方向 × 3パッチ × 色・法線の18回、標高260～475 mの遷移域では両方を使う。これらは岩写真だけの参照数である。</p>
+<p>三角格子の3パッチは Heitz と Neyret の論文を参考にした。原論文は事前に求めたヒストグラム変換と逆変換で入力写真の分布を保つ。この実装は合計1に正規化した重みで色と法線を混ぜるため、パッチが重なる所では元写真よりコントラストが弱くなる場合がある。 <a href="https://eheitzresearch.wordpress.com/722-2/">Heitz &amp; Neyret, High-Performance Graphics 2018</a></p>
+<h2 id="chapter-6--4-歩いている高さとの関係">4. 歩いている高さとの関係</h2>
+<p>地形分類は材質用の頂点成分だけに入る。地面の高さを問い合わせる <code>World::ground</code> は近距離タイルと同じ4 m格子・同じ対角線で三角形を補間する。植物の配置には <code>World::surface</code> を使う。地形そのものの高さ、歩行面、川底と水面の位置関係を共有したまま、同じ地点で露岩と残雪の見え方を比較できる。分類用配列の追加メモリは513×513×4バイトで約1.00 MiB。GPUの頂点サイズと地形テクスチャの枚数は同じ。 <a href="../../src/world.cpp#L719">歩行面</a> · <a href="../../src/world.cpp#L649">描画した三角形の高さ</a></p>
+<h3 id="chapter-6--実データで歩行面を照合した結果">実データで歩行面を照合した結果</h3>
+<p>改修前後の <code>valleyRidges</code>、<code>terrainHeight</code>、<code>ground</code> の関数本体を別の名前空間へ取り出し、同じ実測データを入力にMSVC x64の単精度浮動小数点で計算した。格子の節だけで一致しても補間の変更を見落とすので、各セルの中央と偏った位置も調べた。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>調べた位置</th>
+<th style="text-align: right;">延べ照合地点数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>513×513の全格子点</td>
+<td style="text-align: right;">263,169</td>
+</tr>
+<tr>
+<td>512×512の全セルの中央</td>
+<td style="text-align: right;">262,144</td>
+</tr>
+<tr>
+<td>各セルの中心を外した2点</td>
+<td style="text-align: right;">524,288</td>
+</tr>
+<tr>
+<td>4辺と裾の補間境界、その直前・直後の浮動小数点座標</td>
+<td style="text-align: right;">12,312</td>
+</tr>
+<tr>
+<td>川を横切る測線</td>
+<td style="text-align: right;">109,181</td>
+</tr>
+<tr>
+<td>合計</td>
+<td style="text-align: right;"><strong>1,171,094</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>3種類の高さの計3,513,282比較すべてで、変更前後の32ビット表現が一致した。各高さの最大絶対差は0 m、非有限値は0件。川の境界などで同じ位置が重なるので、表は照合回数を数えた。 <a href="mountain-height-validation.json">入力ファイルのハッシュと各群の結果</a> · <a href="checks/compare-mountain-height.cpp">比較に使用したC++プログラム</a></p>
+<p>再実行するにはVisual StudioのDeveloper PowerShellを開き、リポジトリのルートから次を実行する。</p>
+<pre><code class="language-powershell">$sourceFile = (Resolve-Path docs/landscape-study/checks/compare-mountain-height.cpp).Path
+$heightFile = (Resolve-Path assets/world/teton-relief.r16).Path
+Push-Location $env:TEMP
+try {
+    cl /nologo /O2 /std:c++20 /fp:precise /EHsc /Fe:compare-mountain-height.exe $sourceFile
+    if ($LASTEXITCODE -ne 0) { throw &quot;ビルド失敗&quot; }
+    .\compare-mountain-height.exe $heightFile
+} finally {
+    Pop-Location
+}
+</code></pre>
+<h2 id="chapter-6--5-山腹と残雪を別の視点で確かめる">5. 山腹と残雪を別の視点で確かめる</h2>
+<p>山腹の岩の繰り返しは、谷側から仰角20°で比べると見つけやすい。この画面は手前の尾根が高く、主峰近くの雪が隠れる。</p>
+<pre><code class="language-powershell">.\out\vs\Release\CirrusEngine.exe --camera fly --spawn 240 3320 --look 6 20 --weather clear --no-vegetation --sun-elevation 39 --sun-azimuth -52
+</code></pre>
+<p>残雪を見るカメラは主峰の北東側（ゲーム内の+X・+Z）に置く。カメラから主峰までの水平距離は約1.62 km、主峰の仰角は約8.7°で、垂直画角62°に収まる。撮影点を選ぶ際は前後各2.5%を除いた視線の160点で、実際の地形高さを標高格子に評価して比較した。視線と地形との間に、格子上の推定で最小約54 mの余裕がある。谷側へ光が差して雪と露岩を追えるよう、太陽方位を5°へ回している。</p>
+<pre><code class="language-powershell">.\out\vs\Release\CirrusEngine.exe --camera fly --spawn 1261 6617 --look -150 -3 --weather clear --no-vegetation --sun-elevation 38 --sun-azimuth 5
+</code></pre>
+
+<p class='return'><a href='#contents'>目次に戻る</a></p></article>
+</main></body></html>

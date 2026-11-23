@@ -31,8 +31,11 @@ constexpr float flightStartHeight = 32.0f;
 constexpr int nearCloudWidth = 80, nearCloudHeight = 44, nearCloudSlices = 32;
 constexpr float nearCloudDepth = 160.0f;
 constexpr std::array<const char *, 4> qualityNames{"Low", "Medium", "High", "Ultra"};
-constexpr std::array<const char *, 7> stageNames{
-    "cloud_shadow", "geometry", "sky", "cloud_march", "temporal", "aerial_fog", "composite_ui"};
+constexpr UINT grassShadowSize = 1536;
+constexpr float grassShadowSpan = 44.0f;
+constexpr std::array<const char *, 8> stageNames{
+    "cloud_shadow", "geometry", "screen_lighting", "sky", "cloud_march", "temporal", "aerial_fog",
+    "composite_ui"};
 
 struct TextureViewInfo
 {
@@ -80,7 +83,28 @@ constexpr std::array<TextureViewInfo, static_cast<size_t>(DebugView::Count)> tex
     {"METALLIC", "RGBA16F / A", "White: metal. Black: dielectric."},
     {"NEAR SHADOW DEPTH", "D32 / R32F", "Local terrain and tree shadows for walking."},
     {"RIVER SURFACE", "Depth test", "White: water in front of the terrain. Black: dry or hidden."},
+    {"SSAO", "RGBA16F / R", "Ambient visibility from nearby depth and normals."},
+    {"SCREEN SHADOW", "RGBA16F / G", "Contact visibility along the sunlight ray."},
+    {"GRASS SHADOW", "D32 / PCF", "Foot-level visibility from the grass shadow map."},
+    {"LAYER 1 DENSITY", "Texture / R", "Density texture for the first cloud type."},
+    {"LAYER 2 DENSITY", "Texture / R", "Density texture for the second cloud type."},
+    {"LAYER 3 DENSITY", "Texture / R", "Density texture for the third cloud type."},
+    {"HIGH CLOUD TYPE", "Texture / R", "Black to white follows the cloud type order."},
+    {"HIGH CLOUD COVERAGE", "Texture / R", "Light regions retain progressively more cloud."},
 }};
+
+XMMATRIX snappedLocalLightView(FXMVECTOR center, FXMVECTOR sun, float distance, float texelSize)
+{
+    const XMVECTOR up =
+        std::abs(XMVectorGetY(sun)) > 0.98f ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
+    XMMATRIX view = XMMatrixLookAtLH(center + sun * distance, center, up);
+    const XMVECTOR origin = XMVector3TransformCoord(XMVectorZero(), view);
+    const float x = XMVectorGetX(origin), y = XMVectorGetY(origin);
+    // 位置が少し動いても、同じワールド位置にシャドウマップのテクセルを置く。
+    view.r[3] += XMVectorSet(std::round(x / texelSize) * texelSize - x,
+                             std::round(y / texelSize) * texelSize - y, 0, 0);
+    return view;
+}
 
 std::string narrow(const wchar_t *text)
 {
@@ -379,10 +403,10 @@ ShaderSet Renderer::compileShaders()
                                            &result),
                 entry);
     };
-    auto cs = [&](const wchar_t *file, const char *entry, ComPtr<ID3D11ComputeShader> &result,
+    auto cs = [&](const std::filesystem::path &file, const char *entry, ComPtr<ID3D11ComputeShader> &result,
                   const D3D_SHADER_MACRO *defines = nullptr)
     {
-        auto code = compile(path(file), entry, "cs_5_0", defines);
+        auto code = compile(options_.shaderDirectory / file, entry, "cs_5_0", defines);
         require(device_->CreateComputeShader(code->GetBufferPointer(), code->GetBufferSize(),
                                              nullptr, &result),
                 entry);
@@ -393,12 +417,14 @@ ShaderSet Renderer::compileShaders()
     ps(L"scene.hlsl", "GeometryPS", s.geometryPS);
     ps(L"scene.hlsl", "CompositePS", s.compositePS);
     ps(L"scene.hlsl", "ResolveEdgesPS", s.resolveEdgesPS);
+    cs(L"scene.hlsl", "ScreenLightingCS", s.screenLightingCS);
     vs(L"rain.hlsl", "RainVS", s.rainVS);
     ps(L"rain.hlsl", "RainPS", s.rainPS);
     auto mesh = vs(L"mesh.hlsl", "MeshVS", s.meshVS);
     ps(L"mesh.hlsl", "MeshPS", s.meshPS);
     ps(L"mesh.hlsl", "MeshShadowPS", s.meshShadowPS);
     vs(L"grass.hlsl", "GrassVS", s.grassVS);
+    vs(L"grass.hlsl", "GrassShadowVS", s.grassShadowVS);
     ps(L"grass.hlsl", "GrassPS", s.grassPS);
     cs(L"grass.hlsl", "GrassPlacementCS", s.grassPlacementCS);
     cs(L"noise.hlsl", "NoiseCS", s.noiseCS);
@@ -408,6 +434,14 @@ ShaderSet Renderer::compileShaders()
     cs(L"atmosphere.hlsl", "SkyAmbientCS", s.skyAmbientCS);
     cs(L"atmosphere.hlsl", "AerialCS", s.aerialCS);
     cs(L"clouds.hlsl", "TemporalCS", s.temporalCS);
+    if (options_.cloudTaa || options_.checkShaders)
+    {
+        // 古い --shader-dir の比較用スナップショットにも、独立した表示パスを適用できる。
+        std::filesystem::path aaFile = L"cloud_antialias.hlsl";
+        if (!std::filesystem::exists(options_.shaderDirectory / aaFile))
+            aaFile = options_.assetsDirectory.parent_path() / L"shaders" / aaFile;
+        cs(aaFile, "CloudAntialiasCS", s.cloudAntialiasCS);
+    }
     cs(L"clouds.hlsl", "IntegrateNearCloudCS", s.nearCloudIntegrateCS);
     // 雲の配置・影・描画・画素修復を同じ密度モデルの組で切り替える。
     const D3D_SHADER_MACRO cumulus[] = {{"CIRRUS_CUMULUS_CLOUDS", "1"}, {nullptr, nullptr}};
@@ -546,7 +580,7 @@ void Renderer::initializeResources()
     require(device_->CreateSamplerState(&sd, &linearWrap_), "Wrap sampler");
     sd.Filter = D3D11_FILTER_ANISOTROPIC;
     sd.MaxAnisotropy = 8;
-    require(device_->CreateSamplerState(&sd, &terrainSampler_), "Anisotropic terrain sampler");
+    require(device_->CreateSamplerState(&sd, &anisotropicWrap_), "Anisotropic wrap sampler");
     // 地形の深度シャドウ用。雲影は通常の線形サンプラーで指数モーメントを読む。
     sd.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
     sd.ComparisonFunc = D3D11_COMPARISON_LESS_EQUAL;
@@ -707,9 +741,15 @@ void Renderer::initializeResources()
     }
     context_->GenerateMips(weatherMap_.srv.Get());
     context_->GenerateMips(cloudDisplacement_.srv.Get());
+    loadTextureCloudTypes();
     makeShadowDepth(terrainDepthView_, terrainDepthSRV_);
     if (world_)
+    {
         makeShadowDepth(nearDepthView_, nearDepthSRV_);
+        // GrassFieldの描画は最初のWorld::updateで有効になる。マップは設定に合わせて先に確保する。
+        if (options_.vegetation && options_.grassShadows)
+            makeShadowDepth(grassShadowView_, grassShadowSRV_, grassShadowSize);
+    }
     else
         makeTerrain();
     ui_.initialize(device_.Get());
@@ -720,12 +760,145 @@ void Renderer::initializeResources()
             + std::to_string(detailNoiseSize_) + "^3, weather/displacement 512^2).");
 }
 
+void Renderer::loadTextureCloudTypes()
+{
+    const bool custom = !options_.cloudLayerFile.empty();
+    const auto file = custom ? options_.cloudLayerFile
+                             : options_.assetsDirectory / L"clouds" / L"types.cloudlayers";
+    std::ifstream input(file);
+    if (!input)
+        throw std::runtime_error("Cannot open cloud type definitions: " + file.string());
+
+    const auto imagePath = [&file](const std::string &name)
+    {
+        return file.parent_path() / std::filesystem::path(std::u8string(name.begin(), name.end()));
+    };
+
+    std::string line;
+    size_t lineNumber = 0;
+    while (std::getline(input, line))
+    {
+        ++lineNumber;
+        if (lineNumber == 1 && line.starts_with("\xef\xbb\xbf"))
+            line.erase(0, 3);
+        std::istringstream row(line);
+        TextureCloudType type;
+        if (!(row >> type.id) || type.id.front() == '#')
+            continue;
+        const auto error = [&]()
+        {
+            return std::runtime_error("Invalid cloud layer definition at " + file.string() + ":"
+                                      + std::to_string(lineNumber));
+        };
+        std::string image, format, extra;
+        if (type.id == "@type_map" || type.id == "@coverage_map")
+        {
+            auto &map = type.id == "@type_map" ? cloudTypeMap_ : cloudCoverageMap_;
+            float period{};
+            if (!(row >> std::quoted(image) >> period) || image.empty() || !map.image.empty()
+                || !(period >= 1000 && period <= 200000)
+                || ((row >> extra) && extra.front() != '#'))
+                throw error();
+            map.image = imagePath(image);
+            map.period = period;
+            continue;
+        }
+        if (!(row >> std::quoted(type.label) >> std::quoted(image) >> type.defaults.altitude
+                  >> type.defaults.amount >> type.halfThickness >> type.opticalDepth >> type.period
+                  >> format))
+            throw error();
+        if ((row >> extra) && extra.front() != '#')
+            throw error();
+        const auto validId = [](char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+        };
+        const auto validLabel = [](char c)
+        {
+            return c >= 32 && c <= 126 && c != '"' && c != '\\';
+        };
+        const auto inRange = [](float v, float lo, float hi) { return v >= lo && v <= hi; };
+        const auto duplicate = std::find_if(textureCloudTypes_.begin(), textureCloudTypes_.end(),
+            [&](const TextureCloudType &other) { return other.id == type.id; });
+        if (textureCloudTypes_.size() >= textureCloudLayerCount || type.id.size() > 24
+            || !std::all_of(type.id.begin(), type.id.end(), validId)
+            || type.label.empty() || type.label.size() > 22
+            || !std::all_of(type.label.begin(), type.label.end(), validLabel)
+            || duplicate != textureCloudTypes_.end() || image.empty()
+            || !inRange(type.defaults.altitude, 450, 16000)
+            || !inRange(type.defaults.amount, 0, 1.8f)
+            || !inRange(type.halfThickness, 10, 400)
+            || !inRange(type.opticalDepth, 0.01f, 8)
+            || !inRange(type.period, 1000, 200000)
+            || (format != "density" && format != "profile"))
+            throw error();
+        type.image = imagePath(image);
+        type.profile = format == "profile";
+        textureCloudTypes_.push_back(std::move(type));
+    }
+    if (input.bad() || textureCloudTypes_.empty())
+        throw std::runtime_error("Could not read any cloud types from " + file.string());
+
+    const auto dimensions = [](ID3D11ShaderResourceView *view)
+    {
+        ComPtr<ID3D11Resource> resource;
+        view->GetResource(&resource);
+        ComPtr<ID3D11Texture2D> texture;
+        require(resource.As(&texture), "Read cloud texture dimensions");
+        D3D11_TEXTURE2D_DESC description{};
+        texture->GetDesc(&description);
+        return XMUINT2{description.Width, description.Height};
+    };
+    for (auto *map : {&cloudTypeMap_, &cloudCoverageMap_})
+    {
+        if (map->image.empty())
+            continue;
+        map->texture = loadTexture(device_.Get(), context_.Get(), map->image, false);
+        map->size = dimensions(map->texture.Get());
+    }
+
+    // 旧Texture Studioの1枚のDDSは、RGBから独立した密度テクスチャに分けて読み込む。
+    NoiseDds legacy;
+    const auto legacyPath = options_.cloudTextureDirectory / L"cloud-layers.dds";
+    if (!custom && !options_.cloudTextureDirectory.empty() && std::filesystem::exists(legacyPath))
+    {
+        legacy = readNoiseDds(legacyPath, DXGI_FORMAT_R16G16B16A16_FLOAT, false);
+        importedCloudLayerMasks_ = true;
+    }
+    for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+    {
+        auto &type = textureCloudTypes_[i];
+        if (importedCloudLayerMasks_)
+        {
+            auto texture = makeTexture(legacy.size, legacy.size, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                                       false, false, true);
+            std::vector<uint16_t> texels(legacy.texels.size(), 0x3c00);
+            for (size_t pixel = 0; pixel < texels.size(); pixel += 4)
+                texels[pixel] = legacy.texels[pixel + i];
+            context_->UpdateSubresource(texture.texture.Get(), 0, nullptr, texels.data(), legacy.pitch, 0);
+            context_->GenerateMips(texture.srv.Get());
+            type.texture = std::move(texture.srv);
+            type.profile = false;
+        }
+        else
+            type.texture = loadTexture(device_.Get(), context_.Get(), type.image, false);
+
+        const auto size = dimensions(type.texture.Get());
+        type.texels = static_cast<float>(std::max(size.x, size.y));
+        textureCloudLayers_[i] = type.defaults;
+        if (type.id == options_.soloTextureCloud)
+            soloTextureCloud_ = static_cast<int>(i);
+    }
+    if (soloTextureCloud_ < 0 && !options_.soloTextureCloud.empty())
+        throw std::runtime_error("Unknown cloud type: " + options_.soloTextureCloud);
+}
+
 void Renderer::makeShadowDepth(ComPtr<ID3D11DepthStencilView> &dsv,
-                               ComPtr<ID3D11ShaderResourceView> &srv)
+                               ComPtr<ID3D11ShaderResourceView> &srv, UINT size)
 {
     D3D11_TEXTURE2D_DESC td{};
-    // 地形用は2048²の深度マップ。DSVではD32、シェーダーからはR32で読む。
-    td.Width = td.Height = 2048;
+    // DSVではD32、シェーダーからはR32で読む。
+    td.Width = td.Height = size;
     td.MipLevels = 1;
     td.ArraySize = 1;
     td.Format = DXGI_FORMAT_R32_TYPELESS;
@@ -863,6 +1036,10 @@ void Renderer::makeTargets()
     albedo_ = makeTexture(width_, height_, DXGI_FORMAT_R8G8B8A8_UNORM, true, false);
     normals_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
     surface_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
+    screenVisibility_ = makeTexture((width_ + 1) / 2, (height_ + 1) / 2,
+                                    DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+    const float clearVisibility[] = {1, 1, 0, 0};
+    context_->ClearUnorderedAccessViewFloat(screenVisibility_.uav.Get(), clearVisibility);
     // RG16Fに雲層全体の透過率と、太陽から見た遮蔽深度の指数値を保存する。
     shadowMap_ = makeTexture(shadowSize_, shadowSize_, DXGI_FORMAT_R16G16_FLOAT, false, true, true);
     makeCloudRawTargets();
@@ -880,11 +1057,20 @@ void Renderer::makeTargets()
         context_->ClearUnorderedAccessViewFloat(history_[i].uav.Get(), cloudClear);
         context_->ClearUnorderedAccessViewFloat(historyMeta_[i].uav.Get(), metaClear);
     }
+    if (options_.cloudTaa)
+    {
+        antialiasedCloud_ = makeTexture(cloudWidth_, cloudHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+        antialiasedMeta_ = makeTexture(cloudWidth_, cloudHeight_, DXGI_FORMAT_R32G32_FLOAT, false, true);
+    }
     aerialScatter_ =
         makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     aerialTransmittance_ =
         makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     fog_ = makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+    cloudAerialScatter_ =
+        makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
+    cloudAerialTransmittance_ =
+        makeTexture(aerialWidth_, aerialHeight_, DXGI_FORMAT_R16G16B16A16_FLOAT, false, true);
     rain_ = makeTexture(width_, height_, DXGI_FORMAT_R16G16B16A16_FLOAT, true, false);
     cloudOcclusionSource_.region.w = 0;
     shadowValid_ = false;
@@ -896,38 +1082,45 @@ void Renderer::makeTargets()
 
 ShaderResources Renderer::resources() const
 {
-    return {baseNoise_.Get(),
-            detailNoise_.Get(),
-            weatherMap_.srv.Get(),
-            shadowMap_.srv.Get(),
-            depthSRV_.Get(),
-            albedo_.srv.Get(),
-            normals_.srv.Get(),
-            sky_.srv.Get(),
-            history_[historyIndex_].srv.Get(),
-            historyMeta_[historyIndex_].srv.Get(),
-            nullptr,
-            nullptr,
-            aerialScatter_.srv.Get(),
-            aerialTransmittance_.srv.Get(),
-            fog_.srv.Get(),
-            terrainDepthSRV_.Get(),
-            transmittance_.srv.Get(),
-            nullptr,
-            rain_.srv.Get(),
-            reconstruction_.srv.Get(),
-            towerControl_.Get(),
-            cloudWarp_.Get(),
-            cloudMap_.srv.Get(),
-            cloudHeightLut_.srv.Get(),
-            cloudDisplacement_.srv.Get(),
-            skyAmbient_.srv.Get(),
-            nearDepthSRV_.Get(),
-            surface_.srv.Get(),
-            nullptr,
-            nullptr,
-            nullptr,
-            nearCloud_.srv.Get()};
+    ShaderResources input{
+        baseNoise_.Get(),
+        detailNoise_.Get(),
+        weatherMap_.srv.Get(),
+        shadowMap_.srv.Get(),
+        depthSRV_.Get(),
+        albedo_.srv.Get(),
+        normals_.srv.Get(),
+        sky_.srv.Get(),
+        history_[historyIndex_].srv.Get(),
+        historyMeta_[historyIndex_].srv.Get(),
+        nullptr,
+        nullptr,
+        aerialScatter_.srv.Get(),
+        aerialTransmittance_.srv.Get(),
+        fog_.srv.Get(),
+        terrainDepthSRV_.Get(),
+        transmittance_.srv.Get(),
+        nullptr,
+        rain_.srv.Get(),
+        reconstruction_.srv.Get(),
+        towerControl_.Get(),
+        cloudWarp_.Get(),
+        cloudMap_.srv.Get(),
+        cloudHeightLut_.srv.Get(),
+        cloudDisplacement_.srv.Get(),
+        skyAmbient_.srv.Get(),
+        nearDepthSRV_.Get(),
+        surface_.srv.Get(),
+        nullptr,
+        nullptr,
+        nullptr,
+        nearCloud_.srv.Get(),
+    };
+    for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+        input[cloudTypeTextureSlot + i] = textureCloudTypes_[i].texture.Get();
+    input[cloudRegionTypeSlot] = cloudTypeMap_.texture.Get();
+    input[cloudRegionCoverageSlot] = cloudCoverageMap_.texture.Get();
+    return input;
 }
 
 void Renderer::compute(ID3D11ComputeShader *shader, int x, int y, int z,
@@ -944,8 +1137,8 @@ void Renderer::compute(ID3D11ComputeShader *shader, int x, int y, int z,
     context_->CSSetUnorderedAccessViews(0, static_cast<UINT>(output.size()), output.data(),
                                         nullptr);
     context_->Dispatch(x, y, z);
-    const std::array<ID3D11UnorderedAccessView *, 3> nullUav{};
-    context_->CSSetUnorderedAccessViews(0, 3, nullUav.data(), nullptr);
+    const std::array<ID3D11UnorderedAccessView *, D3D11_PS_CS_UAV_REGISTER_COUNT> nullUav{};
+    context_->CSSetUnorderedAccessViews(0, static_cast<UINT>(output.size()), nullUav.data(), nullptr);
     context_->CSSetShaderResources(0, shaderResourceCount, empty.data());
 }
 
@@ -973,11 +1166,29 @@ void Renderer::updateNearClouds()
     if (warpStrength > 0)
         constants_.formationLayer.y = std::max(constants_.formationLayer.y, top + warpMargin);
 
-    // 視錐台の隅でも格子内に雲が来る可能性があるときは近距離を積分する。
+    // 視錐台の隅まで届く雲だけで格子を有効にする。遠い特殊雲で高度範囲を広げない。
     const float aspect = static_cast<float>(width_) / height_;
     const float cornerRayLength = nearCloudDepth * std::sqrt(1 + 0.361f * (1 + aspect * aspect));
-    const bool active = height + cornerRayLength >= constants_.formationLayer.x - warpMargin
-                        && height - cornerRayLength <= constants_.formationLayer.y;
+    const auto reaches = [height, cornerRayLength](float bottom, float top)
+    {
+        return height + cornerRayLength >= bottom && height - cornerRayLength <= top;
+    };
+    bool active = layer.z > 0 && layer.w > 0 && reaches(layer.x - warpMargin, top + warpMargin);
+    for (std::size_t i = 0; !active && i < static_cast<std::size_t>(constants_.formationControls.x); ++i)
+    {
+        const auto &f = constants_.formations[i];
+        if (f.density <= 0)
+            continue;
+        const float reach = f.radius * 1.85f + cornerRayLength;
+        const float dx = eye.x - constants_.wind.x - f.x;
+        const float dz = eye.z - constants_.wind.y - f.z;
+        const float bottom = f.kind == 1 ? std::min(f.base, layer.x) : f.base;
+        const float upper = f.kind == 1 ? std::max(f.base + f.height, top) : f.base + f.height;
+        active = dx * dx + dz * dz <= reach * reach && reaches(bottom - 120, upper + 120);
+    }
+    for (const auto &textureLayer : constants_.textureCloudLayers)
+        active = active || (textureLayer.z > 0
+                            && reaches(textureLayer.x - textureLayer.y, textureLayer.x + textureLayer.y));
     constants_.nearCloudParams = {active ? nearCloudDepth : 0, warpStrength,
                                   static_cast<float>(nearCloudSlices), 1100.0f};
     if (active != wasActive)
@@ -1031,15 +1242,28 @@ void Renderer::updateCloudOcclusion(bool shareLighting, const XMFLOAT4 &previous
 
 void Renderer::updateConstants()
 {
-    const auto &w = weather_.state();
-    auto drift = weather_.wind();
+    // 雨・湿度・風は天候の補間値、操作した雲の項目だけはパネルの値を使う。
+    auto w = weather_.state();
+    w.coverage = cloudOverrides_.coverage.value_or(w.coverage);
+    w.density = cloudOverrides_.density.value_or(w.density);
+    w.cloudBase = cloudOverrides_.base.value_or(w.cloudBase);
+    w.cloudThickness = cloudOverrides_.thickness.value_or(w.cloudThickness);
+    w.cloudType = cloudOverrides_.type.value_or(w.cloudType);
+    if (soloTextureCloud_ >= 0)
+    {
+        w.coverage = 0;
+        w.density = 0;
+    }
+    constants_.cloudShapeTuning = {1.0f / cloudOverrides_.scale.value_or(1.0f),
+                                   cloudOverrides_.edgeDetail.value_or(1.0f), 0, 0};
+    const auto drift = weather_.wind();
     const auto oldFormations = constants_.formations;
     const auto oldFormationControls = constants_.formationControls;
     const auto previousSun = constants_.sunDirection;
     constants_.formations = formations_.items;
     float cloudBottom = w.cloudBase, cloudTop = w.cloudBase + w.cloudThickness;
     bool rotatingFormation = false;
-    const bool formationsEnabled = options_.formationStrength > 0.0001f;
+    const bool formationsEnabled = soloTextureCloud_ < 0 && options_.formationStrength > 0.0001f;
     for (size_t i = 0; i < formations_.count; ++i)
     {
         auto &f = constants_.formations[i];
@@ -1049,7 +1273,7 @@ void Renderer::updateConstants()
         {
             cloudBottom = std::min(cloudBottom, f.base);
             cloudTop = std::max(cloudTop, f.base + f.height);
-            rotatingFormation |= f.kind > 0.5f && std::abs(f.spin * options_.formationSpeed) > 0;
+            rotatingFormation |= f.kind == 1 && std::abs(f.spin * options_.formationSpeed) > 0;
         }
     }
     const float phaseStep =
@@ -1058,9 +1282,38 @@ void Renderer::updateConstants()
     constants_.formationControls = {formationsEnabled ? static_cast<float>(formations_.count) : 0,
                                     options_.formationStrength, static_cast<float>(formationPhase_),
                                     phaseStep};
+    float shadowBottom = cloudBottom, shadowTop = cloudTop;
+    constants_.textureCloudLayers.fill(XMFLOAT4{0, 1, 0, 1});
+    constants_.textureCloudMaps.fill(XMFLOAT4{1, 0, 0, 0});
+    const float typeSteps = static_cast<float>(textureCloudTypes_.size() - 1);
+    const float typeScale = cloudTypeMap_.texture && soloTextureCloud_ < 0 && typeSteps > 0
+        ? 1.0f / cloudTypeMap_.period : 0;
+    const float coverageScale = cloudCoverageMap_.texture ? 1.0f / cloudCoverageMap_.period : 0;
+    constants_.textureCloudRegions = {
+        typeScale, coverageScale,
+        typeScale * static_cast<float>(std::max(cloudTypeMap_.size.x, cloudTypeMap_.size.y)),
+        coverageScale * static_cast<float>(std::max(cloudCoverageMap_.size.x, cloudCoverageMap_.size.y))};
+    for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+    {
+        const auto &layer = textureCloudLayers_[i];
+        const auto &type = textureCloudTypes_[i];
+        const bool enabled = options_.textureCloudLayers
+            && (soloTextureCloud_ < 0 || soloTextureCloud_ == static_cast<int>(i));
+        // 1 - h² の鉛直積分は 4/3 × 半厚。PNGのRが見通し方向の光学厚を決める。
+        const float extinction = enabled
+            ? 0.75f * layer.amount * type.opticalDepth / type.halfThickness : 0;
+        constants_.textureCloudLayers[i] =
+            {layer.altitude, type.halfThickness, extinction, 1.0f / type.period};
+        constants_.textureCloudMaps[i] = {type.texels, type.profile ? 1.0f : 0.0f, typeSteps, 0};
+        if (extinction > 0)
+        {
+            shadowBottom = std::min(shadowBottom, layer.altitude - type.halfThickness);
+            shadowTop = std::max(shadowTop, layer.altitude + type.halfThickness);
+        }
+    }
     // 曲率で地平線側の世界Yが下がる分も、雲底側の影の積分へ含める。
-    const float shadowPlane = cloudBottom - 500;
-    constants_.formationLayer = {cloudBottom, cloudTop, shadowPlane, 0};
+    const float shadowPlane = shadowBottom - 500;
+    constants_.formationLayer = {cloudBottom, cloudTop, shadowPlane, shadowTop};
     const bool formationChanged =
         oldFormationControls.x != constants_.formationControls.x
         || oldFormationControls.y != constants_.formationControls.y
@@ -1081,6 +1334,8 @@ void Renderer::updateConstants()
     XMMATRIX projection =
         XMMatrixPerspectiveFovLH(XMConvertToRadians(62), static_cast<float>(width_) / height_,
                                  world_ ? 150000.0f : 10.0f, world_ ? 0.15f : 150000.0f);
+    constants_.sceneDepthProjection = {XMVectorGetZ(projection.r[2]), XMVectorGetZ(projection.r[3]),
+                                       0, 0};
     XMMATRIX vp = view * projection;
     XMStoreFloat4x4(&constants_.viewProjection, XMMatrixTranspose(vp));
     XMStoreFloat4x4(&constants_.inverseViewProjection,
@@ -1110,6 +1365,7 @@ void Renderer::updateConstants()
                        static_cast<float>(weather_.time() * 0.6),
                        static_cast<float>(frameNumber_ % 1024)};
     updateNearClouds();
+    constants_.formationLayer.w = std::max(constants_.formationLayer.w, constants_.formationLayer.y);
     float mx = camera_.position.x - previousCamera_.x, my = camera_.position.y - previousCamera_.y,
           mz = camera_.position.z - previousCamera_.z;
     float motion = std::sqrt(mx * mx + my * my + mz * mz);
@@ -1163,11 +1419,19 @@ void Renderer::updateConstants()
     int q = static_cast<int>(options_.quality);
     constants_.renderSize = {static_cast<float>(cloudWidth_), static_cast<float>(cloudHeight_),
                              static_cast<float>(samples[q]), static_cast<float>(lightSamples[q])};
+    const bool stableSampling = options_.quality == Quality::Low || options_.quality == Quality::Medium;
+    const bool shareLighting = !options_.fullCloudLighting && options_.quality != Quality::Ultra;
+    const bool mergeLightSteps = options_.quality == Quality::Low && shareLighting;
+    // 同じチェッカー画素が更新されるたびに異なるサブピクセルを引く。
+    const uint64_t cycle = options_.checkerboard ? (fourPhase ? 4u : 2u) : 1u;
+    const float taaPhase = options_.cloudTaa
+                               ? static_cast<float>(1u + ((frameNumber_ / cycle) & 7u)) : 0.0f;
+    constants_.cloudSampling = {static_cast<float>(detailNoiseSize_), stableSampling ? 1.0f : 0.0f,
+                                mergeLightSteps ? 1.0f : 0.0f, taaPhase};
     constants_.controls = {static_cast<float>(options_.debugView), flash,
                            options_.shadows ? 1.0f : 0.0f, options_.clouds ? 1.0f : 0.0f};
     // 雲影は最大4フレーム共有する。風による移動はサンプル時に毎フレーム補正する。
     // 雲形・太陽・地図範囲が変わったときと、時間が大きく進んだときは即座に更新する。
-    const bool shareLighting = !options_.fullCloudLighting && options_.quality != Quality::Ultra;
     const uint64_t shadowInterval = shareLighting ? 4 : 1;
     const float controlKey = constants_.controls.z + constants_.controls.w * 2;
     updateShadow_ =
@@ -1223,22 +1487,33 @@ void Renderer::updateConstants()
         if (localShadows)
         {
             center = XMVectorSet(x, y, z, 1);
-            XMVECTOR up =
-                std::abs(sun.y) > 0.98f ? XMVectorSet(0, 0, 1, 0) : XMVectorSet(0, 1, 0, 0);
-            XMMATRIX nearView = XMMatrixLookAtLH(center + light * 750, center, up);
             constexpr float spanNear = 384;
-            // Snap the shadow projection to the same world-space texels during walking.
-            XMVECTOR origin = XMVector3TransformCoord(XMVectorZero(), nearView);
-            constexpr float texelNear = spanNear / 2048;
-            nearView.r[3] += XMVectorSet(
-                std::round(XMVectorGetX(origin) / texelNear) * texelNear - XMVectorGetX(origin),
-                std::round(XMVectorGetY(origin) / texelNear) * texelNear - XMVectorGetY(origin), 0,
-                0);
+            const XMMATRIX nearView = snappedLocalLightView(center, light, 750, spanNear / 2048);
             XMStoreFloat4x4(
                 &constants_.nearLightViewProjection,
                 XMMatrixTranspose(nearView * XMMatrixOrthographicLH(spanNear, spanNear, 10, 1600)));
         }
     }
+    bool grassShadowActive = false;
+    if (grassShadowView_ && world_->grass() && sun.y > 0.02f)
+    {
+        const float x = camera_.position.x, z = camera_.position.z;
+        const float ground = world_->ground(x, z);
+        grassShadowActive = camera_.position.y - ground < 32;
+        if (grassShadowActive)
+        {
+            center = XMVectorSet(x, ground, z, 1);
+            const XMMATRIX grassView =
+                snappedLocalLightView(center, light, 70, grassShadowSpan / grassShadowSize);
+            XMStoreFloat4x4(&constants_.grassLightViewProjection,
+                            XMMatrixTranspose(grassView * XMMatrixOrthographicLH(
+                                grassShadowSpan, grassShadowSpan, 4, 144)));
+        }
+    }
+    constants_.groundLighting = {options_.ssao ? 1.0f : 0.0f,
+                                 options_.screenShadows && sun.y > 0.02f ? 1.0f : 0.0f,
+                                 grassShadowActive ? 1.0f : 0.0f,
+                                 0.5f * height_ * XMVectorGetY(projection.r[1])};
     constants_.worldRendering = {world_ ? 1.0f : 0.0f, localShadows ? 1.0f : 0.0f,
                                  options_.timeOfDay >= 0 ? 1.0f : 0.0f, 0};
     updateCloudOcclusion(shareLighting, previousSun);
@@ -1253,9 +1528,10 @@ void Renderer::updateConstants()
     context_->CSSetConstantBuffers(0, 1, &cb);
     ID3D11SamplerState *samplers[] = {linearClamp_.Get(), linearWrap_.Get(), shadowSampler_.Get()};
     context_->PSSetSamplers(0, 3, samplers);
-    ID3D11SamplerState *terrainSampler = terrainSampler_.Get();
-    context_->PSSetSamplers(8, 1, &terrainSampler);
+    ID3D11SamplerState *anisotropicWrap = anisotropicWrap_.Get();
+    context_->PSSetSamplers(8, 1, &anisotropicWrap);
     context_->CSSetSamplers(0, 3, samplers);
+    context_->CSSetSamplers(8, 1, &anisotropicWrap);
     previousVP_ = constants_.viewProjection;
     previousWind_ = drift;
     previousCamera_ = camera_.position;
@@ -1265,6 +1541,17 @@ void Renderer::updateConstants()
     previousLayer_ = constants_.cloudLayer;
     lastElevation_ = options_.elevation;
     lastLightning_ = flash;
+}
+
+void Renderer::setGeometryProjection(const XMFLOAT4X4 &projection)
+{
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    require(context_->Map(passBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
+            "Map geometry pass");
+    std::memcpy(mapped.pData, &projection, sizeof(projection));
+    context_->Unmap(passBuffer_.Get(), 0);
+    ID3D11Buffer *pass = passBuffer_.Get();
+    context_->VSSetConstantBuffers(2, 1, &pass);
 }
 
 void Renderer::drawGeometry(bool shadow, bool localPass)
@@ -1284,13 +1571,7 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
     const XMFLOAT4X4 &projection = localPass ? constants_.nearLightViewProjection
                                    : shadow  ? constants_.lightViewProjection
                                              : constants_.viewProjection;
-    D3D11_MAPPED_SUBRESOURCE mapped{};
-    require(context_->Map(passBuffer_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped),
-            "Map geometry pass");
-    std::memcpy(mapped.pData, &projection, sizeof(projection));
-    context_->Unmap(passBuffer_.Get(), 0);
-    ID3D11Buffer *pass = passBuffer_.Get();
-    context_->VSSetConstantBuffers(2, 1, &pass);
+    setGeometryProjection(projection);
     if (shadow)
     {
         ID3D11DepthStencilView *depth = localPass ? nearDepthView_.Get() : terrainDepthView_.Get();
@@ -1344,18 +1625,36 @@ void Renderer::drawGeometry(bool shadow, bool localPass)
                                   0);
         mesh.draw(context_.Get(), model_.instance.Get(), 1, shadow);
     }
-    if (world_ && world_->grass() && (localPass || !shadow))
+    if (!shadow && world_ && world_->grass())
     {
-        context_->RSSetState(shadow ? shadowRaster_.Get() : raster_.Get());
+        context_->RSSetState(raster_.Get());
         context_->IASetInputLayout(nullptr);
         context_->VSSetShader(shaders_.grassVS.Get(), nullptr, 0);
-        context_->PSSetShader(shadow ? nullptr : shaders_.grassPS.Get(), nullptr, 0);
-        world_->grass()->draw(context_.Get(), shadow);
+        context_->PSSetShader(shaders_.grassPS.Get(), nullptr, 0);
+        world_->grass()->draw(context_.Get(), false);
     }
     ID3D11ShaderResourceView *emptyMaterials[12]{};
     context_->PSSetShaderResources(32, 12, emptyMaterials);
     context_->OMSetRenderTargets(0, nullptr, nullptr);
     context_->PSSetShaderResources(0, shaderResourceCount, empty.data());
+}
+
+void Renderer::drawGrassShadow()
+{
+    const D3D11_VIEWPORT viewport{0, 0, static_cast<float>(grassShadowSize),
+                                   static_cast<float>(grassShadowSize), 0, 1};
+    context_->RSSetViewports(1, &viewport);
+    context_->RSSetState(raster_.Get());
+    context_->OMSetDepthStencilState(depthOn_.Get(), 0);
+    context_->ClearDepthStencilView(grassShadowView_.Get(), D3D11_CLEAR_DEPTH, 1, 0);
+    context_->OMSetRenderTargets(0, nullptr, grassShadowView_.Get());
+    context_->IASetInputLayout(nullptr);
+    context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context_->VSSetShader(shaders_.grassShadowVS.Get(), nullptr, 0);
+    context_->PSSetShader(nullptr, nullptr, 0);
+    setGeometryProjection(constants_.grassLightViewProjection);
+    world_->grass()->draw(context_.Get(), true);
+    context_->OMSetRenderTargets(0, nullptr, nullptr);
 }
 
 void Renderer::drawRain()
@@ -1550,8 +1849,15 @@ void Renderer::frame(double dt, bool focused)
     drawGeometry(true);
     if (constants_.worldRendering.y > 0.5f)
         drawGeometry(true, true);
+    if (constants_.groundLighting.z > 0.5f)
+        drawGrassShadow();
     drawGeometry(false);
     stamp(2);
+
+    if (constants_.groundLighting.x + constants_.groundLighting.y > 0.5f)
+        compute(shaders_.screenLightingCS.Get(), (width_ + 15) / 16, (height_ + 15) / 16, 1,
+                {screenVisibility_.uav.Get()}, resources());
+    stamp(3);
 
     // 3. 背景の空 → 視線方向の雲レイマーチ。
     // 背景の空と、後段で地表と霧に使う環境光を準備する。
@@ -1560,7 +1866,7 @@ void Renderer::frame(double dt, bool focused)
     compute(shaders_.skyCS.Get(), 40, 23, 1, {sky_.uav.Get()}, input);
     input[25] = nullptr;
     compute(shaders_.skyAmbientCS.Get(), 1, 1, 1, {skyAmbient_.uav.Get()}, input);
-    stamp(3);
+    stamp(4);
     if (constants_.nearCloudParams.x > 0)
     {
         compute(cloudShaders.nearCloudCS.Get(), (nearCloudWidth + 3) / 4,
@@ -1605,7 +1911,7 @@ void Renderer::frame(double dt, bool focused)
         if (checkerActive_)
             ++checkerFrames_;
     }
-    stamp(4);
+    stamp(5);
 
     // 4. 風とカメラ移動を補正して履歴を再投影し、未計算画素を再構成する。
     if (!fullCloudRefresh_)
@@ -1634,18 +1940,41 @@ void Renderer::frame(double dt, bool focused)
                     {history_[write].uav.Get(), historyMeta_[write].uav.Get()}, input);
         }
     }
+    // チェッカーの空画素を修復した後で雲だけをアンチエイリアスする。
+    // 古い再構成バッファはここで読み終わる。その領域に解決結果を書いて交換すると、
+    // 次フレームのチェッカー履歴と表示用TAA履歴を独立に保てる。
+    if (options_.cloudTaa)
+    {
+        input = resources();
+        input[8] = history_[write].srv.Get();
+        input[9] = historyMeta_[write].srv.Get();
+        input[10] = antialiasedCloud_.srv.Get();
+        input[11] = antialiasedMeta_.srv.Get();
+        compute(shaders_.cloudAntialiasCS.Get(), (cloudWidth_ + 7) / 8, (cloudHeight_ + 7) / 8, 1,
+                {history_[historyIndex_].uav.Get(), historyMeta_[historyIndex_].uav.Get()}, input);
+        std::swap(antialiasedCloud_, history_[historyIndex_]);
+        std::swap(antialiasedMeta_, historyMeta_[historyIndex_]);
+    }
     // 補完済みの雲の RGB・透過率・代表距離を、以降の大気計算と最終合成で使う。
     historyIndex_ = write;
-    stamp(5);
+    stamp(6);
 
-    // 5. 雲の代表距離・地形深度までの大気散乱と、影を受ける地表霧。
+    // 5. 雲と背景それぞれの距離に応じた大気散乱と、影を受ける地表霧。
     // 縦横 1/4 解像度で出力し、CompositePS が地形との深度差を見ながら補間する。
-    input = resources();
+    auto display = resources();
+    if (options_.cloudTaa)
+    {
+        display[8] = antialiasedCloud_.srv.Get();
+        display[9] = antialiasedMeta_.srv.Get();
+    }
+    input = display;
     input[12] = input[13] = input[14] = nullptr;
     input[28] = nearCloudMoment_.srv.Get();
     compute(shaders_.aerialCS.Get(), (aerialWidth_ + 7) / 8, (aerialHeight_ + 7) / 8, 1,
-            {aerialScatter_.uav.Get(), aerialTransmittance_.uav.Get(), fog_.uav.Get()}, input);
-    stamp(6);
+            {aerialScatter_.uav.Get(), aerialTransmittance_.uav.Get(), fog_.uav.Get(),
+             cloudAerialScatter_.uav.Get(), cloudAerialTransmittance_.uav.Get()},
+            input);
+    stamp(7);
 
     // 6. 奥行きで遮蔽される雨粒をHDRバッファへ描き、すべての照明と一緒に合成する。
     drawRain();
@@ -1661,9 +1990,13 @@ void Renderer::frame(double dt, bool focused)
     context_->VSSetShader(shaders_.fullscreenVS.Get(), nullptr, 0);
     // 全画面で地表・空・雲・霧・雨を線形色のまま合成し、最後に表示用へ変換する。
     context_->PSSetShader(shaders_.compositePS.Get(), nullptr, 0);
-    input = resources();
+    input = display;
     // 生の雲は合成パスでだけ読む。CloudCSのUAVと同時に束縛しない。
     input[17] = fullCloudRefresh_ ? history_[historyIndex_].srv.Get() : cloudRaw_.srv.Get();
+    input[29] = screenVisibility_.srv.Get();
+    input[30] = grassShadowSRV_.Get();
+    input[32] = cloudAerialScatter_.srv.Get();
+    input[33] = cloudAerialTransmittance_.srv.Get();
     context_->PSSetShaderResources(0, shaderResourceCount, input.data());
     context_->Draw(3, 0);
     if (filterEdges)
@@ -1685,7 +2018,7 @@ void Renderer::frame(double dt, bool focused)
     ComPtr<ID3D11Texture2D> back;
     require(swapchain_->GetBuffer(0, IID_PPV_ARGS(&back)), "Present buffer");
     context_->CopyResource(back.Get(), finalColor_.texture.Get());
-    stamp(7);
+    stamp(8);
     endTiming();
     if (!options_.headless)
         require(swapchain_->Present(options_.vsync ? 1 : 0, 0), "Present");
@@ -1714,7 +2047,7 @@ void Renderer::startTiming()
                == S_FALSE)
             Sleep(1);
         require(status, "GPU timer resolve");
-        std::array<uint64_t, 8> times{};
+        std::array<uint64_t, 9> times{};
         bool ready = true;
         for (size_t i = 0; i < times.size(); i++)
             if (context_->GetData(slot.stamps[i].Get(), &times[i], sizeof(uint64_t),
@@ -1764,76 +2097,8 @@ void Renderer::drawUi()
     }
     else
     {
-        ui_.rect(24, 24, 298, 467, 0xda171d19);
-        ui_.rect(24, 24, 298, 3, 0xffa5dbb8);
-        ui_.text(44, 41, "C I R R U S", 0xffe9fff1, 1.18f);
-        if (ui_.button(44, 77, 122, 28, "DEMO [F6]", weather_.demo(), 0.68f))
-        {
-            weather_.setDemo(!weather_.demo());
-            options_.debugView = 0;
-        }
-        if (ui_.button(176, 77, 122, 28, "FLASH [L]", false, 0.68f))
-            weather_.triggerLightning();
-        char line[256];
-        double gpu = 0;
-        for (double ms : gpuMs_)
-            gpu += ms;
-        std::snprintf(line, sizeof(line), "FPS %5.1f | GPU %5.2f ms",
-                      cpuMs_ > 0 ? 1000 / cpuMs_ : 0, gpu);
-        ui_.text(44, 112, line, 0xffc5d2c9, 0.73f);
-        std::snprintf(line, sizeof(line), "Frame %4.2f | Cloud %4.2f ms", cpuMs_, gpuMs_[3]);
-        ui_.text(44, 138, line, 0xff9bafa4, 0.73f);
-        std::snprintf(line, sizeof(line), "RAIN %3.0f%% | WET %3.0f%%",
-                      weather_.state().precipitation * 100, weather_.wetness() * 100);
-        ui_.text(44, 160, line, 0xff9bafa4, 0.66f);
-        std::snprintf(line, sizeof(line), "%s  %3.0f%%", weatherName(weather_.target()).data(),
-                      weather_.transitionProgress() * 100);
-        ui_.text(44, 178, line, 0xffc5e3cf, 0.80f);
-        if (options_.timeOfDay >= 0)
-        {
-            const int minutes = static_cast<int>(options_.timeOfDay * 60) % 1440;
-            std::snprintf(line, sizeof(line), "SOLAR TIME %02d:%02d", minutes / 60, minutes % 60);
-            if (ui_.slider(44, 214, 254, line, options_.timeOfDay, 0, 23.999f))
-                historyValid_ = false;
-            if (ui_.button(44, 275, 130, 30, timeLapse_ ? "STOP TIME [T]" : "RUN TIME [T]",
-                           timeLapse_, 0.66f))
-                timeLapse_ = !timeLapse_;
-            if (world_ && options_.cameraPath.empty()
-                && ui_.button(179, 275, 119, 30, walking_ ? "TAKE OFF [G]" : "LAND [G]", false,
-                              0.66f))
-                key('G');
-        }
-        else
-        {
-            std::snprintf(line, sizeof(line), "SUN ELEVATION  %.1f deg", options_.elevation);
-            if (ui_.slider(44, 214, 254, line, options_.elevation, -14, 85))
-                historyValid_ = false;
-            std::snprintf(line, sizeof(line), "SUN AZIMUTH    %.1f deg", options_.azimuth);
-            if (ui_.slider(44, 273, 254, line, options_.azimuth, -180, 180))
-                historyValid_ = false;
-        }
-        std::snprintf(line, sizeof(line), "EXPOSURE       %.2f", options_.exposure);
-        ui_.slider(44, 332, 254, line, options_.exposure, 0.2f, 3.0f);
-        if (ui_.button(44, 397, 80, 34, qualityNames[static_cast<int>(options_.quality)], false,
-                       0.7f))
-        {
-            options_.quality = static_cast<Quality>((static_cast<int>(options_.quality) + 1) % 4);
-            makeTargets();
-        }
-        if (ui_.button(132, 397, 64, 34, "AUTO", weather_.automatic(), 0.7f))
-            weather_.setAutomatic(!weather_.automatic());
-        const char *checkerLabel = fastClassic() ? "CB4 [F7]" : "CB [F7]";
-        if (ui_.button(204, 397, 94, 34, checkerLabel, options_.checkerboard, 0.7f))
-        {
-            options_.checkerboard = !options_.checkerboard;
-            makeTargets();
-        }
-        const char *styleLabel =
-            options_.cloudStyle == CloudStyle::Classic ? "CLASSIC [F4]" : "CUMULUS [F4]";
-        if (ui_.button(44, 447, 122, 32, styleLabel, false, 0.7f))
-            key(VK_F4);
-        if (ui_.button(176, 447, 122, 32, "TEXTURES [F3]", false, 0.7f))
-            options_.textureViewer = true;
+        if (!cloudSettingsOpen_ || width_ >= 700)
+            drawMainControls();
         if (width_ >= 920)
         {
             constexpr std::array labels{"CLEAR", "PARTLY", "OVERCAST", "RAIN", "STORM"};
@@ -1843,29 +2108,10 @@ void Renderer::drawUi()
                                static_cast<int>(weather_.target()) == i))
                     weather_.transitionTo(static_cast<WeatherKind>(i));
         }
-        if (width_ >= 1000)
-        {
-            const float x = static_cast<float>(width_) - 322;
-            ui_.rect(x, 82, 298, 332, 0xda171d19);
-            ui_.text(x + 18, 97, "CLOUD FORMATIONS [F8]", 0xffe9fff1, 0.78f);
-            constexpr std::array modes{"none", "towers", "vortex", "mixed"};
-            constexpr std::array labels{"OFF", "TOWERS", "VORTEX", "MIXED"};
-            for (int i = 0; i < 4; ++i)
-                if (ui_.button(x + 18 + (i % 2) * 134, 128.0f + (i / 2) * 37.0f, 126, 29, labels[i],
-                               options_.formationMode == modes[i], 0.68f))
-                    setFormations(modes[i]);
-            std::snprintf(line, sizeof(line), "STRENGTH  %.2f", options_.formationStrength);
-            ui_.slider(x + 18, 207, 260, line, options_.formationStrength, 0, 2);
-            std::snprintf(line, sizeof(line), "SIZE      %.2f", options_.formationScale);
-            ui_.slider(x + 18, 252, 260, line, options_.formationScale, 0.5f, 1.6f);
-            std::snprintf(line, sizeof(line), "SPIN      %.2f", options_.formationSpeed);
-            ui_.slider(x + 18, 297, 260, line, options_.formationSpeed, -3, 3);
-            if (ui_.button(x + 18, 365, 260, 29, "FOCUS FORMATIONS [F9]", false, 0.67f))
-            {
-                options_.camera = options_.formationMode == "vortex" ? "vortex" : "formations";
-                resetCamera();
-            }
-        }
+        if (cloudSettingsOpen_)
+            drawCloudSettings();
+        else if (width_ >= 1000)
+            drawFormationControls();
     }
     ui_.rect(24, static_cast<float>(height_) - 61, static_cast<float>(width_) - 48, 37, 0xc7171d19);
     const char *help =
@@ -1879,17 +2125,240 @@ void Renderer::drawUi()
         else
             help = "WASD Fly | E Up / Q Down | Shift Fast | RMB Look | F8 Formations | F9 Focus";
     }
+    if (cloudSettingsOpen_ && !options_.textureViewer && width_ < 700)
+        help = "WASD Move | RMB Look | F12 Save";
     ui_.text(38, static_cast<float>(height_) - 56, help, 0xffbdccc3, 0.72f);
     if (!status_.empty())
         ui_.text(38, static_cast<float>(height_) - 39, status_, 0xffc4dfca, 0.73f);
-    if (paused_)
+    const bool statusHasSpace = !cloudSettingsOpen_ || width_ >= 1000;
+    if (paused_ && statusHasSpace)
         ui_.text(350, weather_.demo() ? 108.0f : 80.0f, "PAUSED", 0xffd3e9cc, 0.85f);
-    if (weather_.demo() && !options_.textureViewer)
+    if (weather_.demo() && !options_.textureViewer && statusHasSpace)
     {
         char line[128];
         std::snprintf(line, sizeof(line), "WEATHER DEMO  %04.1f / 48s", weather_.demoTime());
         ui_.text(350, 78, line, 0xffc5e3cf, 0.82f);
     }
+}
+
+void Renderer::drawFormationControls()
+{
+    constexpr float panelWidth = 324, panelHeight = 359, top = 82, margin = 24;
+    const float scale = std::min(1.0f, std::max(1.0f, height_ - top - 73) / panelHeight);
+    const float x = width_ - margin - panelWidth * scale;
+    ui_.setTransform(x, top, scale);
+    ui_.rect(0, 0, panelWidth, panelHeight, 0xe51a231e);
+    ui_.rect(0, 0, panelWidth, 3, 0xffa5dbb8);
+    ui_.text(18, 12, "CLOUD FORMATIONS [F8]", 0xffe9fff1, 0.79f);
+    for (std::size_t i = 0; i < formationModes.size(); ++i)
+    {
+        const auto &mode = formationModes[i];
+        const float column = static_cast<float>(i % 3);
+        const float row = static_cast<float>(i / 3);
+        if (ui_.button(18 + column * 98, 41 + row * 31, 92, 26, mode.label,
+                       std::string_view(options_.formationMode) == mode.name, 0.61f))
+            setFormations(mode.name);
+    }
+
+    char line[48];
+    std::snprintf(line, sizeof(line), "STRENGTH      %.2f", options_.formationStrength);
+    ui_.slider(18, 174, 288, line, options_.formationStrength, 0, 2);
+    std::snprintf(line, sizeof(line), "SIZE          %.2f", options_.formationScale);
+    ui_.slider(18, 219, 288, line, options_.formationScale, 0.5f, 1.6f);
+    std::snprintf(line, sizeof(line), "VORTEX SPIN   %.2f", options_.formationSpeed);
+    ui_.slider(18, 264, 288, line, options_.formationSpeed, -3, 3);
+    if (ui_.button(18, 312, 288, 30, "FOCUS FORMATIONS [F9]", false, 0.69f))
+        focusFormations();
+    ui_.setTransform(0, 0, 1);
+}
+
+void Renderer::drawMainControls()
+{
+    ui_.rect(24, 24, 298, 467, 0xda171d19);
+    ui_.rect(24, 24, 298, 3, 0xffa5dbb8);
+    ui_.text(44, 41, "C I R R U S", 0xffe9fff1, 0.98f);
+    if (ui_.button(182, 39, 116, 30, "CLOUDS [F10]", cloudSettingsOpen_, 0.66f))
+        key(VK_F10);
+    if (ui_.button(44, 77, 122, 28, "DEMO [F6]", weather_.demo(), 0.68f))
+    {
+        weather_.setDemo(!weather_.demo());
+        options_.debugView = 0;
+    }
+    if (ui_.button(176, 77, 122, 28, "FLASH [L]", false, 0.68f))
+        weather_.triggerLightning();
+    char line[256];
+    double gpu = 0;
+    for (double ms : gpuMs_)
+        gpu += ms;
+    std::snprintf(line, sizeof(line), "FPS %5.1f | GPU %5.2f ms",
+                  cpuMs_ > 0 ? 1000 / cpuMs_ : 0, gpu);
+    ui_.text(44, 112, line, 0xffc5d2c9, 0.73f);
+    std::snprintf(line, sizeof(line), "Frame %4.2f | Cloud %4.2f ms", cpuMs_, gpuMs_[4]);
+    ui_.text(44, 138, line, 0xff9bafa4, 0.73f);
+    std::snprintf(line, sizeof(line), "RAIN %3.0f%% | WET %3.0f%%",
+                  weather_.state().precipitation * 100, weather_.wetness() * 100);
+    ui_.text(44, 160, line, 0xff9bafa4, 0.66f);
+    std::snprintf(line, sizeof(line), "%s  %3.0f%%", weatherName(weather_.target()).data(),
+                  weather_.transitionProgress() * 100);
+    ui_.text(44, 178, line, 0xffc5e3cf, 0.80f);
+    if (options_.timeOfDay >= 0)
+    {
+        const int minutes = static_cast<int>(options_.timeOfDay * 60) % 1440;
+        std::snprintf(line, sizeof(line), "SOLAR TIME %02d:%02d", minutes / 60, minutes % 60);
+        if (ui_.slider(44, 214, 254, line, options_.timeOfDay, 0, 23.999f))
+            historyValid_ = false;
+        if (ui_.button(44, 275, 130, 30, timeLapse_ ? "STOP TIME [T]" : "RUN TIME [T]",
+                       timeLapse_, 0.66f))
+            timeLapse_ = !timeLapse_;
+        if (world_ && options_.cameraPath.empty()
+            && ui_.button(179, 275, 119, 30, walking_ ? "TAKE OFF [G]" : "LAND [G]", false,
+                          0.66f))
+            key('G');
+    }
+    else
+    {
+        std::snprintf(line, sizeof(line), "SUN ELEVATION  %.1f deg", options_.elevation);
+        if (ui_.slider(44, 214, 254, line, options_.elevation, -14, 85))
+            historyValid_ = false;
+        std::snprintf(line, sizeof(line), "SUN AZIMUTH    %.1f deg", options_.azimuth);
+        if (ui_.slider(44, 273, 254, line, options_.azimuth, -180, 180))
+            historyValid_ = false;
+    }
+    std::snprintf(line, sizeof(line), "EXPOSURE       %.2f", options_.exposure);
+    ui_.slider(44, 332, 254, line, options_.exposure, 0.2f, 3.0f);
+    if (ui_.button(44, 397, 80, 34, qualityNames[static_cast<int>(options_.quality)], false,
+                   0.7f))
+    {
+        options_.quality = static_cast<Quality>((static_cast<int>(options_.quality) + 1) % 4);
+        makeTargets();
+    }
+    if (ui_.button(132, 397, 64, 34, "AUTO", weather_.automatic(), 0.7f))
+        weather_.setAutomatic(!weather_.automatic());
+    const char *checkerLabel = fastClassic() ? "CB4 [F7]" : "CB [F7]";
+    if (ui_.button(204, 397, 94, 34, checkerLabel, options_.checkerboard, 0.7f))
+    {
+        options_.checkerboard = !options_.checkerboard;
+        makeTargets();
+    }
+    const char *styleLabel =
+        options_.cloudStyle == CloudStyle::Classic ? "CLASSIC [F4]" : "CUMULUS [F4]";
+    if (ui_.button(44, 447, 122, 32, styleLabel, false, 0.7f))
+        key(VK_F4);
+    if (ui_.button(176, 447, 122, 32, "TEXTURES [F3]", false, 0.7f))
+        options_.textureViewer = true;
+}
+
+void Renderer::drawCloudSettings()
+{
+    constexpr float panelWidth = 324, panelHeight = 401;
+    const float margin = std::min(24.0f, width_ * 0.1f);
+    const float top = width_ >= 920 ? 82.0f : margin;
+    const float scale = std::min({1.0f, (width_ - 2 * margin) / panelWidth,
+                                  std::max(1.0f, height_ - top - 73) / panelHeight});
+    const float x = width_ >= 700 ? width_ - margin - panelWidth * scale : margin;
+    ui_.setTransform(x, top, scale);
+    ui_.rect(0, 0, panelWidth, panelHeight, 0xf21a231e);
+    ui_.rect(0, 0, panelWidth, 3, 0xffa5dbb8);
+    if (ui_.button(172, 13, 68, 28, textureCloudPage_ ? "BASE" : "LAYERS",
+                   textureCloudPage_, 0.65f))
+        textureCloudPage_ = !textureCloudPage_;
+    if (ui_.button(246, 13, 60, 28, "CLOSE", false, 0.65f))
+        key(VK_F10);
+    ui_.text(18, 15, textureCloudPage_ ? "CLOUD LAYERS" : "CLOUD SETTINGS", 0xffe9fff1, 0.87f);
+
+    bool changed = false;
+    if (textureCloudPage_)
+        changed = drawTextureCloudControls();
+    else
+        changed = drawBaseCloudControls();
+    ui_.setTransform(0, 0, 1);
+    if (changed)
+    {
+        // チェッカーボードの履歴と照明キャッシュを捨て、その雲形で影も描き直す。
+        historyValid_ = false;
+        shadowValid_ = false;
+        cloudOcclusionSource_.region.w = 0;
+    }
+}
+
+bool Renderer::drawBaseCloudControls()
+{
+    bool changed = false;
+    if (ui_.button(18, 357, 288, 28, "RESET TO WEATHER", false, 0.72f)
+        && cloudOverrides_.active())
+    {
+        cloudOverrides_ = {};
+        changed = true;
+    }
+
+    const auto &weather = weather_.state();
+    float row = 52;
+    const auto slider = [&](const char *label, std::optional<float> &setting,
+                            float fallback, float minimum, float maximum, const char *format,
+                            float displayMultiplier = 1.0f)
+    {
+        float value = setting.value_or(fallback);
+        if (ui_.slider(18, row, 288, label, value, minimum, maximum))
+        {
+            setting = value;
+            changed = true;
+        }
+        char readout[32];
+        std::snprintf(readout, sizeof(readout), format, value * displayMultiplier);
+        constexpr float textScale = 0.75f;
+        const float valueWidth = static_cast<float>(std::strlen(readout)) * 12.2f * textScale;
+        ui_.text(306 - valueWidth, row, readout, setting ? 0xffa9f3c1 : 0xffd6e5db, textScale);
+        row += 43;
+    };
+    slider("COVERAGE", cloudOverrides_.coverage, weather.coverage, 0, 1, "%.0f%%", 100);
+    slider("DENSITY", cloudOverrides_.density, weather.density, 0, 2.5f, "%.2fx");
+    slider("BASE ALTITUDE", cloudOverrides_.base, weather.cloudBase, 300, 8000, "%.0f m");
+    slider("LAYER THICKNESS", cloudOverrides_.thickness, weather.cloudThickness, 200, 8000, "%.0f m");
+    slider("VERTICAL SHAPE", cloudOverrides_.type, weather.cloudType, 0, 1, "%.0f%%", 100);
+    slider("HORIZONTAL SIZE", cloudOverrides_.scale, 1, 0.5f, 3, "%.2fx");
+    slider("EDGE DETAIL", cloudOverrides_.edgeDetail, 1, 0, 2, "%.2fx");
+    return changed;
+}
+
+bool Renderer::drawTextureCloudControls()
+{
+    bool changed = false;
+    if (ui_.button(18, 46, 137, 29, options_.textureCloudLayers ? "LAYERS ON" : "LAYERS OFF",
+                   options_.textureCloudLayers, 0.72f))
+    {
+        options_.textureCloudLayers = !options_.textureCloudLayers;
+        if (!options_.textureCloudLayers)
+            soloTextureCloud_ = -1;
+        changed = true;
+    }
+    if (ui_.button(161, 46, 145, 29, "RESET LAYERS", false, 0.72f))
+    {
+        for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+            textureCloudLayers_[i] = textureCloudTypes_[i].defaults;
+        soloTextureCloud_ = -1;
+        options_.textureCloudLayers = true;
+        changed = true;
+    }
+
+    for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+    {
+        auto &layer = textureCloudLayers_[i];
+        const float y = 84 + static_cast<float>(i) * 102;
+        ui_.text(18, y, textureCloudTypes_[i].label, 0xffdef2e5, 0.76f);
+        const bool solo = soloTextureCloud_ == static_cast<int>(i);
+        if (ui_.button(238, y - 2, 68, 21, solo ? "ALL" : "SOLO", solo, 0.62f))
+        {
+            soloTextureCloud_ = solo ? -1 : static_cast<int>(i);
+            options_.textureCloudLayers = true;
+            changed = true;
+        }
+        char line[48];
+        std::snprintf(line, sizeof(line), "ALTITUDE        %.0f m", layer.altitude);
+        changed |= ui_.slider(18, y + 18, 288, line, layer.altitude, 450, 16000);
+        std::snprintf(line, sizeof(line), "AMOUNT          %.2fx", layer.amount);
+        changed |= ui_.slider(18, y + 61, 288, line, layer.amount, 0, 1.8f);
+    }
+    return changed;
 }
 
 void Renderer::drawTextureInspector()
@@ -1943,6 +2412,32 @@ void Renderer::drawTextureInspector()
         case DebugView::CloudMap:
             textureWidth = textureHeight = 512;
             break;
+        case DebugView::CloudRegionType:
+        case DebugView::CloudRegionCoverage:
+        {
+            const auto &map = view == DebugView::CloudRegionType ? cloudTypeMap_ : cloudCoverageMap_;
+            textureWidth = static_cast<int>(map.size.x);
+            textureHeight = static_cast<int>(map.size.y);
+            break;
+        }
+        case DebugView::CloudVeilMask:
+        case DebugView::CirrusStreakMask:
+        case DebugView::CloudScalesMask:
+        {
+            const size_t index = static_cast<size_t>(view) - static_cast<size_t>(DebugView::CloudVeilMask);
+            if (index < textureCloudTypes_.size())
+            {
+                ComPtr<ID3D11Resource> resource;
+                textureCloudTypes_[index].texture->GetResource(&resource);
+                ComPtr<ID3D11Texture2D> image;
+                D3D11_TEXTURE2D_DESC description{};
+                if (SUCCEEDED(resource.As(&image)))
+                    image->GetDesc(&description);
+                textureWidth = static_cast<int>(description.Width);
+                textureHeight = static_cast<int>(description.Height);
+            }
+            break;
+        }
         case DebugView::CloudHeightLut:
             textureWidth = 1;
             textureHeight = 128;
@@ -1950,6 +2445,14 @@ void Renderer::drawTextureInspector()
         case DebugView::TerrainShadow:
         case DebugView::NearShadow:
             textureWidth = textureHeight = 2048;
+            break;
+        case DebugView::Ssao:
+        case DebugView::ScreenShadow:
+            textureWidth = (width_ + 1) / 2;
+            textureHeight = (height_ + 1) / 2;
+            break;
+        case DebugView::GrassShadow:
+            textureWidth = textureHeight = grassShadowSize;
             break;
         case DebugView::Sky:
             textureWidth = 320;
@@ -2122,6 +2625,32 @@ void Renderer::resetCamera()
     historyValid_ = false;
 }
 
+void Renderer::focusFormations()
+{
+    options_.camera = options_.formationMode == "vortex" ? "vortex" : "formations";
+    resetCamera();
+    if (formations_.count == 0
+        || (options_.formationMode != "custom"
+            && (formations_.count != 1 || formations_.items[0].kind < 2)))
+        return;
+
+    // 単体プリセットや配置ファイルでは、最初の領域を斜めから見渡せる場所に移動する。
+    const auto &f = formations_.items[0];
+    const auto wind = weather_.wind();
+    const float targetX = f.x + static_cast<float>(wind.x);
+    const float targetZ = f.z + static_cast<float>(wind.z);
+    const float targetY = f.base + f.height * options_.formationScale * 0.55f;
+    const float distance = std::max(f.radius * 2.75f, f.height * 1.30f) * options_.formationScale;
+    camera_.position = {targetX - distance * 0.30f, targetY + distance * 0.17f,
+                        targetZ - distance};
+    const float ground = world_ ? world_->ground(camera_.position.x, camera_.position.z)
+                                : terrainHeight(camera_.position.x, camera_.position.z);
+    camera_.position.y = std::max(camera_.position.y, ground + 32);
+    const float dx = targetX - camera_.position.x, dz = targetZ - camera_.position.z;
+    camera_.yaw = std::atan2(dx, dz);
+    camera_.pitch = std::atan2(targetY - camera_.position.y, std::hypot(dx, dz));
+}
+
 void Renderer::key(UINT k)
 {
     if (k >= '1' && k <= '5')
@@ -2144,6 +2673,16 @@ void Renderer::key(UINT k)
         shadowValid_ = false;
         historyValid_ = false;
     }
+    if (k == VK_F10)
+    {
+        cloudSettingsOpen_ = !(cloudSettingsOpen_ && options_.ui && !options_.textureViewer);
+        if (cloudSettingsOpen_)
+        {
+            options_.ui = true;
+            options_.textureViewer = false;
+            options_.debugView = 0;
+        }
+    }
     if (k == VK_F12)
         captureRequested_ = true;
     if (k == VK_F7)
@@ -2153,18 +2692,14 @@ void Renderer::key(UINT k)
     }
     if (k == VK_F8)
     {
-        constexpr std::array modes{"none", "towers", "vortex", "mixed"};
-        auto found = std::find(modes.begin(), modes.end(), options_.formationMode);
-        const size_t next = found == modes.end()
-                                ? 0
-                                : (static_cast<size_t>(found - modes.begin()) + 1) % modes.size();
-        setFormations(modes[next]);
+        const auto found = std::find_if(formationModes.begin(), formationModes.end(),
+            [this](const FormationMode &mode) { return std::string_view(options_.formationMode) == mode.name; });
+        const std::size_t next = found == formationModes.end() ? 0
+            : (static_cast<std::size_t>(found - formationModes.begin()) + 1) % formationModes.size();
+        setFormations(formationModes[next].name);
     }
     if (k == VK_F9)
-    {
-        options_.camera = options_.formationMode == "vortex" ? "vortex" : "formations";
-        resetCamera();
-    }
+        focusFormations();
     if (k == 'P')
         paused_ = !paused_;
     if (k == 'T')
@@ -2338,23 +2873,27 @@ std::string Renderer::diagnostics()
         context_->Unmap(staging.Get(), 0);
         nearTransmittance.finish();
     }
-    Stats clouds = read(history_[historyIndex_].texture.Get(), 4, 3, true),
+    auto *displayCloud = options_.cloudTaa ? antialiasedCloud_.texture.Get() : history_[historyIndex_].texture.Get();
+    Stats clouds = read(displayCloud, 4, 3, true),
           shadow = read(shadowMap_.texture.Get(), 2, 0, true),
           shadowDepth = read(shadowMap_.texture.Get(), 2, 1, true);
-    Stats r = read(history_[historyIndex_].texture.Get(), 4, 0, true),
-          g = read(history_[historyIndex_].texture.Get(), 4, 1, true),
-          b = read(history_[historyIndex_].texture.Get(), 4, 2, true);
+    Stats r = read(displayCloud, 4, 0, true),
+          g = read(displayCloud, 4, 1, true),
+          b = read(displayCloud, 4, 2, true);
     Stats sky = read(sky_.texture.Get(), 4, 0, true), fog = read(fog_.texture.Get(), 4, 3, true);
     Stats rainR = read(rain_.texture.Get(), 4, 0, true),
           rainG = read(rain_.texture.Get(), 4, 1, true),
           rainB = read(rain_.texture.Get(), 4, 2, true),
           rainAlpha = read(rain_.texture.Get(), 4, 3, true);
-    uint64_t invalid = nearTransmittance.nonfinite + clouds.nonfinite + shadow.nonfinite
+    Stats screenAo = read(screenVisibility_.texture.Get(), 4, 0, true),
+          screenSun = read(screenVisibility_.texture.Get(), 4, 1, true);
+    uint64_t invalid = screenAo.nonfinite + screenSun.nonfinite + nearTransmittance.nonfinite
+                       + clouds.nonfinite + shadow.nonfinite
                        + shadowDepth.nonfinite + r.nonfinite + g.nonfinite + b.nonfinite
                        + sky.nonfinite + fog.nonfinite
                        + rainR.nonfinite + rainG.nonfinite + rainB.nonfinite + rainAlpha.nonfinite;
     if (invalid)
-        throw std::runtime_error("Non-finite GPU values in cloud/sky/fog/rain buffers");
+        throw std::runtime_error("Non-finite GPU values in lighting or atmosphere buffers");
     // 再構成マスクをGPUから読み、実際に再利用・修復した画素数を記録する。
     // ベンチマーク中は呼ばれないため、FPS測定にリードバックは含まれない。
     std::array<uint64_t, 4> reconstructionCounts{};
@@ -2418,6 +2957,12 @@ std::string Renderer::diagnostics()
             << ", \"near_shadow\": " << (constants_.worldRendering.y > 0.5f ? "true" : "false")
             << ", \"model_primitives\": " << model_.meshes.size() << "},\n";
     }
+    out << "  \"ground_lighting\": {\"ssao\": " << (constants_.groundLighting.x > 0.5f ? "true" : "false")
+        << ", \"screen_shadows\": " << (constants_.groundLighting.y > 0.5f ? "true" : "false")
+        << ", \"grass_shadows\": " << (constants_.groundLighting.z > 0.5f ? "true" : "false")
+        << ", \"ssao_min\": " << screenAo.minimum << ", \"ssao_mean\": " << screenAo.mean
+        << ", \"screen_shadow_min\": " << screenSun.minimum << ", \"screen_shadow_mean\": "
+        << screenSun.mean << "},\n";
     out << "  \"frames\": " << frameNumber_ << ", \"simulation_seconds\": " << weather_.time()
         << ",\n";
     const auto &state = weather_.state();
@@ -2425,6 +2970,12 @@ std::string Renderer::diagnostics()
         << ", \"density\": " << state.density << ", \"base_m\": " << state.cloudBase
         << ", \"thickness_m\": " << state.cloudThickness << ", \"rain\": " << state.precipitation
         << ", \"transition_progress\": " << weather_.transitionProgress() << "},\n";
+    out << "  \"cloud_settings\": {\"coverage\": " << constants_.cloudLayer.z
+        << ", \"density\": " << constants_.cloudLayer.w << ", \"base_m\": " << constants_.cloudLayer.x
+        << ", \"thickness_m\": " << constants_.cloudLayer.y << ", \"type\": " << constants_.weather.x
+        << ", \"horizontal_size\": " << 1.0f / constants_.cloudShapeTuning.x
+        << ", \"edge_detail\": " << constants_.cloudShapeTuning.y
+        << ", \"overridden\": " << (cloudOverrides_.active() ? "true" : "false") << "},\n";
     out << "  \"wind_offset_m\": [" << weather_.wind().x << ", " << weather_.wind().z << "],\n";
     out << "  \"weather_effects\": {\"wetness\": " << weather_.wetness()
         << ", \"demo\": " << (weather_.demo() ? "true" : "false")
@@ -2453,12 +3004,18 @@ std::string Renderer::diagnostics()
     out << "  \"cloud_shadows_enabled\": " << (options_.shadows ? "true" : "false") << ",\n";
     out << "  \"cloud_optimization\": {\"lighting_reuse\": "
         << (constants_.cloudPerformance.z > 0.5f ? "true" : "false")
+        << ", \"stable_sampling\": " << (constants_.cloudSampling.y > 0.5f ? "true" : "false")
+        << ", \"sun_ray_max_steps\": "
+        << static_cast<int>(constants_.renderSize.w) - (constants_.cloudSampling.z > 0.5f ? 1 : 0)
         << ", \"occlusion_cache_active\": "
         << (constants_.cloudOcclusionRegion.w > 0.5f ? "true" : "false")
         << ", \"occlusion_cache_updates\": " << cloudOcclusionUpdates_
         << ", \"shadow_updates\": " << shadowUpdates_
         << ", \"atmosphere_updates\": " << atmosphereUpdates_
         << ", \"shadow_age_seconds\": " << constants_.cloudPerformance.w << "},\n";
+    out << "  \"cloud_anti_aliasing\": {\"enabled\": " << (options_.cloudTaa ? "true" : "false")
+        << ", \"history_available\": " << (options_.cloudTaa && constants_.previousWind.w > 0.5f ? "true" : "false")
+        << ", \"sample_phase\": " << static_cast<int>(constants_.cloudSampling.w) - 1 << "},\n";
     out << "  \"cloud_reconstruction\": {\"enabled\": "
         << (options_.checkerboard ? "true" : "false")
         << ", \"active\": " << (checkerActive_ ? "true" : "false")
@@ -2476,6 +3033,35 @@ std::string Renderer::diagnostics()
     out << "  \"cloud_textures\": {\"source\": \""
         << (options_.cloudTextureDirectory.empty() ? "procedural" : "dds")
         << "\", \"base_size\": " << baseNoiseSize_ << ", \"detail_size\": " << detailNoiseSize_ << "},\n";
+    out << "  \"texture_cloud_layers\": {\"enabled\": "
+        << (options_.clouds && options_.textureCloudLayers ? "true" : "false")
+        << ", \"mask_source\": \"" << (importedCloudLayerMasks_ ? "dds" : "png")
+        << "\", \"solo\": ";
+    if (soloTextureCloud_ >= 0)
+        out << '"' << textureCloudTypes_[soloTextureCloud_].id << '"';
+    else
+        out << "null";
+    const bool useTextureLayers = options_.clouds && options_.textureCloudLayers;
+    const auto writeRegionMap = [&](const TextureCloudRegionMap &map, bool applied)
+    {
+        out << "{\"size\": [" << map.size.x << ", " << map.size.y << "], \"period_m\": " << map.period
+            << ", \"applied\": " << (useTextureLayers && applied ? "true" : "false") << "}";
+    };
+    out << ", \"region_maps\": {\"type\": ";
+    writeRegionMap(cloudTypeMap_, constants_.textureCloudRegions.x > 0);
+    out << ", \"coverage\": ";
+    writeRegionMap(cloudCoverageMap_, constants_.textureCloudRegions.y > 0);
+    out << "}, \"layers\": [";
+    for (size_t i = 0; i < textureCloudTypes_.size(); ++i)
+    {
+        const auto &type = textureCloudTypes_[i];
+        const auto &layer = textureCloudLayers_[i];
+        const bool active = options_.clouds && constants_.textureCloudLayers[i].z > 0;
+        out << (i ? ", " : "") << "{\"id\": \"" << type.id << "\", \"name\": \"" << type.label
+            << "\", \"altitude_m\": " << layer.altitude << ", \"amount\": " << layer.amount
+            << ", \"active\": " << (active ? "true" : "false") << "}";
+    }
+    out << "]},\n";
     out << "  \"tower_control_volume\": {\"size\": " << cloudControlSize
         << ", \"format\": \"R16_FLOAT\", \"bytes\": "
         << cloudControlSize * cloudControlSize * cloudControlSize * 2
@@ -2492,7 +3078,7 @@ std::string Renderer::diagnostics()
     for (size_t i = 0; i < formations_.count; ++i)
     {
         const auto &f = constants_.formations[i];
-        out << (i ? ", " : "") << "{\"kind\": \"" << (f.kind > 0.5f ? "vortex" : "tower")
+        out << (i ? ", " : "") << "{\"kind\": \"" << formationKinds[static_cast<std::size_t>(f.kind)]
             << "\", \"center_xz_m\": [" << f.x << ", " << f.z << "], \"radius_m\": " << f.radius
             << ", \"base_m\": " << f.base << ", \"height_m\": " << f.height
             << ", \"density\": " << f.density << ", \"spin_rad_s\": " << f.spin << "}";

@@ -1,0 +1,127 @@
+{
+  "roi_xyxy_half_open": [
+    315,
+    80,
+    442,
+    169
+  ],
+  "frame_indices_inclusive_zero_based": [
+    8,
+    19
+  ],
+  "discarded_frames": 8,
+  "luma_weights_in_display_RGB": [
+    0.2126,
+    0.7152,
+    0.0722
+  ],
+  "units": "absolute 8-bit display luma steps",
+  "metrics": {
+    "before": {
+      "mean": 0.16988642114322017,
+      "p95": 0.927800000000019,
+      "per_frame_pair_mean": [
+        0.10384662478987877,
+        0.08685205697602405,
+        0.07121215606476156,
+        0.245754012209148,
+        0.19655112801911007,
+        0.18124322746173582,
+        0.15704888967530736,
+        0.28720543218614525,
+        0.20429772626736264,
+        0.17244906661948148,
+        0.1622903123064673
+      ],
+      "adjacent_pair_count": 11,
+      "sample_count": 124333,
+      "logical_size": [
+        320,
+        180
+      ],
+      "phases": 4,
+      "checker_frames": 19,
+      "full_refresh_frames": 1,
+      "taa": {
+        "enabled": true,
+        "history_available": true,
+        "sample_phase": 4
+      },
+      "source_sha256": "D255FAE7622C5C29FE4CBE512633E077D39B547E08CF054F973B632469F8710F"
+    },
+    "adopted": {
+      "mean": 0.15930197614470812,
+      "p95": 0.927800000000019,
+      "per_frame_pair_mean": [
+        0.0897686631867646,
+        0.07706223126603551,
+        0.0639057241440325,
+        0.24308785278244702,
+        0.1756206316907015,
+        0.1597990268070424,
+        0.14967682916039982,
+        0.2641508449084314,
+        0.19574008670264537,
+        0.16950246837122881,
+        0.1640073785720604
+      ],
+      "adjacent_pair_count": 11,
+      "sample_count": 124333,
+      "logical_size": [
+        320,
+        180
+      ],
+      "phases": 4,
+      "checker_frames": 19,
+      "full_refresh_frames": 1,
+      "taa": {
+        "enabled": true,
+        "history_available": true,
+        "sample_phase": 4
+      },
+      "source_sha256": "6395A937CE67408A105A9C39EF44E52E2E4A898A6A176FC564CFB83B45BBFB07"
+    }
+  },
+  "conditions": {
+    "adapter": "NVIDIA GeForce RTX 5080",
+    "width": 640,
+    "height": 360,
+    "frames": 20,
+    "simulation_seconds": 0.333333,
+    "weather": "Clear",
+    "quality": "Medium",
+    "cloud_style": "classic",
+    "classic_fast": true,
+    "sun_elevation": 38.0,
+    "sun_azimuth": -102.0,
+    "camera_position_m": [
+      451.0,
+      1730.255859,
+      5214.0
+    ],
+    "cloud_settings": {
+      "coverage": 0.15,
+      "density": 0.95,
+      "base_m": 2400.0,
+      "thickness_m": 2200.0,
+      "type": 0.95,
+      "horizontal_size": 1.0,
+      "edge_detail": 1.0,
+      "overridden": false
+    },
+    "cloud_anti_aliasing": {
+      "enabled": true,
+      "history_available": true,
+      "sample_phase": 4
+    },
+    "wind_offset_m": [
+      3.0,
+      1.333333
+    ]
+  },
+  "all_20_weather_timeline_rows_identical": true,
+  "source_files": [
+    "before",
+    "adopted"
+  ]
+}

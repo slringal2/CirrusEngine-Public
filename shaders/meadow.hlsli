@@ -26,15 +26,22 @@ float meadowTrail(float2 p)
 
 float meadowGust(float2 p, float2 direction)
 {
-    float2 along = float2(dot(p, direction), dot(p, float2(-direction.y, direction.x)));
-    float sweep = sin(along.x * 0.32 + along.y * 0.059 - CameraTime.w * 1.80);
-    float roll = sin(along.x * 0.69 - along.y * 0.21 - CameraTime.w * 2.6);
-    return saturate(0.48 + 0.37 * sweep + 0.15 * roll);
+    // Advect a world-space pattern with the weather's accumulated wind displacement.
+    // Fixed wave axes keep distant grass in phase when the wind changes direction.
+    float2 q = p - Wind.xy * 0.58;
+    const float2 frontA = float2(0.87, 0.49);
+    const float2 frontB = float2(-0.49, 0.87);
+    float alignment = dot(direction, frontA);
+    float envelope = sin(dot(q, float2(0.064, -0.041)));
+    float sweep = sin(dot(q, frontA) * 0.28 + 1.4 * envelope);
+    float crossSweep = sin(dot(q, frontB) * 0.39 - envelope);
+    float crest = lerp(crossSweep, sweep, alignment * alignment);
+    return saturate(0.45 + 0.36 * crest + 0.19 * envelope);
 }
 
 float3 meadowColor(float moisture)
 {
-    return lerp(float3(0.123, 0.140, 0.044), float3(0.044, 0.122, 0.034), moisture);
+    return lerp(float3(0.178, 0.151, 0.045), float3(0.049, 0.157, 0.039), moisture);
 }
 
 #endif

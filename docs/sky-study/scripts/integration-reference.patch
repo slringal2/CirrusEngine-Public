@@ -1,0 +1,16 @@
+--- a/shaders/clouds.hlsl
++++ b/shaders/clouds.hlsl
+@@ -505,9 +505,13 @@
+         distantSteps = (int)(RenderSize.z * lerp(1, 0.65, smoothstep(0.15, 0.8, abs(ray.y))));
+     float fineDistance = nearView ? max(0, min(end, NearCloudParams.w) - start) : 0;
+     int fineSteps = (int)ceil(fineDistance / 40);
++    fineSteps *= 4;
++    distantSteps *= 4;
+     float fineStepLength = fineDistance / max(fineSteps, 1);
+     int steps = distantSteps + fineSteps;
+     float emptyStep = nearView ? 175 : clamp(5 * (end - start) / RenderSize.z, 175, 850);
++
++    emptyStep *= 0.25;
+ 
+     // 雲と同じ高度では、地形深度が跳ぶと手前のサンプル位置まで変わり、地平線に帯が出る。
+     // この視点では距離に応じて歩幅を広げ、地形や雲層の端で止まるまで同じ間隔で進む。

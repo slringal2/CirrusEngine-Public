@@ -55,6 +55,12 @@ C++はルートの `.clang-format` で4スペース・約100桁・波括弧の�
 
 ## 雲の軽量化
 
+LowとMediumでは、視線サンプルを区間の中点に置きます。2相で再投影する未計算画素には近傍色と透過率の範囲に小さな余裕を持たせ、位相が替わるたびに同じ履歴が切り詰められるのを抑えます。表示段階のディザも固定パターンです。
+
+雲層から離れた視点では、天頂寄りの遠景レイのサンプル上限を地平線側の65%まで下げます。遠景の輪郭を侵食するノイズは、レイの歩幅と画素の投影幅からミップを選びます。Classicの細粒が画素内で平均化される範囲では、低周波側のサンプルで代用します。被覆率・高度と粗い形状から密度がゼロと分かる点では、残りのノイズ参照を省きます。 [Nubis（SIGGRAPH 2017、スライド95–96）](https://www.advances.realtimerendering.com/s2017/Nubis%20-%20Authoring%20Realtime%20Volumetric%20Cloudscapes%20with%20the%20Decima%20Engine%20-%20Final%20.pdf)
+
+太陽側の遮蔽は、LowとMediumで歩幅が広がるほど粗い詳細ノイズを使います。Lowでは最遠の2区間をまとめ、積分の終点を保ちながら最大5サンプルにします。`--full-cloud-lighting` では太陽側の細部をミップ0で読み、Lowも最大6サンプルで積分します。診断JSONの `cloud_optimization` で安定サンプリングと太陽側の最大ステップ数を確認できます。
+
 Low / Medium / Highでは、同じ視線上で最後に照明を評価した点と近く、密度差も小さい場合に照明の遮蔽を共有します。Cumulusで共有するのは奇数ステップです。距離の上限は描画ピクセルの世界サイズから20～160 mに制限します。許容する密度差は `max(0.04, 現在密度 × 0.2)` で、それを超える点や空白を挟む点は計算し直します。密度・透過率・代表距離は全視線サンプルで積分します。Ultraと `--full-cloud-lighting` では照明共有を無効にします。
 
 雲影は最大4フレーム、シミュレーション時間で最大約1/15秒間共有します。生成後の風の移動量を `CloudPerformance.xy` で渡し、地表・霧・雨からの参照座標を毎フレーム補正します。雲層・雲形・太陽・範囲・有効フラグの変化、リサイズ、シェーダー再読み込みではすぐに更新します。透過率が0.001を下回ると雲影の積分を打ち切ります。
@@ -100,15 +106,25 @@ Classic Fastは2×2画素の区間内サンプル位置をそろえ、通常描�
 
 遠景は視錐台の奥の面からレイマーチし、既存の2相または4相の履歴で再構成します。雲に近い視点では距離に応じて歩幅を広げ、地平線で地形深度が変わっても手前のサンプル位置がずれないようにします。近距離は現在の視点の格子から読み、地形や川面が格子内にあれば、その深度までの累積値を補間します。合成色は「手前の散乱光 ＋ 手前の透過率 × 奥の色」です。雲底・雲頂の変形、視線、太陽側の自己遮蔽、雲影で同じ密度評価を使います。
 
-空気遠近と霧は、不透明度で重み付けした近景・遠景の代表距離を使います。日中の濃い雲と地表の雲影には、周囲から回り込む拡散光を加えます。診断JSONの `near_cloud_voxels` は格子寸法・積分する深度・更新回数を示します。格子を使ったフレームでは、最奥面の透過率の最小・最大・平均も記録します。格子生成と積分のGPU時間は `cloud_march` に含みます。
+雲にかかる空気遠近と霧は、透過率と不透明度で重み付けした近景・遠景の代表距離まで計算します。背景にかかる空気遠近と霧は地形や水面までの距離で計算するため、上空から見下ろしても雲の縁に地形までの霞がにじみません。日中の濃い雲と地表の雲影には、周囲から回り込む拡散光を加えます。診断JSONの `near_cloud_voxels` は格子寸法・積分する深度・更新回数を示します。格子を使ったフレームでは、最奥面の透過率の最小・最大・平均も記録します。格子生成と積分のGPU時間は `cloud_march` に含みます。
 
 近距離の視錐台格子を積分して遠距離のレイマーチにつなぐ構成は、Rockstarの公開講演を参考にしています。 [Bauerの講演 42〜49枚目](https://advances.realtimerendering.com/s2019/slides_public_release.pptx)
 
+## テクスチャ雲層
+
+`assets/clouds/types.cloudlayers` は雲種のID、2D PNG、高度、濃さ、半厚、鉛直光学厚、水平タイル幅を定義します。岩や地表のテクスチャと同じWICローダーを通し、PNGの値を線形データとしてt45～t47に束縛します。R×Aが密度で、`profile` ではG/Bが柱ごとの厚みと中心高度を決めます。旧 `cloud-layers.dds` はRGBから独立した密度テクスチャに分けます。
+
+遠景は球殻との交差区間を水平移動量に応じて分割し、各区間でテクスチャを一度読みます。設定した鉛直プロファイルは区間端の高度から解析的に積分します。HighとUltraでは隣接画素の視線を雲層の接平面に投影し、区間の水平移動を加えた異方性のフットプリントを `SampleGrad` に渡します。斜めの視線では、長く伸びる方向を平均化しつつ短い方向の細部を保ちます。LowとMediumおよび雲影では、スカラーのフットプリントからミップを選びます。近景の視錐台ボクセルと太陽の雲影も同じ密度・高度プロファイルを参照します。 [Physically Based Renderingのテクスチャサンプリング](https://pbr-book.org/4ed/Textures_and_Materials/Texture_Sampling_and_Antialiasing)
+
+`@type_map` の値をローカルな雲種インデックスに変換し、隣接する層の光学厚を補間します。各層は定義ファイルで指定した高度にあり、別の `@coverage_map` の値 c で形状密度 d を `max(0, d - (1 - c)) / max(c, 0.0001)` へ変換します。c が0の領域は透明です。マップは形状と同じ風のオフセットを用い、雲影と視錐台も同じ密度計算を使います。遠景の短い交差区間では2枚を区間の中点で1回読み、長い区間では分割した位置ごとに読みます。
+
+**SOLO** は選んだ雲種だけを積分する表示モードです。診断JSONの `texture_cloud_layers` に `solo` と各層の `active` が記録されます。
+
 ## 大型雲の領域と回転
 
-`cloud_formations.hpp` の `FormationSet` は最大8個の `CloudFormation` を保持します。1領域は位置XZ・雲底高度・半径、高さ・密度・種類・シード、回転速度・巻き込み強度・傾きの3個のfloat4です。C++/HLSLで48バイトを共有します。ファイルの行数、列、値域、非有限値を読み込み時に検証し、GPU配列の範囲を越える設定を拒否します。
+`cloud_formations.hpp` の `FormationSet` は最大24個の `CloudFormation` を保持します。1領域は位置XZ・雲底高度・半径、高さ・密度・種類・シード、回転速度・巻き込み強度・傾きの3個のfloat4です。C++/HLSLで48バイトを共有します。ファイルの行数、列、値域、非有限値を読み込み時に検証し、GPU配列の範囲を越える設定を拒否します。
 
-背景は `backgroundCloudShape` と `detailBackgroundCloud` で密度を求め、`formations.hlsli` の `compositeFormationDensity` で大型雲を重ねます。入道雲は `cloud_volume.hpp` で261個の階層セルを128³の3Dプロファイルへ焼き、GPUのt20で共有します。座標変形は64³の滑らかな周期ベクトル場t21、密度の侵食は2D変位で読み出し位置をずらしたPerlin–Worleyを使います。追加リソースは合計6MiBです。雲海と入道雲の寄与は加算します。領域の外では追加の3Dノイズを参照しません。[実装の読み方と式](implementation-guide.md)、[参照資料と採用範囲](cloud-research.md)を参照してください。
+背景は `backgroundCloudShape` と `detailBackgroundCloud` で密度を求め、`formations.hlsli` の `compositeFormationDensity` で大型雲を重ねます。入道雲は `cloud_volume.hpp` で261個の階層セルを128³の3Dプロファイルへ焼き、GPUのt20で共有します。座標変形は64³の滑らかな周期ベクトル場t21、密度の侵食は2D変位で読み出し位置をずらしたPerlin–Worleyを使います。追加リソースは合計6MiBです。雲海と入道雲の寄与は加算します。レンズ雲・かなとこ雲・ロール雲・波頭雲・乳房雲は、局所のローカル座標で輪郭を作り同じ3Dノイズを重ねます。高度範囲と水平半径の外では追加の3Dノイズを参照しません。[実装の読み方と式](implementation-guide.md)、[参照資料と採用範囲](cloud-research.md)を参照してください。
 
 渦は6つの半径帯の速度を連続補間してローカル座標を回転させ、skewを加えた低周波の雲量場でcoverageと雲頂を制御します。旧版の3本の対数螺旋を廃止しました。丸い塊の3Dノイズには強い静的skewを掛けず、同じ半径別の回転速度で移流します。中央の目・周囲の雲・外周の遷移を持ち、外縁は背景と連続補間します。`turns`は巻き込み強度で、帯の本数ではありません。速度変更は回転の積算位相へ加算するため、形状を瞬間的に飛ばしません。
 
@@ -203,9 +219,9 @@ The cloud placement pass bakes a 512² two-channel map and a 1×128 height LUT f
 7. **Aerial / fog** integrates the atmosphere to the representative cloud or geometry depth. Integrate height fog and a rain veil from the lower cloud map with cloud and terrain shadowing to produce volumetric light shafts.
 8. **Deferred composition** evaluates a GGX sun and hemispherical ambient from the G-buffer, with cloud and terrain shadows. Where the river surface is visible, it combines the shaded riverbed with reflections before applying aerial perspective and fog. Reflections use the existing sky and cloud buffers and trace visible banks against the depth buffer. Cloud and aerial upsampling reject depth discontinuities. The composite uses an ACES approximation and display gamma before drawing controls.
 
-| Quality | Cloud resolution | View samples | Light samples | Cloud shadow map |
+| Quality | Cloud resolution | Max. distant view samples | Max. light samples | Cloud shadow map |
 | --- | --- | --- | --- | --- |
-| Low | Quarter | 160 | 6 | 256² |
+| Low | Quarter | 160 | 5（照明比較時は6） | 256² |
 | Medium | Half | 224 | 8 | 512² |
 | High | Half | 384 | 12 | 768² |
 | Ultra | Full | 640 | 16 | 1536² |

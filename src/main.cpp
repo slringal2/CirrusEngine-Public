@@ -87,6 +87,8 @@ cirrus::Options arguments()
             o.fullCloudLighting = true;
         else if (a == L"--no-checkerboard")
             o.checkerboard = false;
+        else if (a == L"--no-cloud-taa")
+            o.cloudTaa = false;
         else if (a == L"--classic-fast")
             o.classicFast = true;
         else if (a == L"--cloud-style")
@@ -133,6 +135,18 @@ cirrus::Options arguments()
             o.cloudTextureDirectory = next();
             if (o.cloudTextureDirectory.empty())
                 throw std::runtime_error("--cloud-textures requires a DDS pack directory");
+        }
+        else if (a == L"--cloud-layer-file")
+        {
+            o.cloudLayerFile = next();
+            if (o.cloudLayerFile.empty())
+                throw std::runtime_error("--cloud-layer-file requires a definition file");
+        }
+        else if (a == L"--cloud-layer-only")
+        {
+            o.soloTextureCloud = ascii(next());
+            if (o.soloTextureCloud.empty())
+                throw std::runtime_error("--cloud-layer-only requires a cloud type ID");
         }
         else if (a == L"--camera")
             o.camera = ascii(next());
@@ -242,8 +256,16 @@ cirrus::Options arguments()
             o.clouds = false;
         else if (a == L"--no-near-cloud-voxels")
             o.nearCloudVoxels = false;
+        else if (a == L"--no-texture-cloud-layers")
+            o.textureCloudLayers = false;
         else if (a == L"--no-cloud-shadows")
             o.shadows = false;
+        else if (a == L"--no-grass-shadows")
+            o.grassShadows = false;
+        else if (a == L"--no-ssao")
+            o.ssao = false;
+        else if (a == L"--no-screen-shadows")
+            o.screenShadows = false;
         else if (a == L"--auto-weather")
             o.automatic = true;
         else if (a == L"--no-vsync")
@@ -260,6 +282,8 @@ cirrus::Options arguments()
         || !std::isfinite(o.azimuth) || o.azimuth < -180 || o.azimuth > 180
         || !std::isfinite(o.exposure) || o.exposure < 0.05f || o.exposure > 10)
         throw std::runtime_error("Invalid time step, sun, exposure or debug view");
+    if (!o.soloTextureCloud.empty() && (!o.clouds || !o.textureCloudLayers))
+        throw std::runtime_error("--cloud-layer-only requires cloud layers to be enabled");
     if (o.debugView < 0 || o.debugView >= static_cast<int>(cirrus::DebugView::Count))
         throw std::runtime_error("Unknown texture debug view");
     if (!std::isfinite(o.formationStrength) || o.formationStrength < 0 || o.formationStrength > 2

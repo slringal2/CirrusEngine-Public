@@ -1,9 +1,12 @@
 #include "common.hlsli"
 #include "lightning.hlsli"
 #include "geometry.hlsli"
+#include "screen_lighting.hlsli"
 #include "meadow.hlsli"
 
 Texture2D<float4> CompositeColor : register(t28);
+Texture2D<float4> CloudAerialScatter : register(t32);
+Texture2D<float4> CloudAerialTransmittance : register(t33);
 Texture2D<float4> GroundMeadow : register(t37);
 Texture2D<float4> GroundSoil : register(t38);
 Texture2D<float4> GroundSoilNormal : register(t39);
@@ -11,7 +14,6 @@ Texture2D<float4> RiverGravel : register(t40);
 Texture2D<float4> RiverGravelNormal : register(t41);
 Texture2D<float4> RidgeRock : register(t42);
 Texture2D<float4> RidgeRockNormal : register(t43);
-SamplerState TerrainWrap : register(s8);
 
 struct Vertex
 {
@@ -50,6 +52,105 @@ float3 ridgeWeights(float3 normal)
     return weights / dot(weights, 1.0.xxx);
 }
 
+struct RidgeSurface
+{
+    float3 color;
+    float3 bump;
+};
+
+// Use explicit gradients so the two rock mappings can crossfade at foothill elevations
+// and fully skip the unused material above or below that narrow transition.
+RidgeSurface sampleRidgeRock(float3 uv, float3 dx, float3 dy, float3 normal)
+{
+    float3 w = ridgeWeights(normal);
+    RidgeSurface result;
+    result.color = RidgeRock.SampleGrad(AnisotropicWrap, uv.zy, dx.zy, dy.zy).rgb * w.x
+                   + RidgeRock.SampleGrad(AnisotropicWrap, uv.xz, dx.xz, dy.xz).rgb * w.y
+                   + RidgeRock.SampleGrad(AnisotropicWrap, uv.xy, dx.xy, dy.xy).rgb * w.z;
+    float2 faceX = RidgeRockNormal.SampleGrad(AnisotropicWrap, uv.zy, dx.zy, dy.zy).xy * 2 - 1;
+    float2 faceY = RidgeRockNormal.SampleGrad(AnisotropicWrap, uv.xz, dx.xz, dy.xz).xy * 2 - 1;
+    float2 faceZ = RidgeRockNormal.SampleGrad(AnisotropicWrap, uv.xy, dx.xy, dy.xy).xy * 2 - 1;
+    result.bump = float3(0, -faceX.y, faceX.x) * w.x
+                  + float3(faceY.x, 0, -faceY.y) * w.y
+                  + float3(faceZ.x, -faceZ.y, 0) * w.z;
+    return result;
+}
+
+struct RockPatch
+{
+    float3 color;
+    float2 bump;
+};
+
+// Adjacent triangles use the same offsets at their shared vertices. Positions stay
+// continuous through the blend, while neighbouring rock photographs start at different UVs.
+RockPatch randomRockPatch(float2 uv, float2 dx, float2 dy)
+{
+    float2 lattice = float2(uv.x - uv.y * 0.57735027, uv.y * 1.15470054) * 0.84;
+    float2 cell = floor(lattice), f = frac(lattice);
+    bool upper = f.x + f.y > 1;
+    float2 corner0 = upper ? cell + 1 : cell;
+    float3 w = upper ? float3(f.x + f.y - 1, 1 - f.y, 1 - f.x)
+                     : float3(1 - f.x - f.y, f.x, f.y);
+    w = w * w * (3 - 2 * w);
+    w /= dot(w, 1.0.xxx);
+    RockPatch patch;
+    patch.color = 0;
+    patch.bump = 0;
+    [unroll] for (int i = 0; i < 3; ++i)
+    {
+        float2 corner = i == 0 ? corner0 : (i == 1 ? cell + float2(1, 0) : cell + float2(0, 1));
+        float2 offset = float2(hash12(corner + float2(23, 91)), hash12(corner + float2(159, 43)));
+        float2 sampleUv = uv + offset;
+        patch.color += w[i] * RidgeRock.SampleGrad(AnisotropicWrap, sampleUv, dx, dy).rgb;
+        patch.bump += w[i] * (RidgeRockNormal.SampleGrad(AnisotropicWrap, sampleUv, dx, dy).xy * 2 - 1);
+    }
+    return patch;
+}
+
+// Rotate relative to the valley and bend the rock volume continuously. Like the colour,
+// its normal map follows the deformed coordinates. The transpose of the deformation
+// Jacobian maps the sampled height gradient back to world space before deferred lighting.
+RidgeSurface mountainRock(float3 world, float3 normal)
+{
+    float mountain = smoothstep(260, 475, world.y);
+    const float cosine = 0.88235294, sine = 0.47058824;
+    float3x3 rotation = float3x3(cosine, 0, sine, 0, 1, 0, -sine, 0, cosine);
+    float3 rockSpace = mul(rotation, world);
+    const float3x3 frequency = float3x3(0, 0.011, 0.021, -0.013, 0, 0.017, 0.023, -0.012, 0);
+    float3 wave, slope;
+    sincos(mul(frequency, rockSpace) + float3(0.7, 1.6, 2.8), wave, slope);
+    const float3 amplitude = float3(15, 18, 14);
+    float3 coarseUv = world * 0.013 + 0.34;
+    float3 alpineUv = (rockSpace + amplitude * wave) * 0.040 + 0.34;
+    float3 coarseDx = ddx(coarseUv), coarseDy = ddy(coarseUv);
+    float3 alpineDx = ddx(alpineUv), alpineDy = ddy(alpineUv);
+    RidgeSurface result;
+    result.color = 0;
+    result.bump = 0;
+    [branch] if (mountain < 1)
+    {
+        RidgeSurface low = sampleRidgeRock(coarseUv, coarseDx, coarseDy, normal);
+        result.color = low.color * (1 - mountain);
+        result.bump = low.bump * (1 - mountain);
+    }
+    [branch] if (mountain > 0)
+    {
+        float3 w = ridgeWeights(mul(rotation, normal));
+        RockPatch x = randomRockPatch(alpineUv.zy, alpineDx.zy, alpineDy.zy);
+        RockPatch y = randomRockPatch(alpineUv.xz, alpineDx.xz, alpineDy.xz);
+        RockPatch z = randomRockPatch(alpineUv.xy, alpineDx.xy, alpineDy.xy);
+        float3 color = x.color * w.x + y.color * w.y + z.color * w.z;
+        float3 bump = float3(0, -x.bump.y, x.bump.x) * w.x
+                      + float3(y.bump.x, 0, -y.bump.y) * w.y
+                      + float3(z.bump.x, -z.bump.y, 0) * w.z;
+        float3 gradient = bump + mul(bump * amplitude * slope, frequency);
+        result.color += color * mountain;
+        result.bump += mul(gradient, rotation) * mountain;
+    }
+    return result;
+}
+
 // 細かい模様は1画素に入らなくなったら平均値へ寄せる。上空での斑点や格子を抑える。
 float filteredTerrainNoise(float2 p)
 {
@@ -84,8 +185,8 @@ GBuffer GeometryPS(GeometryVarying v)
         float erosion = smoothstep(0.12, 0.45, 1 - normal.y);
         float soilCover = saturate(max(trail, (1 - smoothstep(0, 0.32, moisture)) * 0.38
                                                + erosion * 0.31));
-        float3 grassFine = GroundMeadow.Sample(TerrainWrap, xz * 0.58).rgb;
-        float3 grassWide = GroundMeadow.Sample(TerrainWrap, turned * 0.21 + float2(6.2, 1.9)).rgb;
+        float3 grassFine = GroundMeadow.Sample(AnisotropicWrap, xz * 0.58).rgb;
+        float3 grassWide = GroundMeadow.Sample(AnisotropicWrap, turned * 0.21 + float2(6.2, 1.9)).rgb;
         float3 grassTexture = lerp(grassFine, grassWide, 0.36 + 0.22 * patches);
         float fineCover = dot(grassTexture, float3(0.25, 0.64, 0.11));
         float3 grassTint = lerp(float3(1.15, 1.04, 0.84), float3(0.89, 1.04, 0.93), meadowRegion);
@@ -95,55 +196,69 @@ GBuffer GeometryPS(GeometryVarying v)
         float fieldWave = meadowGust(xz, wind);
         float grassMotion = smoothstep(65, 250, distance) * (1 - smoothstep(700, 1700, distance));
         meadow *= 1 + (fieldWave - 0.5) * min(windSpeed / 20, 1.3) * grassMotion * 0.12;
-        float3 soilFine = GroundSoil.Sample(TerrainWrap, xz * 0.52).rgb;
-        float3 soilWide = GroundSoil.Sample(TerrainWrap, turned * 0.17 + float2(4.1, 2.3)).rgb;
+        float3 soilFine = GroundSoil.Sample(AnisotropicWrap, xz * 0.52).rgb;
+        float3 soilWide = GroundSoil.Sample(AnisotropicWrap, turned * 0.17 + float2(4.1, 2.3)).rgb;
         float3 earth = lerp(soilFine, soilWide, 0.30 + 0.19 * region) * (0.79 + 0.26 * ruts);
         float bank = riverBankDistance(v.world.x, z);
         float gravel = (1 - smoothstep(-0.6, 5.4, bank + (ruts - 0.5) * 4))
                        * (1 - smoothstep(2180, riverExtent, abs(z)));
         float nearWater = (1 - smoothstep(0.05, 0.75, v.world.y - riverLevel(z))) * gravel;
-        float3 pebbles = RiverGravel.Sample(TerrainWrap, xz * 0.52).rgb
+        float3 pebbles = RiverGravel.Sample(AnisotropicWrap, xz * 0.52).rgb
                          * lerp(1.08, 0.59, nearWater);
         float3 ground = lerp(meadow, earth, saturate(soilCover));
         ground = lerp(ground, pebbles, gravel);
-        float scree = smoothstep(0.15, 0.43, 1 - normal.y);
-        float exposed = saturate(max(scree, smoothstep(650, 1140, v.world.y))
-                                 * (0.68 + 0.54 * grain));
+        // Open-world COLOR.x stores the signed neighbourhood height difference from the DEM.
+        float hollow = max(v.material.x, 0.0);
+        float crest = max(-v.material.x, 0.0);
+        float alpine = smoothstep(590, 1040, v.world.y);
+        float cliff = smoothstep(0.13, 0.42, 1 - normal.y);
+        float exposed = saturate(max(cliff, alpine * (0.80 + 0.38 * crest - 0.27 * hollow))
+                                 * (0.78 + 0.46 * grain));
         exposed *= 1 - max(gravel, trail);
-        float3 projection = v.world * 0.013 + 0.34;
-        float3 weights = ridgeWeights(normal);
-        float3 ridge = RidgeRock.Sample(TerrainWrap, projection.zy).rgb * weights.x
-                       + RidgeRock.Sample(TerrainWrap, projection.xz).rgb * weights.y
-                       + RidgeRock.Sample(TerrainWrap, projection.xy).rgb * weights.z;
-        float fault = meadowNoise(xz * 0.0031 + float2(22, v.world.y * 0.0038));
-        ridge *= 0.72 + 0.66 * fault;
+        RidgeSurface rockSample = mountainRock(v.world, normal);
+        float3 ridge = rockSample.color;
+        // Use world-space fractures at the scale of a cliff face. Pixel derivatives fade
+        // undersampled structure to its mean; near rock grain still comes from the photos.
+        float fault = filteredTerrainNoise(xz * 0.0031 + float2(22, v.world.y * 0.0038));
+        float2 rockPlane = float2(dot(xz, float2(0.0084, 0.0041)),
+                                  v.world.y * 0.014 + dot(xz, float2(0.0018, -0.0036)));
+        float fracture = filteredTerrainNoise(rockPlane);
+        float joints = smoothstep(0.56, 0.82, fracture) * (0.45 + 0.55 * cliff);
         float stoneLuma = dot(ridge, float3(0.25, 0.64, 0.11));
-        ridge = lerp(ridge, stoneLuma * float3(0.91, 1.00, 1.09), 0.72);
+        float3 rockTint = lerp(float3(0.83, 0.91, 1.02), float3(1.18, 1.04, 0.87), fault);
+        ridge = lerp(ridge, stoneLuma * rockTint, 0.77);
+        ridge *= (0.75 + 0.66 * fault) * (1 - 0.27 * joints);
         float distant = smoothstep(310, 1600, distance);
         float thicket = smoothstep(0.40, 0.79, 0.60 * meadowRegion + 0.40 * patches);
         thicket *= distant * (1 - smoothstep(640, 1020, v.world.y));
         ground *= lerp(1, float3(0.62, 0.74, 0.64), thicket * (1 - max(gravel, trail)));
         ground = lerp(ground, ridge, exposed);
-        float snowline = 1120 + 290 * meadowNoise(xz * 0.005 + 27);
-        float snow = smoothstep(snowline - 46, snowline + 102, v.world.y)
-                     * smoothstep(0.42, 0.82, normal.y);
-        ground = lerp(ground, float3(0.53, 0.59, 0.66) * (0.79 + 0.25 * fine), snow);
+        // Loose rock gathers below scarps. A stable aspect term keeps the snow pattern
+        // fixed through time of day, while the existing lighting pass moves the shadows.
+        float talus = alpine * hollow * smoothstep(0.52, 0.82, normal.y) * (1 - gravel);
+        float pebbleLuma = dot(pebbles, float3(0.25, 0.64, 0.11));
+        float3 debris = float3(0.88, 0.83, 0.75) * (0.065 + 0.48 * stoneLuma + 0.42 * pebbleLuma);
+        ground = lerp(ground, debris, talus);
+        float snowLine = 1330 + (patches - 0.5) * 115 + (region - 0.5) * 135
+                         + 175 * crest - 245 * hollow - 92 * normal.z;
+        float snowShelf = smoothstep(0.50 - 0.14 * hollow, 0.86 - 0.15 * hollow, normal.y);
+        float snow = smoothstep(snowLine - 55, snowLine + 85, v.world.y) * snowShelf;
+        ground = lerp(ground, float3(0.69, 0.74, 0.78) * (0.92 + 0.10 * fine), snow);
         albedo = ground * (0.77 + 0.45 * variation) * lerp(1, 0.62, wet);
 
-        float3 soilNormal = GroundSoilNormal.Sample(TerrainWrap, xz * 0.52).xyz * 2 - 1;
-        float3 pebbleNormal = RiverGravelNormal.Sample(TerrainWrap, xz * 0.52).xyz * 2 - 1;
+        float3 soilNormal = GroundSoilNormal.Sample(AnisotropicWrap, xz * 0.52).xyz * 2 - 1;
+        float3 pebbleNormal = RiverGravelNormal.Sample(AnisotropicWrap, xz * 0.52).xyz * 2 - 1;
         float2 bump = lerp(soilNormal.xy * (0.32 + 0.24 * soilCover), pebbleNormal.xy * 0.72,
                           gravel);
-        float2 faceX = RidgeRockNormal.Sample(TerrainWrap, projection.zy).xy * 2 - 1;
-        float2 faceY = RidgeRockNormal.Sample(TerrainWrap, projection.xz).xy * 2 - 1;
-        float2 faceZ = RidgeRockNormal.Sample(TerrainWrap, projection.xy).xy * 2 - 1;
-        float3 ridgeBump = float3(0, -faceX.y, faceX.x) * weights.x
-                           + float3(faceY.x, 0, -faceY.y) * weights.y
-                           + float3(faceZ.x, -faceZ.y, 0) * weights.z;
+        float3 ridgeBump = rockSample.bump;
         float groundDetail = 1 - smoothstep(62, 480, distance);
         float rockDetail = 1 - smoothstep(750, 3400, distance);
         float3 groundBump = float3(bump.x, 0, -bump.y) * groundDetail;
-        normal = normalize(normal + lerp(groundBump, ridgeBump * (0.37 * rockDetail), exposed));
+        float3 materialBump = lerp(groundBump, ridgeBump * (0.40 * rockDetail), exposed);
+        normal = normalize(normal + materialBump * (1 - 0.85 * snow));
+        float dryRoughness = lerp(lerp(v.material.a, 0.77, exposed), 0.96, talus);
+        roughness = lerp(dryRoughness, lerp(0.18, 0.33, exposed), wet);
+        roughness = lerp(roughness, 0.84, snow);
         roughness = lerp(roughness, 0.62, nearWater * (1 - wet));
     }
     return encodeMaterial(albedo, roughness, normal, 0, 0, 1);
@@ -185,9 +300,11 @@ float3 surfaceLighting(float2 uv, float depth)
     float3 F0 = lerp(0.04, material.rgb, metallic);
     float3 F = F0 + (1 - F0) * pow(1 - vh, 5);
     float3 specular = D * G * F / max(4 * nl * nv, 0.001);
-    // 地表と霧は同じ雲影・地形影を読む。直達光に太陽側の大気透過率も掛ける。
+    // 通常の地形影と、草・接触影のうち最も強い遮蔽を直射光に使う。
+    float2 localVisibility = sampleScreenLighting(uv, depth, normal);
     float cloudVisibility = cloudShadow(world);
-    float shadow = cloudVisibility * terrainShadow(world);
+    float geometryVisibility = min(terrainShadow(world), grassShadowVisibility(world, normal));
+    float shadow = cloudVisibility * min(geometryVisibility, localVisibility.g);
     float3 solar = SolarExposure.rgb * sunTransmittance(world);
     float3 diffuse = material.rgb * (1 - metallic);
     float3 direct = ((1 - F) * diffuse / PI + specular) * solar * nl * shadow;
@@ -214,7 +331,8 @@ float3 surfaceLighting(float2 uv, float depth)
                    * (0.15 + 0.85 * saturate(dot(normal, flashDirection)));
     // GSurface.a の大きさは間接光の遮蔽係数、負の符号は葉や草の透過光を足す目印。
     // 光源越しに見る角度ほど葉の透過光を強める。大気・雲と同じ太陽色を使う。
-    float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * abs(surface.a);
+    float ambientVisibility = abs(surface.a) * localVisibility.r;
+    float3 indirect = (diffuse + F0 * metallic * lerp(0.47, 0.16, rough)) * ambient * ambientVisibility;
     float forwardLight = pow(saturate(dot(-V, L)), 3);
     float3 leafTransmission = surface.a < 0
         ? diffuse * float3(0.84, 1.0, 0.34) * (0.035 + 0.17 * forwardLight) * solar
@@ -263,21 +381,32 @@ float3 aces(float3 x)
     return saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
 }
 
-void upsampleAerial(float2 uv, float scene, out float3 scattering, out float3 transmission,
-                   out float4 fog)
+struct AerialSample
 {
-    // 空気遠近法・霧も深度差を考慮して補間する。
-    // 散乱光と透過率に同じ正規化重みを使い、遠景の霧が手前の輪郭ににじむのを抑える。
+    float3 scattering;
+    float3 transmission;
+    float4 fog;
+    float3 cloudScattering;
+    float3 cloudTransmission;
+};
+
+AerialSample upsampleAerial(float2 uv, float scene, bool hasCloud)
+{
+    // 背景では地形の輪郭を保ち、雲では雲がある近傍を使って補間する。
     uint w, h;
     AerialScatter.GetDimensions(w, h);
     float2 size = float2(w, h);
     float2 p = uv * size - 0.5;
     int2 base = (int2)floor(p);
     float2 f = frac(p);
-    scattering = 0;
-    transmission = 0;
-    fog = 0;
-    float sum = 0;
+    AerialSample sampleValue;
+    sampleValue.scattering = 0;
+    sampleValue.transmission = 0;
+    sampleValue.fog = 0;
+    sampleValue.cloudScattering = 0;
+    sampleValue.cloudTransmission = 1;
+    float3 cloudScattering = 0, cloudTransmission = 0;
+    float sum = 0, cloudSum = 0;
     [unroll]
     for (int y = 0; y < 2; y++)
         [unroll]
@@ -286,26 +415,46 @@ void upsampleAerial(float2 uv, float scene, out float3 scattering, out float3 tr
             int2 q = clamp(base + int2(x, y), int2(0, 0), int2(w, h) - 1);
             float2 qUV = (q + 0.5) / size;
             float depth = sceneDistance(qUV);
-            float difference = abs(depth - scene) / max(80, scene * 0.035);
-            float weight = (x ? f.x : 1 - f.x) * (y ? f.y : 1 - f.y) * exp(-min(difference, 40));
-            scattering += AerialScatter.Load(int3(q, 0)).rgb * weight;
-            transmission += AerialTransmittance.Load(int3(q, 0)).rgb * weight;
-            fog += FogTexture.Load(int3(q, 0)) * weight;
+            float depthTolerance = max(80, scene * 0.035);
+            float bilinear = (x ? f.x : 1 - f.x) * (y ? f.y : 1 - f.y);
+            float difference = abs(depth - scene) / depthTolerance;
+            float weight = bilinear * exp(-min(difference, 40));
+            sampleValue.scattering += AerialScatter.Load(int3(q, 0)).rgb * weight;
+            sampleValue.transmission += AerialTransmittance.Load(int3(q, 0)).rgb * weight;
+            sampleValue.fog += FogTexture.Load(int3(q, 0)) * weight;
             sum += weight;
+
+            [branch]
+            if (hasCloud)
+            {
+                float4 cloudS = CloudAerialScatter.Load(int3(q, 0));
+                float4 cloudT = CloudAerialTransmittance.Load(int3(q, 0));
+                float behindSurface = max(cloudT.a * 100000 - scene, 0) / depthTolerance;
+                float cloudWeight = bilinear * cloudS.a * exp(-min(behindSurface, 40));
+                cloudScattering += cloudS.rgb * cloudWeight;
+                cloudTransmission += cloudT.rgb * cloudWeight;
+                cloudSum += cloudWeight;
+            }
         }
 
     if (sum > 0.00001)
     {
-        scattering /= sum;
-        transmission /= sum;
-        fog /= sum;
+        sampleValue.scattering /= sum;
+        sampleValue.transmission /= sum;
+        sampleValue.fog /= sum;
     }
     else
     {
-        scattering = AerialScatter.SampleLevel(LinearClamp, uv, 0).rgb;
-        transmission = AerialTransmittance.SampleLevel(LinearClamp, uv, 0).rgb;
-        fog = FogTexture.SampleLevel(LinearClamp, uv, 0);
+        sampleValue.scattering = AerialScatter.SampleLevel(LinearClamp, uv, 0).rgb;
+        sampleValue.transmission = AerialTransmittance.SampleLevel(LinearClamp, uv, 0).rgb;
+        sampleValue.fog = FogTexture.SampleLevel(LinearClamp, uv, 0);
     }
+    if (cloudSum > 0.00001)
+    {
+        sampleValue.cloudScattering = cloudScattering / cloudSum;
+        sampleValue.cloudTransmission = cloudTransmission / cloudSum;
+    }
+    return sampleValue;
 }
 
 // HDRの散乱光だけ表示用に変換する。透過率・深度・法線にはこの変換を掛けない。
@@ -336,8 +485,18 @@ float4 textureDebugView(float2 uv, int view)
 {
     float aspect = Resolution.x / Resolution.y;
     if (view == 2 || view == 6 || view == 7 || view == 8 || view == 9 || view == 11
-        || view == 24 || view == 25 || view == 26 || view == 28 || view == 30)
+        || view == 24 || view == 25 || view == 26 || view == 28 || view == 30
+        || (view >= 35 && view <= 37))
         aspect = 1;
+    else if (view == 38 || view == 39)
+    {
+        uint w = 0, h = 0;
+        if (view == 38)
+            HighCloudTypeMap.GetDimensions(w, h);
+        else
+            HighCloudCoverageMap.GetDimensions(w, h);
+        aspect = w > 0 && h > 0 ? (float)w / h : 1;
+    }
     else if (view == 18)
         aspect = 4;
     else if (view == 12)
@@ -388,6 +547,16 @@ float4 textureDebugView(float2 uv, int view)
         return float4(CloudMap.SampleLevel(LinearWrap, uv, 0).rg, 0, 1);
     if (view == 27)
         return float4(cloudHeightProfile(uv.y), 1);
+    if (view >= 35 && view <= 37)
+    {
+        float4 texel = sampleTextureCloudMap(view - 35, uv, 0);
+        float value = texel.r * texel.a;
+        return float4(value.xxx, 1);
+    }
+    if (view == 38)
+        return float4(HighCloudTypeMap.SampleLevel(LinearClamp, uv, 0).xxx, 1);
+    if (view == 39)
+        return float4(HighCloudCoverageMap.SampleLevel(LinearClamp, uv, 0).xxx, 1);
     if (view == 28)
     {
         float2 moments = CloudShadowMap.SampleLevel(LinearClamp, uv, 0);
@@ -410,6 +579,23 @@ float4 textureDebugView(float2 uv, int view)
         float water = WorldRendering.x > 0.5
                       && riverSurfaceDistance(worldRay(uv), opaque) < opaque ? 1 : 0;
         return float4(water.xxx, 1);
+    }
+    if (view >= 32 && view <= 34)
+    {
+        float depth = geometryDepth(uv);
+        float visibility = 1;
+        if (hasGeometry(depth))
+        {
+            float3 normal = normalize(GNormal.SampleLevel(LinearClamp, uv, 0).xyz * 2 - 1);
+            if (view == 34)
+                visibility = grassShadowVisibility(worldPosition(uv, depth), normal);
+            else
+            {
+                float2 screen = sampleScreenLighting(uv, depth, normal);
+                visibility = view == 32 ? screen.r : screen.g;
+            }
+        }
+        return float4(visibility.xxx, 1);
     }
     if (view == 10)
     {
@@ -495,9 +681,8 @@ float4 CompositePS(ScreenVarying v) : SV_Target
     }
     float4 farCloud = upsampleClouds(uv, scene);
     float4 nearCloud = sampleNearCloud(uv, ray, scene).color;
-    float3 scattering, transmission;
-    float4 fog;
-    upsampleAerial(uv, scene, scattering, transmission, fog);
+    float cloudT = nearCloud.a * farCloud.a;
+    AerialSample aerial = upsampleAerial(uv, scene, cloudT < 0.9999);
 
     // 線形色空間で背景・雲・空気遠近法・霧を合成する。cloud.a は透過率。
     float3 surface = geometry ? surfaceLighting(uv, depth) : 0;
@@ -506,20 +691,23 @@ float4 CompositePS(ScreenVarying v) : SV_Target
         surface = shadeRiver(uv, ray, scene, opaque, surface);
     // 地形と川面の色は空気を通って減衰し、途中の空気が散乱させた光が足される。
     // 空の背景色は SkyCS 側で大気散乱を積分済み。
-    float3 base = geometry || water ? surface * transmission + scattering : sky;
-    float3 farColor = base * farCloud.a + farCloud.rgb * transmission
-                      + scattering * (1 - farCloud.a);
-    // 手前の散乱光を加算し、残った透過率を奥の雲と背景に掛ける。
-    float3 color = nearCloud.rgb + nearCloud.a * farColor;
-    color = color * fog.a + fog.rgb;
-    color += lightningBolt(ray, scene, nearCloud.a * farCloud.a);
+    float3 base = geometry || water ? surface * aerial.transmission + aerial.scattering : sky;
+    base = base * aerial.fog.a + aerial.fog.rgb;
+    // 手前と奥の雲の散乱光を合成してから、カメラと雲の間にある大気と霧を掛ける。
+    // 薄い雲の隙間から見える背景は、背景までの大気と霧を通った色のまま透過する。
+    float3 cloudRadiance = nearCloud.rgb + nearCloud.a * farCloud.rgb;
+    float3 color = base * cloudT + cloudRadiance * aerial.cloudTransmission
+                   + aerial.cloudScattering * (1 - cloudT);
+    color += lightningBolt(ray, scene, cloudT);
     float4 rain = RainTexture.SampleLevel(LinearClamp, uv, 0);
     // RainPS の A は不透明度で RGB は乗算済み。背後の光に掛ける透過率は 1 - rain.a。
     color = color * (1 - rain.a) + rain.rgb;
     // 表示用のトーンマップとガンマ補正は、すべての照明・合成が済んでから行う。
     color = aces(max(color, 0) * SolarExposure.w);
     color = pow(color, 1 / 2.2);
-    float dither = (hash12(v.position.xy + Wind.ww) - 0.5) / 255;
+    // Low/Mediumは表示用の1階調のディザも固定し、静止部分に毎フレームのきらつきを加えない。
+    float ditherPhase = CloudSampling.y > 0.5 ? 0 : Wind.w;
+    float dither = (hash12(v.position.xy + ditherPhase) - 0.5) / 255;
     return float4(saturate(color + dither), 1);
 }
 

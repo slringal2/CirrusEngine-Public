@@ -4,6 +4,7 @@
 #include <d3dcompiler.h>
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -150,12 +151,33 @@ void Ui::begin(int w, int h, int mx, int my, bool down, bool pressed)
     my_ = my;
     down_ = down;
     pressed_ = pressed;
+    if (!down_ || pressed_)
+        activeSlider_.reset();
+    setTransform(0, 0, 1);
     vertices_.clear();
+}
+
+void Ui::setTransform(float x, float y, float scale)
+{
+    originX_ = x;
+    originY_ = y;
+    scale_ = scale;
+}
+
+bool Ui::hit(float x, float y, float w, float h) const
+{
+    const float localX = (mx_ - originX_) / scale_;
+    const float localY = (my_ - originY_) / scale_;
+    return localX >= x && localX < x + w && localY >= y && localY < y + h;
 }
 
 void Ui::quad(float x, float y, float w, float h, float u0, float v0, float u1, float v1,
               uint32_t c)
 {
+    x = originX_ + x * scale_;
+    y = originY_ + y * scale_;
+    w *= scale_;
+    h *= scale_;
     vertices_.insert(vertices_.end(), {{x, y, u0, v0, c},
                                        {x + w, y, u1, v0, c},
                                        {x, y + h, u0, v1, c},
@@ -190,7 +212,7 @@ void Ui::text(float x, float y, std::string_view value, uint32_t c, float scale)
 bool Ui::button(float x, float y, float w, float h, std::string_view label, bool active,
                 float textScale)
 {
-    bool over = mx_ >= x && mx_ < x + w && my_ >= y && my_ < y + h;
+    bool over = hit(x, y, w, h);
     rect(x, y, w, h, active ? 0xe0508060 : (over ? 0xdc4b554d : 0xce272e2a));
     rect(x, y, active ? 3.0f : 1.0f, h, active ? 0xffa3edb4 : 0xff485248);
     text(x + 10, y + 3, label, active ? 0xffedfff3 : 0xffb6c6c0, textScale);
@@ -200,17 +222,22 @@ bool Ui::button(float x, float y, float w, float h, std::string_view label, bool
 bool Ui::slider(float x, float y, float w, std::string_view label, float &value, float minimum,
                 float maximum)
 {
+    const float previous = value;
+    const std::array position{originX_ + x * scale_, originY_ + y * scale_};
+    if (pressed_ && hit(x - 3, y + 19, w + 6, 23))
+        activeSlider_ = position;
+    // ドラッグを始めたスライダーに入力を送り続け、他の行へ移っても操作対象を変えない。
+    if (activeSlider_ == position)
+    {
+        const float t = std::clamp((mx_ - position[0]) / (w * scale_), 0.0f, 1.0f);
+        value = std::lerp(minimum, maximum, t);
+    }
     text(x, y, label, 0xffa9bab3, 0.75f);
     rect(x, y + 30, w, 3, 0xff44554b);
     float t = std::clamp((value - minimum) / (maximum - minimum), 0.0f, 1.0f);
     rect(x, y + 30, w * t, 3, 0xff8cd5ab);
     rect(x + w * t - 3, y + 26, 6, 11, 0xffb0e6c5);
-    if (down_ && mx_ >= x && mx_ <= x + w && my_ >= y + 20 && my_ <= y + 42)
-    {
-        value = minimum + (maximum - minimum) * std::clamp((mx_ - x) / w, 0.0f, 1.0f);
-        return true;
-    }
-    return false;
+    return value != previous;
 }
 
 void Ui::draw(ID3D11DeviceContext *ctx)

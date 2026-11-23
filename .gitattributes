@@ -11,3 +11,6 @@
 *.sln text eol=crlf
 *.vcxproj text eol=crlf
 *.filters text eol=crlf
+
+# A blank context line in a unified diff contains a single space.
+docs/sky-study/scripts/*.patch text eol=lf whitespace=-blank-at-eol

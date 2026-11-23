@@ -89,6 +89,7 @@ class World
     ID3D11Device *device_;
     std::map<TileKey, Tile> terrain_;
     std::vector<uint16_t> ridgeHeights_;
+    std::vector<float> ridgeLandforms_;
     ComPtr<ID3D11Buffer> indices_;
     std::array<ComPtr<ID3D11ShaderResourceView>, 7> groundTextures_;
     std::array<std::array<Mesh, 2>, 4> treeMeshes_; // bark and needles, two forms per LOD

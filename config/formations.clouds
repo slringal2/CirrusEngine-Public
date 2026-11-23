@@ -1,5 +1,11 @@
-# Units: metres; angular speed: degrees/second. Up to 8 regions.
+# Units: metres; angular speed: degrees/second. Up to 24 regions.
 # tower  x  z  radius  base_altitude  height  density
 tower -5600 7000 6200 1800 8600 1.05
 # vortex x  z  radius  base_altitude  height  density  spin_deg_per_sec  turns (coverage skew)
 vortex 6400 12000 7000 900 4400 0.85 2.0 1.6
+# Optional profiles: lenticular, anvil, roll, fluctus and mammatus accept a final yaw in degrees.
+# lenticular -5750 10500 2800 4700 1280 0.76 -20
+# anvil       7800 16600 4600 1900 9100 1.00  14
+# roll       -2400 15500 4200 2450 1300 0.84   9
+# fluctus     2200 21400 4400 6400 1650 0.79 -11
+# mammatus  -11500 19700 3600 5400 1950 0.82  32

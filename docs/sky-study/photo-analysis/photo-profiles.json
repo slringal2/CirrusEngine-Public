@@ -1,0 +1,173 @@
+{
+  "atlantic": {
+    "roi": [
+      245,
+      202,
+      545,
+      326
+    ],
+    "resampled_width": 256,
+    "resampled_height": 106,
+    "colour_ratio_p08_p92": [
+      -0.21686746922630282,
+      0.16397228599544506
+    ],
+    "thresholds": {
+      "0.35": {
+        "threshold_stable_columns": 217,
+        "interior_columns_for_shape": 170,
+        "upper_outline_median_abs_residual": 1.508,
+        "normal_profiles_used": 198,
+        "interquantile_normal_width_p25_p50_p75": [
+          2.18,
+          2.443,
+          2.897
+        ],
+        "upper_outline_residual_rms": 2.785
+      },
+      "0.5": {
+        "threshold_stable_columns": 217,
+        "interior_columns_for_shape": 170,
+        "upper_outline_median_abs_residual": 1.285,
+        "normal_profiles_used": 210,
+        "interquantile_normal_width_p25_p50_p75": [
+          2.191,
+          2.475,
+          2.855
+        ],
+        "upper_outline_residual_rms": 2.777
+      },
+      "0.65": {
+        "threshold_stable_columns": 217,
+        "interior_columns_for_shape": 170,
+        "upper_outline_median_abs_residual": 1.689,
+        "normal_profiles_used": 202,
+        "interquantile_normal_width_p25_p50_p75": [
+          2.166,
+          2.437,
+          2.823
+        ],
+        "upper_outline_residual_rms": 2.838
+      }
+    },
+    "sha256": "fc11096cc65d46725ea464fbd2cacea6b75e13f3582a2b730ccc431abd9d26c5",
+    "source_size": [
+      960,
+      639
+    ]
+  },
+  "congestus": {
+    "roi": [
+      74,
+      128,
+      361,
+      238
+    ],
+    "resampled_width": 256,
+    "resampled_height": 98,
+    "colour_ratio_p08_p92": [
+      -0.3562231744368104,
+      -0.015999999968
+    ],
+    "thresholds": {
+      "0.35": {
+        "threshold_stable_columns": 179,
+        "interior_columns_for_shape": 146,
+        "upper_outline_median_abs_residual": 1.343,
+        "normal_profiles_used": 174,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.432,
+          1.836,
+          2.888
+        ],
+        "upper_outline_residual_rms": 2.453
+      },
+      "0.5": {
+        "threshold_stable_columns": 179,
+        "interior_columns_for_shape": 146,
+        "upper_outline_median_abs_residual": 1.548,
+        "normal_profiles_used": 176,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.433,
+          1.792,
+          2.71
+        ],
+        "upper_outline_residual_rms": 2.127
+      },
+      "0.65": {
+        "threshold_stable_columns": 179,
+        "interior_columns_for_shape": 146,
+        "upper_outline_median_abs_residual": 2.043,
+        "normal_profiles_used": 151,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.554,
+          1.853,
+          2.521
+        ],
+        "upper_outline_residual_rms": 2.936
+      }
+    },
+    "sha256": "546cabe4939f9d656d954fd7139c06348ceddc1a025e2a799baa24d98b293526",
+    "source_size": [
+      430,
+      430
+    ]
+  },
+  "hawaii": {
+    "roi": [
+      187,
+      45,
+      292,
+      122
+    ],
+    "resampled_width": 96,
+    "resampled_height": 70,
+    "colour_ratio_p08_p92": [
+      -0.4898616606973075,
+      -0.03030303024181206
+    ],
+    "thresholds": {
+      "0.35": {
+        "threshold_stable_columns": 85,
+        "interior_columns_for_shape": 48,
+        "upper_outline_median_abs_residual": 0.448,
+        "normal_profiles_used": 71,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.619,
+          2.187,
+          3.176
+        ],
+        "upper_outline_residual_rms": 0.828
+      },
+      "0.5": {
+        "threshold_stable_columns": 85,
+        "interior_columns_for_shape": 48,
+        "upper_outline_median_abs_residual": 0.514,
+        "normal_profiles_used": 72,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.636,
+          2.02,
+          2.95
+        ],
+        "upper_outline_residual_rms": 0.807
+      },
+      "0.65": {
+        "threshold_stable_columns": 85,
+        "interior_columns_for_shape": 48,
+        "upper_outline_median_abs_residual": 0.599,
+        "normal_profiles_used": 71,
+        "interquantile_normal_width_p25_p50_p75": [
+          1.651,
+          2.122,
+          3.026
+        ],
+        "upper_outline_residual_rms": 0.829
+      }
+    },
+    "sha256": "1b3f227d50da196305ec9b8a6edb106d19cf184564d7f35b4e7775a70e4e5384",
+    "source_size": [
+      430,
+      430
+    ]
+  }
+}

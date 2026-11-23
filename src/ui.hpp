@@ -1,7 +1,9 @@
 #pragma once
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -12,6 +14,7 @@ class Ui
   public:
     void initialize(ID3D11Device *device);
     void begin(int width, int height, int mouseX, int mouseY, bool down, bool pressed);
+    void setTransform(float x, float y, float scale);
     void rect(float x, float y, float w, float h, uint32_t color);
     void text(float x, float y, std::string_view text, uint32_t color = 0xffe1e7e8,
               float scale = 1.0f);
@@ -30,6 +33,7 @@ class Ui
 
     void quad(float x, float y, float w, float h, float u0, float v0, float u1, float v1,
               uint32_t color);
+    bool hit(float x, float y, float w, float h) const;
     std::vector<Vertex> vertices_;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> font_;
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_;
@@ -40,5 +44,7 @@ class Ui
     Microsoft::WRL::ComPtr<ID3D11SamplerState> sampler_;
     int width_ = 0, height_ = 0, mx_ = 0, my_ = 0;
     bool down_ = false, pressed_ = false;
+    float originX_ = 0, originY_ = 0, scale_ = 1;
+    std::optional<std::array<float, 2>> activeSlider_;
 };
 }

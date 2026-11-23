@@ -1,0 +1,8 @@
+# Independent regional maps, each specified as a PNG and a world-space period in metres.
+@type_map "layer-type.png" 58200
+@coverage_map "layer-coverage.png" 49100
+
+# ID "display label" image altitude_m amount half_thickness_m vertical_tau tile_period_m format
+veil "THIN VEIL" veil.png 10500 0.93 64 0.49 48000 profile
+cirrus "CIRRUS STREAKS" cirrus.png 8300 1.10 72 1.04 31000 profile
+scales "SCALE CLOUDS" scales.png 5450 1.25 56 1.14 16000 profile

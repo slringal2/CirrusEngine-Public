@@ -1,0 +1,30 @@
+{
+  "src/world.cpp": {
+    "baseline": "42b44e7d6c13f48b16a7a326e6fda37d8fef155d6aa8a36c6bda01aa4c33ab89",
+    "final_source": "8c9cc9f98f9a50a8aaf04bb11ecf09525707bdbf508edc5262ad0cd4e2b6a4da"
+  },
+  "src/world.hpp": {
+    "baseline": "125f43e18d1da4ea3b4d74e988d2ca704be023de637eca5af9ec3ad845355546",
+    "final_source": "1f28d92f689e18bc4f993b4a54fb9a3d9b499f2db0dbf11df1c20594928f5039"
+  },
+  "shaders/grass.hlsl": {
+    "baseline": "6e1c39fe32f563ed431d06bacb9bcd2a489eafbfafac9a8386b407d1fe247873",
+    "final_source": "ba7b50dee1790f853f86acd0bb3b51e8c525107250cb56d5f1f974f295b3e7ec"
+  },
+  "shaders/meadow.hlsli": {
+    "baseline": "62a1b98e542c68317b130625b9cde69ce80f5b1b378d888bb94c73166879488f",
+    "final_source": "3391b0d73fd292817505bf57ab88bb3b92b6e0a22b0fb45f5d915ad9466d6a78"
+  },
+  "shaders/river_water.hlsli": {
+    "baseline": "66cb7209df6b9e479f68648fb6143afa70c0ab2c013054541c45228b794963e0",
+    "final_source": "2c60f52ed2f6807af040922cccaaf6c723acd6268e26429d3116474a669e3cd8"
+  },
+  "shaders/scene.hlsl": {
+    "baseline": "da259fdf6bdb38e975ca94d5903e227a657458863df5a6e0bb4a6364486354c1",
+    "final_source": "442807bd2ff389f322eef11a3d5ade8f4b0dad82e368f4dc3c652a0824f6998e"
+  },
+  "shaders/common.hlsli": {
+    "baseline": "12ec5e91e185ebf8a42498d5d52c29d6f2fe2f6fa62ceab82c0d70bfd29acc17",
+    "final_source": "12ec5e91e185ebf8a42498d5d52c29d6f2fe2f6fa62ceab82c0d70bfd29acc17"
+  }
+}

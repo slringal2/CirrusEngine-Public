@@ -16,9 +16,9 @@ int main()
             std::cerr << message << '\n';
         }
     };
-    for (const auto name : {"none", "towers", "vortex", "mixed"})
+    for (const auto &mode : formationModes)
     {
-        auto set = formationPreset(name);
+        auto set = formationPreset(mode.name);
         for (size_t i = 0; i < set.count; ++i)
             check(validFormation(set.items[i]), "Preset outside supported volume bounds");
     }
@@ -50,7 +50,7 @@ int main()
         check(rejected, "Invalid formation file was accepted");
     }
     std::string overflow;
-    for (int i = 0; i < 9; ++i)
+    for (std::size_t i = 0; i <= maxCloudFormations; ++i)
         overflow += "tower 0 0 3000 1800 9000 1\n";
     bool rejected = false;
     try

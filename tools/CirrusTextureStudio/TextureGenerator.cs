@@ -24,11 +24,15 @@ internal static class TextureGenerator
         var displacement = new TextureData("cloud-displacement.dds", WeatherSize, 1, 2,
             new Half[WeatherSize * WeatherSize * 2]);
 
+        var layers = new TextureData("cloud-layers.dds", WeatherSize, 1, 4,
+            new Half[WeatherSize * WeatherSize * 4]);
+
         uint seed = unchecked((uint)settings.Seed);
         var parallel = new ParallelOptions { CancellationToken = cancellation };
         GenerateVolumes(settings, seed, baseNoise, detailNoise, parallel);
         GenerateWeather(settings, seed, weather, displacement, parallel);
-        return new TexturePack(settings, [baseNoise, detailNoise, weather, displacement]);
+        GenerateLayerMasks(seed, layers, parallel);
+        return new TexturePack(settings, [baseNoise, detailNoise, weather, displacement, layers]);
     }
 
     private static void GenerateVolumes(GenerationSettings settings, uint seed, TextureData baseNoise,
@@ -103,6 +107,47 @@ internal static class TextureGenerator
                 displacement.Texels[pixel * 2 + 1] = (Half)warp.Y;
             }
         });
+    }
+
+    private static void GenerateLayerMasks(uint seed, TextureData layers, ParallelOptions parallel)
+    {
+        // 3種類の周期マスクをRGBA16F 1枚へ保存する。エンジンは旧DDS互換としてRGBを各層に分けて読む。
+        var broad = new PeriodicGrid(8, seed ^ 0xc2b2ae35u);
+        var medium = new PeriodicGrid(19, seed ^ 0xb5297a4du);
+        var fine = new PeriodicGrid(47, seed ^ 0xa5cd8b3du);
+        var bend = new PeriodicGrid(7, seed ^ 0x63d83595u);
+        var fibres = new PeriodicGrid(6, seed ^ 0x5f356495u);
+        var fineFibres = new PeriodicGrid(12, seed ^ 0x6d2b79f5u);
+        var cloudlets = new PeriodicGrid(30, seed ^ 0x2c9277b5u);
+        Parallel.For(0, layers.Size, parallel, y =>
+        {
+            for (int x = 0; x < layers.Size; ++x)
+            {
+                Vector2 uv = (new Vector2(x, y) + new Vector2(0.5f)) / layers.Size;
+                float low = broad.Value(new Vector3(uv * 8, 2.73f));
+                float mid = medium.Value(new Vector3(uv * 19, 9.38f));
+                float high = fine.Value(new Vector3(uv * 47, 16.65f));
+                float veil = SmoothStep(0.30f, 0.75f, 0.64f * low + 0.26f * mid + 0.10f * high);
+
+                float curve = 0.054f * (bend.Value(new Vector3(uv * 7, 2.18f)) - 0.5f);
+                var flowing = new Vector2(uv.X, uv.Y + curve);
+                float strands = 0.76f * fibres.Value(new Vector3(flowing * new Vector2(6, 54), 3.13f))
+                    + 0.24f * fineFibres.Value(new Vector3(flowing * new Vector2(12, 108), 8.41f));
+                float wisps = SmoothStep(0.49f, 0.78f, strands) * SmoothStep(0.29f, 0.67f, mid);
+
+                Vector2 warped = uv + 0.027f * (new Vector2(low, mid) - new Vector2(0.5f));
+                float core = cloudlets.CumulusCore(warped * 30);
+                float patches = SmoothStep(0.36f, 0.66f, 0.66f * mid + 0.34f * low);
+                float scales = SmoothStep(0.16f, 0.76f, core) * patches;
+                WriteRgba(layers.Texels, (y * layers.Size + x) * 4, veil, wisps, scales, 1);
+            }
+        });
+    }
+
+    private static float SmoothStep(float lower, float upper, float value)
+    {
+        float t = Saturate((value - lower) / (upper - lower));
+        return t * t * (3 - 2 * t);
     }
 
     private static void WriteRgba(Half[] texels, int index, float r, float g, float b, float a)

@@ -78,7 +78,7 @@ void GrassPlacementCS(uint3 id : SV_DispatchThreadID)
     float3 root = float3(p.x, height, p.y);
     float4 clip = mul(float4(root + float3(0, 0.5, 0), 1), ViewProjection);
     // Grass just off camera can still cast a shadow onto the foreground.
-    bool castsNearby = GrassLodIndex == 0 && distance < 12;
+    bool castsNearby = GrassLodIndex == 0 && distance < 16;
     if (!castsNearby && (clip.w < -0.7 || any(abs(clip.xy) > clip.w + 2.4)))
         return;
 
@@ -133,25 +133,35 @@ GrassVarying GrassVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
     float2 widthAxis = float2(-direction.y, direction.x);
     float2 offset = direction * GrassSpacing * (0.13 + 0.52 * r1);
     float3 root = site.root + float3(offset.x, dot(offset, site.grade) - 0.022, offset.y);
-    float seedHead = GrassLodIndex < 2 && blade == 0 && r2 < lerp(0.092, 0.031, site.moisture)
-                     ? 1 : 0;
+    // Moisture changes over entire patches. Individual stems retain stable variation within each patch.
+    float hydration = saturate(site.moisture + 0.36 * site.bank);
+    float dry = 1 - smoothstep(0.13, 0.64, hydration);
     float sward = ((site.seed >> 22) & 1023u) / 1023.0;
-    float height = lerp(0.14, 0.49, r2) * lerp(0.77, 1.22, sward);
-    height *= (1 + site.bank * 0.60 + seedHead * 1.06);
-    float spread = lerp(0.18, 0.66, r1) * height;
+    float seedHead = GrassLodIndex < 2 && blade < 2u && r1 < lerp(0.08, 0.38, dry) ? 1 : 0;
+    float height = lerp(0.16, 0.42, r2) * lerp(0.64, 1.32, sward);
+    height *= lerp(0.79, 1.18, hydration) * (1 + 0.53 * site.bank);
+    // The flowering culm rises above ordinary leaves. Its random height is independent of its selection.
+    height = lerp(height, lerp(0.46, 0.79, r2) * lerp(0.88, 1.11, sward), seedHead);
+    float spread = lerp(0.13, 0.69, r1) * height * (1 - 0.52 * seedHead);
 
     float windSpeed = length(WeatherEffects.yz);
     float2 wind = WeatherEffects.yz / max(windSpeed, 0.01);
     float gust = meadowGust(site.root.xz, wind);
-    float windBend = (0.12 + 0.66 * gust) * min(windSpeed / 26.0, 1.7);
+    float windBend = (0.10 + 0.76 * gust) * min(windSpeed / 26.0, 1.7);
     float2 lean = direction * spread + wind * (height * windBend);
     float2 drift = lean * (t * t);
-    // The wider, shorter ribbons at distance preserve coverage at fewer triangles.
+    // A blade twists about its stem as it opens. The fixed root keeps adjacent triangles watertight.
+    float twist = (2 * r2 - 1) * t * (0.78 - 0.48 * seedHead);
+    widthAxis = normalize(widthAxis + direction * twist);
+
     float distanceLod = GrassLodIndex * 0.5;
-    float width = GrassSpacing * lerp(0.028, 0.074, r0);
+    float width = GrassSpacing * lerp(0.028, 0.071, r0) * lerp(0.86, 1.18, hydration);
     width *= lerp(1, 1.25, distanceLod);
-    float taper = (0.63 + 1.17 * t) * (1 - t) * (1 + 0.45 * t);
-    width *= taper * lerp(1.0, 0.46 + 0.62 * smoothstep(0.48, 0.81, t), seedHead);
+    float leafProfile = (0.63 + 1.17 * t) * (1 - t) * (1 + 0.45 * t);
+    // The existing rows include 3/4 (near) and 2/3 (mid), placing the widest part of the ear there.
+    float ear = smoothstep(0.49, 0.71, t) * (1 - smoothstep(0.76, 1.0, t));
+    float culmProfile = 0.23 * (1 - t) + 0.98 * ear;
+    width *= lerp(leafProfile, culmProfile, seedHead);
     float2 horizontal = drift + widthAxis * (edge * width);
     float upright = height * (t - (0.17 + 0.14 * gust) * t * t * t);
     float3 p = root + float3(horizontal.x, upright, horizontal.y);
@@ -160,18 +170,26 @@ GrassVarying GrassVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
     o.position = mul(float4(p, 1), GeometryProjection);
     float2 crossBladeNormal = direction * 0.44 + widthAxis * (0.35 * edge) - lean * t;
     o.normal = normalize(float3(crossBladeNormal.x, 1.0, crossBladeNormal.y));
-    float3 base = meadowColor(site.moisture) * lerp(0.67, 1.36, r1);
-    float3 tips = base * float3(1.24, 1.13, 1.08);
-    float bract = seedHead * smoothstep(0.58, 0.91, t);
-    tips = lerp(tips, float3(0.35, 0.29, 0.115), bract);
+    float3 base = meadowColor(hydration) * lerp(0.80, 1.18, r1);
+    float3 tips = base * float3(1.25, 1.24, 1.08);
+    float cured = dry * lerp(0.31, 0.87, sward);
+    tips = lerp(tips, float3(0.35, 0.245, 0.075), cured);
+    float bract = seedHead * smoothstep(0.47, 0.73, t);
+    tips = lerp(tips, float3(0.42, 0.30, 0.107), bract);
     // At distance a pixel averages tips and roots across several blades.
-    o.color = lerp(base * lerp(0.28, 0.69, distanceLod), tips, smoothstep(0, 0.94, t));
+    o.color = lerp(base * lerp(0.31, 0.69, distanceLod), tips, smoothstep(0, 0.94, t));
     o.color *= (0.91 + 0.18 * gust) * lerp(1, 0.72, WeatherEffects.x);
     o.bladeLength = t;
     float variant = (float)((bits >> 14) & 3u);
     o.grainUV = float2(0.015 + 0.97 * (edge * 0.5 + 0.5),
                       (variant + 0.018 + 0.964 * (1 - t)) * 0.25);
     return o;
+}
+
+float4 GrassShadowVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID) : SV_Position
+{
+    // 数式と風の状態を色描画と共有するため、葉の位置と影が一致する。
+    return GrassVS(vertex, instance).position;
 }
 
 GBuffer GrassPS(GrassVarying v)

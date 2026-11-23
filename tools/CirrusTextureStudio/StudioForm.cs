@@ -19,7 +19,8 @@ internal sealed class StudioForm : Form
         ["RGB", "R · 基本の雲形", "G · Worley 4", "B · Worley 8", "A · Worley 16"],
         ["RGB", "R · Worley 4", "G · Worley 8", "B · Worley 16", "A · Worley 32"],
         ["RGB", "R · 雲量", "G · 湿度", "B · 雲種", "A · 積雲の芯"],
-        ["RG", "R · 変位 1", "G · 変位 2"]
+        ["RG", "R · 変位 1", "G · 変位 2"],
+        ["RGB", "R · 薄雲", "G · 筋雲", "B · うろこ雲"]
     ];
 
     private readonly NumericUpDown seed = Number("シード", 0, int.MaxValue, 17, 0, 1);
@@ -27,7 +28,7 @@ internal sealed class StudioForm : Form
     private readonly NumericUpDown density = Number("密度の補正", -0.25m, 0.25m, 0, 2, 0.02m);
     private readonly NumericUpDown coverage = Number("雲量の補正", -0.30m, 0.30m, 0, 2, 0.02m);
     private readonly ComboBox texture = Choice("テクスチャ", 181,
-        "Perlin–Worley", "詳細 Worley", "天候マップ", "雲の変位マップ");
+        "Perlin–Worley", "詳細 Worley", "天候マップ", "雲の変位マップ", "雲層マスク");
     private readonly ComboBox channel = Choice("チャンネル", 160);
     private readonly ComboBox axis = Choice("断面軸", 62, "X", "Y", "Z");
     private readonly TrackBar slice = new()
